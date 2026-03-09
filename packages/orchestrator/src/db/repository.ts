@@ -1,4 +1,4 @@
-import { and, eq, gt, desc } from 'drizzle-orm';
+import { and, eq, gt, desc, sql } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { competitions, events, results } from './schema.js';
 import type { ArenaEvent, Brief, Team, CompetitionState } from '@arena/shared';
@@ -69,6 +69,14 @@ export class CompetitionRepository {
       winnerId: result.winner,
       summary: result.summary,
     });
+  }
+
+  async countEvents(competitionId: string): Promise<number> {
+    const rows = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(events)
+      .where(eq(events.competitionId, competitionId));
+    return rows[0]?.count ?? 0;
   }
 
   async getResult(competitionId: string) {

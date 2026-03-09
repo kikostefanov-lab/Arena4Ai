@@ -98,7 +98,7 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ error: 'Competition not found' });
     return;
   }
-  const eventCount = await repo.getEvents(id).then((evts) => evts.length);
+  const eventCount = await repo.countEvents(id);
   const result = await repo.getResult(id);
   res.json({ id: comp.id, state: comp.state, eventCount, result });
 });

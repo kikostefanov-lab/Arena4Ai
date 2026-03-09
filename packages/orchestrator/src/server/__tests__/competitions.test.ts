@@ -21,6 +21,7 @@ vi.mock('../../db/repository.js', () => {
       return Promise.resolve(null);
     }),
     getEvents: vi.fn().mockResolvedValue([]),
+    countEvents: vi.fn().mockResolvedValue(0),
     getResult: vi.fn().mockResolvedValue(null),
     list: vi.fn().mockResolvedValue([]),
   }));
@@ -40,6 +41,9 @@ vi.mock('../../engine/competition-runner.js', async () => {
       scorecards: [],
       winner: null,
     });
+    cancel = vi.fn().mockResolvedValue(undefined);
+    pause = vi.fn();
+    resume = vi.fn();
   }
 
   return { CompetitionRunner: MockCompetitionRunner };
@@ -190,5 +194,57 @@ describe('GET /health', () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
+  });
+});
+
+describe('POST /competitions/:id/cancel', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  it('returns 404 when competition not found', async () => {
+    const res = await request(app).post('/competitions/nonexistent/cancel');
+    expect(res.status).toBe(404);
+  });
+
+  it('cancels running competition and returns ok', async () => {
+    // Start a competition first — runner is registered in runnerRegistry under its competitionId
+    const startRes = await request(app)
+      .post('/competitions')
+      .send({ brief: validBrief, teams: validTeams });
+    expect(startRes.status).toBe(201);
+    const { competitionId } = startRes.body as { competitionId: string };
+
+    const res = await request(app).post(`/competitions/${competitionId}/cancel`);
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+  });
+});
+
+describe('POST /competitions/:id/pause', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  it('returns 404 when competition not found', async () => {
+    const res = await request(app).post('/competitions/nonexistent/pause');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('POST /competitions/:id/resume', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  it('returns 404 when competition not found', async () => {
+    const res = await request(app).post('/competitions/nonexistent/resume');
+    expect(res.status).toBe(404);
   });
 });
