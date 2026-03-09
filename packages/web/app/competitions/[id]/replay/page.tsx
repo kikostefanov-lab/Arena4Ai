@@ -26,16 +26,16 @@ interface Team {
 const FONT = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
 
 const EVENT_EMOJI: Record<string, string> = {
-  TOOL_CALL: '\uD83D\uDD27',
-  FILE_CREATE: '\uD83D\uDCDD',
-  FILE_MODIFY: '\u270F\uFE0F',
-  REASONING: '\uD83E\uDDE0',
-  ERROR: '\u274C',
-  TIME_WARNING: '\u23F0',
-  TIME_UP: '\u23F1\uFE0F',
-  JUDGE_SCORE: '\u2696\uFE0F',
-  COMPETITION_START: '\uD83D\uDE80',
-  COMPETITION_COMPLETE: '\uD83C\uDFC1',
+  TOOL_CALL: '🔧',
+  FILE_CREATE: '📝',
+  FILE_MODIFY: '✏️',
+  REASONING: '🧠',
+  ERROR: '❌',
+  TIME_WARNING: '⏰',
+  TIME_UP: '⏱️',
+  JUDGE_SCORE: '⚖️',
+  COMPETITION_START: '🚀',
+  COMPETITION_COMPLETE: '🏁',
 };
 
 const EVENT_COLOR: Record<string, string> = {
@@ -105,7 +105,18 @@ function summarizeEvent(type: string, payload: Record<string, unknown> | null): 
       if (p.text && typeof p.text === 'string') return p.text.trim().slice(0, 100) || null;
       if (p.raw) {
         const raw = p.raw as Record<string, unknown>;
-        if (raw.type === 'system' || raw.type === 'user' || raw.type === 'rate_limit_event') return null;
+        if (raw.type === 'system' || raw.type === 'rate_limit_event') return null;
+        if (raw.type === 'user') {
+          const msg = raw.message as Record<string, unknown> | null;
+          const content = msg?.content;
+          if (Array.isArray(content)) {
+            const toolResult = (content as Record<string, unknown>[]).find((b) => b.type === 'tool_result');
+            if (toolResult?.content && typeof toolResult.content === 'string') {
+              return `Result: ${toolResult.content.replace(/\n/g, ' ').trim().slice(0, 100)}`;
+            }
+          }
+          return null;
+        }
         if (raw.type === 'result') {
           const res = raw.result;
           return (res && typeof res === 'string') ? res.slice(0, 80) : null;
@@ -114,8 +125,21 @@ function summarizeEvent(type: string, payload: Record<string, unknown> | null): 
           const msg = raw.message as Record<string, unknown> | null;
           const content = msg?.content;
           if (Array.isArray(content)) {
-            const tb = (content as Record<string, unknown>[]).find((b) => b.type === 'text');
+            const blocks = content as Record<string, unknown>[];
+            const tb = blocks.find((b) => b.type === 'text');
             if (tb?.text && typeof tb.text === 'string') return (tb.text as string).slice(0, 100);
+            const thinkBlock = blocks.find((b) => b.type === 'thinking');
+            if (thinkBlock?.thinking && typeof thinkBlock.thinking === 'string') {
+              return thinkBlock.thinking.replace(/\n/g, ' ').trim().slice(0, 100);
+            }
+            const toolBlock = blocks.find((b) => b.type === 'tool_use');
+            if (toolBlock) {
+              const toolName = String(toolBlock.name ?? 'tool');
+              const input = toolBlock.input as Record<string, unknown> | undefined;
+              const val = input?.command ?? input?.code ?? input?.path ?? input?.content;
+              if (val && typeof val === 'string') return `${toolName}  ${val.replace(/\n/g, ' ').slice(0, 80)}`;
+              return toolName;
+            }
           }
           return null;
         }
@@ -141,7 +165,7 @@ function summarizeEvent(type: string, payload: Record<string, unknown> | null): 
     case 'JUDGE_SCORE': {
       const score = p.score ?? p.totalScore;
       const crit = p.criterionId ?? p.criterion;
-      if (crit && score != null) return `${String(crit)} \u2192 ${score}`;
+      if (crit && score != null) return `${String(crit)} → ${score}`;
       return null;
     }
     default:
@@ -202,7 +226,7 @@ function EventRow({ event, startTs, isNew }: { event: ArenaEvent; startTs: strin
 
   const color = EVENT_COLOR[event.type] ?? '#8896ab';
   const border = EVENT_BORDER[event.type] ?? '#1e2d45';
-  const emoji = EVENT_EMOJI[event.type] ?? '\u00B7';
+  const emoji = EVENT_EMOJI[event.type] ?? '·';
   const relTime = formatRelativeTime(event.timestamp, startTs);
 
   return (
@@ -376,7 +400,7 @@ function TimelineScrubber({
           pointerEvents: 'none',
           boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
         }}>
-          <span style={{ marginRight: '0.3rem' }}>{EVENT_EMOJI[hoveredEvent.type] ?? '\u00B7'}</span>
+          <span style={{ marginRight: '0.3rem' }}>{EVENT_EMOJI[hoveredEvent.type] ?? '·'}</span>
           <span style={{ color: EVENT_COLOR[hoveredEvent.type] ?? '#8896ab', fontWeight: 700, marginRight: '0.4rem' }}>
             {hoveredEvent.type}
           </span>
@@ -506,7 +530,7 @@ export default function ReplayPage() {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, color: '#ef4444', fontSize: '0.75rem',
     }}>
-      {'\u274C'} {error}
+      {'❌'} {error}
     </div>
   );
 
@@ -596,16 +620,16 @@ export default function ReplayPage() {
           fontSize: '0.6rem', color: '#f97316', fontWeight: 700,
           letterSpacing: '2px', textDecoration: 'none', flexShrink: 0,
         }}>
-          {'\u25C6'} ARENA
+          {'◆'} ARENA
         </a>
-        <span style={{ color: '#1e2d45' }}>{'\u2502'}</span>
+        <span style={{ color: '#1e2d45' }}>{'│'}</span>
         <a
           href={`/competitions/${id}`}
           style={{ fontSize: '0.62rem', color: '#8896ab', textDecoration: 'none', letterSpacing: '0.5px' }}
         >
-          {'\u2190'} Live
+          {'←'} Live
         </a>
-        <span style={{ color: '#1e2d45' }}>{'\u2502'}</span>
+        <span style={{ color: '#1e2d45' }}>{'│'}</span>
         {briefTitle && (
           <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {briefTitle}
@@ -616,7 +640,7 @@ export default function ReplayPage() {
           background: 'rgba(249,115,22,0.12)', color: '#f97316',
           borderRadius: '4px', letterSpacing: '1.5px',
         }}>
-          {'\u25B6'} REPLAY
+          {'▶'} REPLAY
         </span>
         <div style={{ flex: 1 }} />
         <span style={{ fontSize: '0.6rem', color: '#4a5568', fontVariantNumeric: 'tabular-nums' }}>
@@ -648,7 +672,7 @@ export default function ReplayPage() {
             }}
             title="Reset to beginning"
           >
-            {'\u23EE'}
+            {'⏮'}
           </button>
 
           {/* Play / Pause */}
@@ -669,7 +693,7 @@ export default function ReplayPage() {
               ...((!playing && cursor < allEvents.length) ? { animation: 'playPulse 2s ease-in-out infinite' } : {}),
             }}
           >
-            {playing ? '\u23F8 Pause' : '\u25B6\uFE0F Play'}
+            {playing ? '⏸ Pause' : '▶️ Play'}
           </button>
 
           {/* Divider */}
@@ -694,7 +718,7 @@ export default function ReplayPage() {
                   borderRight: '1px solid #1e2d45',
                 }}
               >
-                {s}{'\u00D7'}
+                {s}{'×'}
               </button>
             ))}
           </div>

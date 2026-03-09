@@ -42,20 +42,20 @@ const MODEL_COLORS: Record<string, string> = {
 };
 
 const MODEL_ICONS: Record<string, string> = {
-  claude: '\uD83D\uDD35',
-  codex: '\uD83D\uDFE2',
-  gemini: '\uD83D\uDFE3',
+  claude: '🔵',
+  codex: '🟢',
+  gemini: '🟣',
 };
 
 const FORMAT_BADGE_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
-  SPRINT:      { color: '#06b6d4', icon: '\u26A1',       label: 'SPRINT' },
-  HACKATHON:   { color: '#a855f7', icon: '\uD83D\uDD28', label: 'HACKATHON' },
-  RELAY_RACE:  { color: '#22c55e', icon: '\uD83D\uDD04', label: 'RELAY' },
-  RED_VS_BLUE: { color: '#ef4444', icon: '\u2694\uFE0F', label: 'RED\u00D7BLUE' },
+  SPRINT:      { color: '#06b6d4', icon: '⚡',       label: 'SPRINT' },
+  HACKATHON:   { color: '#a855f7', icon: '🔨', label: 'HACKATHON' },
+  RELAY_RACE:  { color: '#22c55e', icon: '🔄', label: 'RELAY' },
+  RED_VS_BLUE: { color: '#ef4444', icon: '⚔️', label: 'RED×BLUE' },
 };
 
 function FormatBadge({ format }: { format: string | null }) {
-  if (!format) return <span style={{ color: '#2d4060' }}>\u2014</span>;
+  if (!format) return <span style={{ color: '#2d4060' }}>—</span>;
   const cfg = FORMAT_BADGE_CONFIG[format];
   const color = cfg?.color ?? '#8896ab';
   const icon = cfg?.icon ?? '';
@@ -87,7 +87,7 @@ function getModelColorForKey(key: string): string {
 
 function getModelIcon(key: string): string {
   const base = key.split(':')[0]?.toLowerCase() ?? '';
-  return MODEL_ICONS[base] ?? '\u2B24';
+  return MODEL_ICONS[base] ?? '⬤';
 }
 
 function h2hCellBg(wins: number, losses: number): string {
@@ -142,15 +142,15 @@ export default async function AnalyticsPage() {
               letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
               border: '1px solid #1e2d45', borderRadius: '4px',
             }}>
-              \u2190 Gallery
+              ← Gallery
             </a>
-            <span style={{ color: '#1e2d45' }}>\u2502</span>
+            <span style={{ color: '#1e2d45' }}>│</span>
             <div>
               <span style={{
                 fontSize: '0.6rem', color: '#f97316', fontWeight: 700,
                 letterSpacing: '3px', textTransform: 'uppercase',
               }}>
-                \uD83D\uDCCA Analytics
+                📊 Analytics
               </span>
               <div style={{ fontSize: '0.52rem', color: '#4a5568', marginTop: '0.15rem', letterSpacing: '1px' }}>
                 Performance dashboard
@@ -164,7 +164,7 @@ export default async function AnalyticsPage() {
             textAlign: 'center', padding: '4rem 2rem',
             background: '#111827', border: '1px solid #1e2d45', borderRadius: '8px',
           }}>
-            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>\u26A0\uFE0F</div>
+            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
             <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>
               Could not reach orchestrator. Is it running?
             </p>
@@ -179,10 +179,10 @@ export default async function AnalyticsPage() {
               marginBottom: '2rem',
             }}>
               {[
-                { icon: '\uD83D\uDCCA', label: 'Total Battles', value: data.totalCompetitions, accent: '#3b82f6' },
-                { icon: '\u2705', label: 'Completed', value: data.completedCompetitions, accent: '#22c55e' },
-                { icon: '\u23F1\uFE0F', label: 'Avg Duration', value: formatDuration(data.avgDurationMs), accent: '#f97316' },
-                { icon: '\uD83D\uDD2C', label: 'Syntheses', value: data.synthesisCount, accent: '#a855f7' },
+                { icon: '📊', label: 'Total Battles', value: data.totalCompetitions, accent: '#3b82f6' },
+                { icon: '✅', label: 'Completed', value: data.completedCompetitions, accent: '#22c55e' },
+                { icon: '⏱️', label: 'Avg Duration', value: formatDuration(data.avgDurationMs), accent: '#f97316' },
+                { icon: '🔬', label: 'Syntheses', value: data.synthesisCount, accent: '#a855f7' },
               ].map(({ icon, label, value, accent }) => (
                 <div key={label} style={{
                   background: '#111827',
@@ -232,7 +232,7 @@ export default async function AnalyticsPage() {
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
-                  \uD83C\uDFC6 Win Rate by Agent
+                  🏆 Win Rate by Agent
                 </span>
                 <span style={{ fontSize: '0.5rem', color: '#4a5568', letterSpacing: '1px' }}>
                   model:persona
@@ -270,7 +270,7 @@ export default async function AnalyticsPage() {
                             background: isTop ? 'rgba(234,179,8,0.04)' : 'transparent',
                           }}>
                             <td style={{ padding: '0.65rem 1rem', color: '#4a5568', fontSize: '0.6rem', fontWeight: 700 }}>
-                              {isTop ? '\uD83E\uDD47' : `${idx + 1}`}
+                              {isTop ? '🥇' : `${idx + 1}`}
                             </td>
                             <td style={{ padding: '0.65rem 1rem' }}>
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -336,7 +336,7 @@ export default async function AnalyticsPage() {
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
-                  \u2694\uFE0F Head-to-Head
+                  ⚔️ Head-to-Head
                 </span>
               </div>
 
@@ -356,7 +356,7 @@ export default async function AnalyticsPage() {
                             fontSize: '0.52rem', color: '#4a5568', textTransform: 'uppercase',
                             letterSpacing: '1.5px', fontWeight: 700, minWidth: '130px',
                           }}>
-                            vs \u2192
+                            vs →
                           </th>
                           {personas.map((p) => {
                             const icon = getModelIcon(p);
@@ -403,7 +403,7 @@ export default async function AnalyticsPage() {
                                   <td key={colPersona} style={{
                                     padding: '0.65rem 0.75rem', textAlign: 'center', color: '#2d4060',
                                   }}>
-                                    \u2014
+                                    —
                                   </td>
                                 );
                               }
@@ -430,7 +430,7 @@ export default async function AnalyticsPage() {
                                     </span>
                                   )}
                                   {cell.wins === 0 && cell.losses === 0 && cell.draws === 0 && (
-                                    <span style={{ color: '#2d4060' }}>\u2014</span>
+                                    <span style={{ color: '#2d4060' }}>—</span>
                                   )}
                                 </td>
                               );
@@ -455,7 +455,7 @@ export default async function AnalyticsPage() {
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
-                  \uD83C\uDFAF By Format
+                  🎯 By Format
                 </span>
               </div>
 
@@ -476,7 +476,7 @@ export default async function AnalyticsPage() {
                   {(data.byFormat ?? []).map((f) => {
                     const cfg = FORMAT_BADGE_CONFIG[f.format];
                     const color = cfg?.color ?? '#8896ab';
-                    const icon = cfg?.icon ?? '\uD83D\uDCCB';
+                    const icon = cfg?.icon ?? '📋';
                     const completionPct = f.total > 0 ? (f.completed / f.total) * 100 : 0;
                     return (
                       <div key={f.format} style={{
@@ -545,7 +545,7 @@ export default async function AnalyticsPage() {
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
-                  \uD83D\uDCDC Recent Competitions
+                  📜 Recent Competitions
                 </span>
               </div>
 
@@ -577,7 +577,7 @@ export default async function AnalyticsPage() {
                                 display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
                               }}
                             >
-                              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>\uD83C\uDFC6</span>
+                              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>🏆</span>
                               {comp.title}
                             </a>
                           </td>
@@ -605,10 +605,10 @@ export default async function AnalyticsPage() {
                                 color: winnerColor, fontWeight: 700,
                                 display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                               }}>
-                                <span style={{ color: '#eab308' }}>\u2605</span> {comp.winner}
+                                <span style={{ color: '#eab308' }}>★</span> {comp.winner}
                               </span>
                             ) : (
-                              <span style={{ color: '#2d4060' }}>\u2014</span>
+                              <span style={{ color: '#2d4060' }}>—</span>
                             )}
                           </td>
                           <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#8896ab' }}>

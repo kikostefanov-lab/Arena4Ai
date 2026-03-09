@@ -26,10 +26,10 @@ const MODEL_COLORS: Record<string, string> = {
 };
 
 const FORMAT_BADGES: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-  SPRINT:      { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4', label: 'SPRINT',    icon: '\u26A1' },
-  HACKATHON:   { bg: 'rgba(168,85,247,0.12)',  color: '#a855f7', label: 'HACKATHON', icon: '\uD83D\uDD28' },
-  RED_VS_BLUE: { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444', label: 'RED\u00D7BLUE', icon: '\u2694\uFE0F' },
-  RELAY_RACE:  { bg: 'rgba(34,197,94,0.12)',   color: '#22c55e', label: 'RELAY',     icon: '\uD83D\uDD04' },
+  SPRINT:      { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4', label: 'SPRINT',    icon: '⚡' },
+  HACKATHON:   { bg: 'rgba(168,85,247,0.12)',  color: '#a855f7', label: 'HACKATHON', icon: '🔨' },
+  RED_VS_BLUE: { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444', label: 'RED×BLUE', icon: '⚔️' },
+  RELAY_RACE:  { bg: 'rgba(34,197,94,0.12)',   color: '#22c55e', label: 'RELAY',     icon: '🔄' },
 };
 
 const STATE_STYLES: Record<string, { bg: string; color: string }> = {
@@ -80,7 +80,7 @@ export default function GalleryPage() {
     fetch('/api/competitions')
       .then((r) => r.json())
       .then((data: CompetitionSummary[]) => { setCompetitions(data); setLoading(false); })
-      .catch(() => { setError('Failed to load competitions \u2014 is the API server running?'); setLoading(false); });
+      .catch(() => { setError('Failed to load competitions — is the API server running?'); setLoading(false); });
   }, []);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -174,7 +174,7 @@ export default function GalleryPage() {
                 marginBottom: '0.6rem',
                 fontWeight: 700,
               }}>
-                \u25C6 Tournament Lobby
+                ◆ Tournament Lobby
               </div>
               <h1 style={{
                 fontSize: '2.4rem',
@@ -197,11 +197,11 @@ export default function GalleryPage() {
                   gap: '0.6rem',
                 }}>
                   <span>{completedCount} battle{completedCount !== 1 ? 's' : ''} completed</span>
-                  <span style={{ color: '#1e2d45' }}>\u00B7</span>
+                  <span style={{ color: '#1e2d45' }}>·</span>
                   <span>{uniqueModels.size} agent{uniqueModels.size !== 1 ? 's' : ''} competing</span>
                   {runningCount > 0 && (
                     <>
-                      <span style={{ color: '#1e2d45' }}>\u00B7</span>
+                      <span style={{ color: '#1e2d45' }}>·</span>
                       <span style={{ color: '#f97316', fontWeight: 700 }}>{runningCount} live now</span>
                     </>
                   )}
@@ -223,7 +223,7 @@ export default function GalleryPage() {
                   letterSpacing: '1px', fontWeight: 600,
                 }}
               >
-                \uD83D\uDCCA ANALYTICS
+                📊 ANALYTICS
               </a>
               <Link
                 href="/competitions/new"
@@ -235,7 +235,7 @@ export default function GalleryPage() {
                   display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
                 }}
               >
-                \u2694\uFE0F New Battle
+                ⚔️ New Battle
               </Link>
             </div>
           </div>
@@ -244,8 +244,8 @@ export default function GalleryPage() {
         {/* Loading */}
         {loading && (
           <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>\u2694\uFE0F</div>
-            <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>Loading competitions\u2026</p>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚔️</div>
+            <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>Loading competitions…</p>
           </div>
         )}
 
@@ -256,7 +256,7 @@ export default function GalleryPage() {
             background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)',
             borderRadius: '8px',
           }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>\u26A0\uFE0F</div>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚠️</div>
             <p style={{ color: '#ef4444', fontSize: '0.75rem' }}>{error}</p>
           </div>
         )}
@@ -270,7 +270,7 @@ export default function GalleryPage() {
             border: '1px dashed #1e2d45',
             borderRadius: '12px',
           }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>\u2694\uFE0F</div>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚔️</div>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '0.5rem' }}>
               No battles yet
             </h2>
@@ -288,7 +288,7 @@ export default function GalleryPage() {
                 textDecoration: 'none', letterSpacing: '0.5px',
               }}
             >
-              \u2694\uFE0F Launch First Battle
+              ⚔️ Launch First Battle
             </Link>
           </div>
         )}
@@ -343,7 +343,7 @@ export default function GalleryPage() {
                       {/* Title row */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>
-                          {isRunning ? '\u2694\uFE0F' : isComplete ? '\uD83C\uDFC6' : '\uD83D\uDCCB'}
+                          {isRunning ? '⚔️' : isComplete ? '🏆' : '📋'}
                         </span>
                         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
                           {comp.brief?.title ?? comp.id}
@@ -408,12 +408,12 @@ export default function GalleryPage() {
                         )}
                         {winnerTeam && (
                           <>
-                            <span style={{ color: '#2d3748' }}>\u00B7</span>
+                            <span style={{ color: '#2d3748' }}>·</span>
                             <span style={{
                               color: '#eab308', fontSize: '0.6rem', fontWeight: 700,
                               display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                             }}>
-                              \uD83C\uDFC6 {teamLabel(winnerTeam)} wins
+                              🏆 {teamLabel(winnerTeam)} wins
                             </span>
                           </>
                         )}
@@ -453,7 +453,7 @@ export default function GalleryPage() {
                             letterSpacing: '0.5px', whiteSpace: 'nowrap',
                           }}
                         >
-                          \u25B6 REPLAY
+                          ▶ REPLAY
                         </a>
                       )}
 
@@ -468,7 +468,7 @@ export default function GalleryPage() {
                             opacity: deleting === comp.id ? 0.4 : 1,
                           }}
                         >
-                          {deleting === comp.id ? '\u2026' : '\u2715'}
+                          {deleting === comp.id ? '…' : '✕'}
                         </button>
                       )}
                     </div>

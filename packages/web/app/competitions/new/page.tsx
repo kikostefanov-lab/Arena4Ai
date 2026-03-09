@@ -72,16 +72,16 @@ const FORMAT_PRESETS: Record<Format, {
 };
 
 const FORMAT_META: Record<Format, { emoji: string; label: string; subtitle: string; color: string; glowColor: string }> = {
-  SPRINT:      { emoji: '\u26A1', label: 'Sprint',       subtitle: 'Quick 15-min challenge',   color: '#06b6d4', glowColor: 'rgba(6,182,212,0.35)'   },
-  HACKATHON:   { emoji: '\uD83D\uDD28', label: 'Hackathon',    subtitle: 'Deep 2-hour build',        color: '#a855f7', glowColor: 'rgba(168,85,247,0.35)'  },
-  RELAY_RACE:  { emoji: '\uD83D\uDD04', label: 'Relay Race',   subtitle: 'Pass the baton',           color: '#22c55e', glowColor: 'rgba(34,197,94,0.35)'   },
-  RED_VS_BLUE: { emoji: '\u2694\uFE0F', label: 'Red vs Blue',  subtitle: 'Attack & Defend',           color: '#ef4444', glowColor: 'rgba(239,68,68,0.35)'   },
+  SPRINT:      { emoji: '⚡', label: 'Sprint',       subtitle: 'Quick 15-min challenge',   color: '#06b6d4', glowColor: 'rgba(6,182,212,0.35)'   },
+  HACKATHON:   { emoji: '🔨', label: 'Hackathon',    subtitle: 'Deep 2-hour build',        color: '#a855f7', glowColor: 'rgba(168,85,247,0.35)'  },
+  RELAY_RACE:  { emoji: '🔄', label: 'Relay Race',   subtitle: 'Pass the baton',           color: '#22c55e', glowColor: 'rgba(34,197,94,0.35)'   },
+  RED_VS_BLUE: { emoji: '⚔️', label: 'Red vs Blue',  subtitle: 'Attack & Defend',           color: '#ef4444', glowColor: 'rgba(239,68,68,0.35)'   },
 };
 
 const MODEL_META: Record<Model, { emoji: string; label: string; color: string; glowColor: string }> = {
-  claude: { emoji: '\uD83D\uDD35', label: 'Claude', color: '#3b82f6', glowColor: 'rgba(59,130,246,0.4)'  },
-  codex:  { emoji: '\uD83D\uDFE2', label: 'Codex',  color: '#22c55e', glowColor: 'rgba(34,197,94,0.4)'   },
-  gemini: { emoji: '\uD83D\uDFE3', label: 'Gemini', color: '#a855f7', glowColor: 'rgba(168,85,247,0.4)'  },
+  claude: { emoji: '🔵', label: 'Claude', color: '#3b82f6', glowColor: 'rgba(59,130,246,0.4)'  },
+  codex:  { emoji: '🟢', label: 'Codex',  color: '#22c55e', glowColor: 'rgba(34,197,94,0.4)'   },
+  gemini: { emoji: '🟣', label: 'Gemini', color: '#a855f7', glowColor: 'rgba(168,85,247,0.4)'  },
 };
 
 const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'guardian', 'pioneer'];
@@ -330,9 +330,9 @@ export default function NewCompetitionPage() {
         <div style={{ marginBottom: '2.5rem', animation: 'fadeInUp 0.4s ease-out' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.2rem' }}>
             <a href="/" style={{ fontSize: '0.6rem', color: '#f97316', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}>
-              {'\u25C6'} ARENA
+              {'◆'} ARENA
             </a>
-            <span style={{ color: '#1e2d45' }}>{'\u2502'}</span>
+            <span style={{ color: '#1e2d45' }}>{'│'}</span>
             <span style={{ fontSize: '0.6rem', color: '#8896ab', letterSpacing: '1px' }}>NEW COMPETITION</span>
           </div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#e2e8f0', margin: 0, lineHeight: 1.2 }}>
@@ -371,18 +371,18 @@ export default function NewCompetitionPage() {
                 color: step1Done ? '#22c55e' : '#f97316',
                 border: `1.5px solid ${step1Done ? '#22c55e' : '#f97316'}`,
               }}>
-                {step1Done ? '\u2713' : '1'}
+                {step1Done ? '✓' : '1'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0' }}>
-                  {'\uD83D\uDCCB'} Brief
+                  {'📋'} Brief
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#8896ab', marginTop: '0.15rem' }}>
                   Define the challenge
                 </div>
               </div>
               <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
-                {expandedStep === 1 ? '\u25B2' : '\u25BC'}
+                {expandedStep === 1 ? '▲' : '▼'}
               </span>
             </div>
 
@@ -535,7 +535,7 @@ export default function NewCompetitionPage() {
                       transition: 'all 0.2s',
                     }}
                   >
-                    Next: Rubric {'\u2192'}
+                    Next: Rubric {'→'}
                   </button>
                 </div>
               </div>
@@ -568,18 +568,18 @@ export default function NewCompetitionPage() {
                 color: step2Done ? '#22c55e' : '#eab308',
                 border: `1.5px solid ${step2Done ? '#22c55e' : '#eab308'}`,
               }}>
-                {step2Done ? '\u2713' : '2'}
+                {step2Done ? '✓' : '2'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0' }}>
-                  {'\u2696\uFE0F'} Rubric
+                  {'⚖️'} Rubric
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#8896ab', marginTop: '0.15rem' }}>
                   Set scoring criteria
                 </div>
               </div>
               <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
-                {expandedStep === 2 ? '\u25B2' : '\u25BC'}
+                {expandedStep === 2 ? '▲' : '▼'}
               </span>
             </div>
 
@@ -617,7 +617,7 @@ export default function NewCompetitionPage() {
                             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
                             onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#4a5568'; }}
                           >
-                            {'\u2715'} remove
+                            {'✕'} remove
                           </button>
                         )}
                       </div>
@@ -720,7 +720,7 @@ export default function NewCompetitionPage() {
                       transition: 'all 0.2s',
                     }}
                   >
-                    Next: Agents {'\u2192'}
+                    Next: Agents {'→'}
                   </button>
                 </div>
               </div>
@@ -757,14 +757,14 @@ export default function NewCompetitionPage() {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0' }}>
-                  {'\uD83E\uDD16'} Agents
+                  {'🤖'} Agents
                 </div>
                 <div style={{ fontSize: '0.6rem', color: '#8896ab', marginTop: '0.15rem' }}>
                   Choose your fighters
                 </div>
               </div>
               <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
-                {expandedStep === 3 ? '\u25B2' : '\u25BC'}
+                {expandedStep === 3 ? '▲' : '▼'}
               </span>
             </div>
 
@@ -941,7 +941,7 @@ export default function NewCompetitionPage() {
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               animation: 'fadeInUp 0.3s ease-out',
             }}>
-              <span>{'\u274C'}</span>
+              <span>{'❌'}</span>
               {error}
             </div>
           )}
@@ -971,7 +971,7 @@ export default function NewCompetitionPage() {
                 Launching...
               </span>
             ) : (
-              <span>{'\uD83D\uDE80'} LAUNCH COMPETITION</span>
+              <span>{'🚀'} LAUNCH COMPETITION</span>
             )}
           </button>
         </form>

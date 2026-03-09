@@ -31,10 +31,10 @@ const EVENT_ICON: Record<string, string> = {
   FILE_CREATE:       '\u{1F4DD}',
   FILE_MODIFY:       '\u{1F4DD}',
   REASONING:         '\u{1F9E0}',
-  ERROR:             '\u26A0\uFE0F',
-  TIME_WARNING:      '\u23F0',
-  TIME_UP:           '\u23F0',
-  JUDGE_SCORE:       '\u2696\uFE0F',
+  ERROR:             '⚠️',
+  TIME_WARNING:      '⏰',
+  TIME_UP:           '⏰',
+  JUDGE_SCORE:       '⚖️',
   COMPETITION_START: '\u{1F680}',
   COMPETITION_END:   '\u{1F3C1}',
 };
@@ -195,7 +195,19 @@ function summarizeEvent(type: string, payload: unknown): string | null {
       if (p.text && typeof p.text === 'string') return p.text.trim().slice(0, 120) || null;
       if (p.raw) {
         const raw = p.raw as Record<string, unknown>;
-        if (raw.type === 'system' || raw.type === 'user' || raw.type === 'rate_limit_event') return null;
+        if (raw.type === 'system' || raw.type === 'rate_limit_event') return null;
+        if (raw.type === 'user') {
+          // Tool result received — extract tool_result content
+          const msg = raw.message as Record<string, unknown> | null;
+          const content = msg?.content;
+          if (Array.isArray(content)) {
+            const toolResult = (content as Record<string, unknown>[]).find((b) => b.type === 'tool_result');
+            if (toolResult?.content && typeof toolResult.content === 'string') {
+              return `Result: ${toolResult.content.replace(/\n/g, ' ').trim().slice(0, 100)}`;
+            }
+          }
+          return null;
+        }
         if (raw.type === 'result') {
           const res = raw.result;
           return (res && typeof res === 'string') ? res.slice(0, 100) : null;
@@ -204,8 +216,24 @@ function summarizeEvent(type: string, payload: unknown): string | null {
           const msg = raw.message as Record<string, unknown> | null;
           const content = msg?.content;
           if (Array.isArray(content)) {
-            const tb = (content as Record<string, unknown>[]).find((b) => b.type === 'text');
+            const blocks = content as Record<string, unknown>[];
+            // Text content
+            const tb = blocks.find((b) => b.type === 'text');
             if (tb?.text && typeof tb.text === 'string') return tb.text.slice(0, 120);
+            // Thinking content (Claude's reasoning)
+            const thinkBlock = blocks.find((b) => b.type === 'thinking');
+            if (thinkBlock?.thinking && typeof thinkBlock.thinking === 'string') {
+              return thinkBlock.thinking.replace(/\n/g, ' ').trim().slice(0, 120);
+            }
+            // Tool use content
+            const toolBlock = blocks.find((b) => b.type === 'tool_use');
+            if (toolBlock) {
+              const toolName = String(toolBlock.name ?? 'tool');
+              const input = toolBlock.input as Record<string, unknown> | undefined;
+              const val = input?.command ?? input?.code ?? input?.path ?? input?.content;
+              if (val && typeof val === 'string') return `${toolName}  ${val.replace(/\n/g, ' ').slice(0, 80)}`;
+              return toolName;
+            }
           }
           return null;
         }
@@ -231,7 +259,7 @@ function summarizeEvent(type: string, payload: unknown): string | null {
     case 'JUDGE_SCORE': {
       const score = p.score ?? p.totalScore;
       const crit = p.criterionId ?? p.criterion;
-      if (crit && score != null) return `${String(crit)} \u2192 ${score}`;
+      if (crit && score != null) return `${String(crit)} → ${score}`;
       return null;
     }
     default:
@@ -368,7 +396,7 @@ function EventRow({
 
   const color = EVENT_COLOR[event.type] ?? '#8896ab';
   const bg = EVENT_BG[event.type] ?? 'transparent';
-  const icon = EVENT_ICON[event.type] ?? '\u00B7';
+  const icon = EVENT_ICON[event.type] ?? '·';
   const label = EVENT_LABEL[event.type] ?? event.type;
   const relTime = getRelativeTime(event.timestamp, competitionStartTime);
 
@@ -593,7 +621,7 @@ function ScoreDrawer({
           color: '#8896ab', fontSize: '0.62rem', flexShrink: 0,
           background: 'rgba(30,45,69,0.4)', padding: '0.2rem 0.5rem', borderRadius: '4px',
         }}>
-          {drawerOpen ? '\u25B2 hide' : '\u25BC details'}
+          {drawerOpen ? '▲ hide' : '▼ details'}
         </span>
       </button>
 
@@ -725,7 +753,7 @@ function ScoreDrawer({
                   fontSize: '0.62rem', fontWeight: 800, color: '#a855f7',
                   letterSpacing: '2px', textTransform: 'uppercase',
                 }}>
-                  {'\u2728'} Synthesis
+                  {'✨'} Synthesis
                 </span>
                 <span style={{
                   fontSize: '0.62rem', color: '#8896ab',
@@ -734,7 +762,7 @@ function ScoreDrawer({
                   Best elements from both teams, merged by synthesis agent
                 </span>
                 <span style={{ fontSize: '0.62rem', color: '#8896ab', flexShrink: 0 }}>
-                  {synthOpen ? '\u25B2' : '\u25BC'}
+                  {synthOpen ? '▲' : '▼'}
                 </span>
               </button>
               {synthOpen && (
@@ -770,7 +798,7 @@ function StateBanner({ state }: { state: CompetitionState }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
         animation: 'judgingPulse 2s ease-in-out infinite',
       }}>
-        <span style={{ fontSize: '0.85rem' }}>{'\u2696\uFE0F'}</span>
+        <span style={{ fontSize: '0.85rem' }}>{'⚖️'}</span>
         <span style={{
           fontSize: '0.68rem', fontWeight: 700, color: '#eab308', letterSpacing: '2px',
         }}>
@@ -971,7 +999,7 @@ export default function CompetitionPage() {
             ARENA
           </a>
 
-          <span style={{ color: '#1e2d45', fontSize: '1rem' }}>{'\u2502'}</span>
+          <span style={{ color: '#1e2d45', fontSize: '1rem' }}>{'│'}</span>
 
           <div style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center',
@@ -990,7 +1018,7 @@ export default function CompetitionPage() {
               display: 'flex', alignItems: 'center', gap: '0.3rem',
             }}>
               {isRunning && <StatusDot color={stateBadge.color} pulsing={true} />}
-              {isComplete && <span>{'\u2705'}</span>}
+              {isComplete && <span>{'✅'}</span>}
               {state}
             </span>
 
@@ -1046,7 +1074,7 @@ export default function CompetitionPage() {
             display: 'flex', alignItems: 'center', gap: '0.3rem',
             transition: 'all 0.15s ease',
           }}>
-            {'\u25B6'} REPLAY
+            {'▶'} REPLAY
           </a>
 
           <div style={{
