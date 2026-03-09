@@ -117,6 +117,21 @@ program
     }
   });
 
+// ── serve ─────────────────────────────────────────────────────────────────────
+program
+  .command('serve')
+  .description('Start the Arena HTTP API server')
+  .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('--skip-sandbox', 'Skip Docker sandbox')
+  .action(async (opts: { port: string; skipSandbox?: boolean }) => {
+    const { createServer } = await import('./server/app.js');
+    const server = createServer();
+    const port = Number(opts.port);
+    server.listen(port, () => {
+      console.log(`[arena] server listening on http://localhost:${port}`);
+    });
+  });
+
 program.parseAsync(process.argv).catch((err: Error) => {
   console.error(err.message);
   process.exit(1);

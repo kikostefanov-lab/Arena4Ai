@@ -17,7 +17,10 @@ import {
 
 import { transition } from './state-machine.js';
 import { ClockManager } from './clock-manager.js';
+import { BaseAdapter } from '../adapters/base-adapter.js';
 import { ClaudeAdapter } from '../adapters/claude/claude-adapter.js';
+import { CodexAdapter } from '../adapters/codex/codex-adapter.js';
+import { GeminiAdapter } from '../adapters/gemini/gemini-adapter.js';
 import { resolvePersona } from '../adapters/claude/claude-personas.js';
 import { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { EventLogger } from '../events/event-logger.js';
@@ -33,6 +36,10 @@ export interface RunOptions {
   sandboxImage?: string;
   /** Path to the claude CLI binary. */
   claudeBin?: string;
+  /** Path to the codex CLI binary. Defaults to 'codex'. */
+  codexBin?: string;
+  /** Path to the gemini CLI binary. Defaults to 'gemini'. */
+  geminiBin?: string;
   /** If true, print a formatted results table to stdout after judging. */
   printResults?: boolean;
   /**
@@ -78,14 +85,36 @@ export class CompetitionRunner extends EventEmitter {
       logDir: options.logDir ?? tmpdir(),
       sandboxImage: options.sandboxImage ?? 'node:20-alpine',
       claudeBin: options.claudeBin ?? 'claude',
+      codexBin: options.codexBin ?? 'codex',
+      geminiBin: options.geminiBin ?? 'gemini',
       printResults: options.printResults ?? true,
       skipSandbox: options.skipSandbox ?? false,
     };
   }
 
+  /** The competition's unique ID — same value embedded in every ArenaEvent. */
+  get competitionId(): string {
+    return this.competition.id;
+  }
+
   private advance(to: CompetitionState): void {
     this.competition.state = transition(this.competition.state, to);
     this.emit('stateChange', this.competition.state);
+  }
+
+  /** Cancel the running competition (stub — full implementation in Task 8). */
+  async cancel(): Promise<void> {
+    // TODO: implement graceful cancellation
+  }
+
+  /** Pause the running competition (stub — full implementation in Task 8). */
+  pause(): void {
+    // TODO: implement pause
+  }
+
+  /** Resume a paused competition (stub — full implementation in Task 8). */
+  resume(): void {
+    // TODO: implement resume
   }
 
   /** Run the competition end-to-end and return the result. */
@@ -109,7 +138,7 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.LAUNCHING);
 
       const workdirs: Record<string, string> = {};
-      const adapters: ClaudeAdapter[] = [];
+      const adapters: BaseAdapter[] = [];
 
       for (const team of teams) {
         const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
@@ -119,23 +148,41 @@ export class CompetitionRunner extends EventEmitter {
           await sandboxManager.create(team.id, { workdir });
         }
 
-        const [modelName, personaId] = team.model.split(':');
+        // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
+        const [provider, personaId] = team.model.split(':');
         const persona = resolvePersona(
           personaId ?? team.persona,
           brief.format,
         );
 
-        const adapter = new ClaudeAdapter(team.id, {
-          workdir,
-          competitionId: this.competition.id,
-          claudeBin: this.options.claudeBin,
-        });
+        let adapter: BaseAdapter;
+        switch (provider) {
+          case 'codex':
+            adapter = new CodexAdapter(team.id, {
+              workdir,
+              competitionId: this.competition.id,
+              codexBin: this.options.codexBin,
+            });
+            break;
+          case 'gemini':
+            adapter = new GeminiAdapter(team.id, {
+              workdir,
+              competitionId: this.competition.id,
+              geminiBin: this.options.geminiBin,
+            });
+            break;
+          case 'claude':
+          default:
+            adapter = new ClaudeAdapter(team.id, {
+              workdir,
+              competitionId: this.competition.id,
+              claudeBin: this.options.claudeBin,
+            });
+        }
 
         adapter.on('arenaEvent', forwardEvent);
         await adapter.injectBrief(brief, persona.systemPrompt);
         adapters.push(adapter);
-
-        void modelName; // used via team.model label
       }
 
       // ── RUNNING ──────────────────────────────────────────────────────────
@@ -174,7 +221,7 @@ export class CompetitionRunner extends EventEmitter {
       // Run automated scorer (sync) + AI cross-judge (async) in parallel across all deliverables
       console.log('[arena] judging with automated scorer + AI cross-judge...');
       const judgeResults = await Promise.all([
-        ...deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric)),
+        ...deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief)),
         ...deliverables.map((d) => aiJudge(d, brief.rubric, {
           judgeId: JUDGE_IDS.aiClaude,
           claudeBin: this.options.claudeBin,
