@@ -1,4 +1,4 @@
-import { pgTable, text, jsonb, timestamp, integer, index } from 'drizzle-orm/pg-core';
+import { pgTable, text, jsonb, timestamp, integer, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const competitions = pgTable('competitions', {
   id:          text('id').primaryKey(),
@@ -18,7 +18,10 @@ export const events = pgTable('events', {
   payload:       jsonb('payload'),
   metadata:      jsonb('metadata'),
   seq:           integer('seq').notNull(),
-}, (t) => [index('events_competition_id_idx').on(t.competitionId)]);
+}, (t) => [
+  index('events_competition_id_idx').on(t.competitionId),
+  uniqueIndex('events_competition_seq_uidx').on(t.competitionId, t.seq),
+]);
 
 export const results = pgTable('results', {
   competitionId: text('competition_id').primaryKey().references(() => competitions.id),

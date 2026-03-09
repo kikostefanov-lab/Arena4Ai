@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "events_competition_seq_uidx" ON "events" USING btree ("competition_id","seq");
