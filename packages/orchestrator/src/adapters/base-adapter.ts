@@ -82,6 +82,9 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   }
 
   async shutdown(): Promise<void> {
+    if (this.sandbox) {
+      await this.sandbox.killContainer(this.teamId);
+    }
     if (this.process) {
       this.process.kill('SIGTERM');
       this.process = null;
