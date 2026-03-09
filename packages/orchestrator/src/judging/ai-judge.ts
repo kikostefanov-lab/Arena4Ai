@@ -6,6 +6,7 @@ import { computeOverallScore } from './score-aggregator.js';
 export const JUDGE_IDS = {
   automated: 'automated',
   aiClaude: 'ai-claude',
+  aiAdversarial: 'ai-adversarial',
 } as const;
 
 export interface AiJudgeOptions {
@@ -13,6 +14,44 @@ export interface AiJudgeOptions {
   judgeId: string;
   /** Path to the claude CLI binary. Defaults to 'claude'. */
   claudeBin?: string;
+}
+
+/**
+ * Build the judge prompt for a deliverable and rubric.
+ * When judgeId includes 'adversarial', critical evaluation instructions are added.
+ */
+export function buildJudgePrompt(
+  deliverable: Deliverable,
+  rubric: Rubric,
+  judgeId: string,
+): string {
+  const criteriaList = rubric.criteria
+    .map((c) => `- ${c.id}: ${c.description} (max ${c.maxScore} points)`)
+    .join('\n');
+
+  const filesText = deliverable.files
+    .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
+    .join('\n\n');
+
+  const adversarialClause = judgeId.includes('adversarial')
+    ? '\n\nIMPORTANT: You are an adversarial judge. Look for weaknesses, gaps, and missed edge cases. Score critically — be specific about what is missing or wrong.'
+    : '';
+
+  return `You are an impartial competition judge. Evaluate the following deliverable against each rubric criterion.${adversarialClause}
+
+## Rubric Criteria
+${criteriaList}
+
+## Deliverable Files
+${filesText || '(no files submitted)'}
+
+## Instructions
+Return ONLY a JSON object with this exact shape (no markdown, no prose):
+{
+  "scores": [
+    { "criterionId": "<id>", "score": <number 0–maxScore>, "commentary": "<1–2 sentences>" }
+  ]
+}`;
 }
 
 /**
@@ -31,29 +70,7 @@ export async function aiJudge(
 ): Promise<JudgeResult> {
   const { judgeId, claudeBin = 'claude' } = options;
 
-  const criteriaList = rubric.criteria
-    .map((c) => `- ${c.id}: ${c.description} (max ${c.maxScore} points)`)
-    .join('\n');
-
-  const filesText = deliverable.files
-    .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
-    .join('\n\n');
-
-  const prompt = `You are an impartial competition judge. Evaluate the following deliverable against each rubric criterion.
-
-## Rubric Criteria
-${criteriaList}
-
-## Deliverable Files
-${filesText || '(no files submitted)'}
-
-## Instructions
-Return ONLY a JSON object with this exact shape (no markdown, no prose):
-{
-  "scores": [
-    { "criterionId": "<id>", "score": <number 0–maxScore>, "commentary": "<1–2 sentences>" }
-  ]
-}`;
+  const prompt = buildJudgePrompt(deliverable, rubric, judgeId);
 
   let scores: CriterionScore[] = rubric.criteria.map((c) => ({
     criterionId: c.id,

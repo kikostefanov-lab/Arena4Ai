@@ -50,6 +50,8 @@ export interface RunOptions {
   skipSandbox?: boolean;
   /** Skip synthesis phase (useful in tests or when Claude is unavailable). */
   skipSynthesis?: boolean;
+  /** Number of AI judges per deliverable. Default 1. Max 2. */
+  aiJudgeCount?: 1 | 2;
 }
 
 export interface CompetitionResult {
@@ -98,6 +100,7 @@ export class CompetitionRunner extends EventEmitter {
       printResults: options.printResults ?? true,
       skipSandbox: options.skipSandbox ?? false,
       skipSynthesis: options.skipSynthesis ?? false,
+      aiJudgeCount: options.aiJudgeCount ?? 1,
     };
   }
 
@@ -238,12 +241,23 @@ export class CompetitionRunner extends EventEmitter {
 
       // Run automated scorer (sync) + AI cross-judge (async) in parallel across all deliverables
       console.log('[arena] judging with automated scorer + AI cross-judge...');
+      const aiJudgePromises = deliverables.map((d) => aiJudge(d, brief.rubric, {
+        judgeId: JUDGE_IDS.aiClaude,
+        claudeBin: this.options.claudeBin,
+      }));
+
+      if (this.options.aiJudgeCount >= 2) {
+        aiJudgePromises.push(
+          ...deliverables.map((d) => aiJudge(d, brief.rubric, {
+            judgeId: JUDGE_IDS.aiAdversarial,
+            claudeBin: this.options.claudeBin,
+          })),
+        );
+      }
+
       const judgeResults = await Promise.all([
         ...deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief)),
-        ...deliverables.map((d) => aiJudge(d, brief.rubric, {
-          judgeId: JUDGE_IDS.aiClaude,
-          claudeBin: this.options.claudeBin,
-        })),
+        ...aiJudgePromises,
       ]);
 
       const scorecards = aggregate(judgeResults);
