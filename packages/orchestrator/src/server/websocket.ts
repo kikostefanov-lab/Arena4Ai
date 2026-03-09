@@ -15,6 +15,7 @@ function normalizeResult(
   scorecards: RawScorecard[],
   winnerId: string | null,
   summary?: string | null,
+  synthesis?: string | null,
 ) {
   return {
     winnerId,
@@ -25,6 +26,7 @@ function normalizeResult(
       rank: sc.rank,
     })),
     ...(summary ? { summary } : {}),
+    ...(synthesis ? { synthesis } : {}),
   };
 }
 
@@ -92,7 +94,7 @@ export function attachWebSocket(server: Server): void {
       const result = await repo.getResult(competitionId);
       if (result) {
         const scorecards = (result.scorecards as RawScorecard[]) ?? [];
-        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary);
+        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary, (result as Record<string, unknown>).synthesis as string | null | undefined);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
         return;
@@ -110,9 +112,9 @@ export function attachWebSocket(server: Server): void {
       const onArenaEvent = (event: unknown) => { seq++; send({ ...(event as object), _seq: seq }); };
       const onStateChange = (state: unknown) => { send({ type: 'STATE_CHANGE', state }); };
       const onResult = (r: unknown) => {
-        // r is CompetitionResult from the runner: { competition, scorecards, winner }
-        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null };
-        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null);
+        // r is CompetitionResult from the runner: { competition, scorecards, winner, synthesis }
+        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; synthesis?: string | null };
+        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, undefined, runnerResult.synthesis);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
       };

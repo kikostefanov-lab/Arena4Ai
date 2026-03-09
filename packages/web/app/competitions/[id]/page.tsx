@@ -30,6 +30,7 @@ interface CompetitionResult {
   winnerId: string | null;
   teams: TeamResult[];
   summary?: string;
+  synthesis?: string | null;
 }
 
 type CompetitionState = 'PENDING' | 'RUNNING' | 'JUDGING' | 'COMPLETE' | 'ERROR';
@@ -341,6 +342,25 @@ export default function CompetitionPage() {
               );
             })}
           </div>
+
+          {/* Synthesis panel */}
+          {result?.synthesis && (
+            <div className="mt-8 border border-purple-800 rounded-lg overflow-hidden">
+              <div className="bg-purple-900/30 px-4 py-3 border-b border-purple-800 flex items-center gap-2">
+                <span className="text-purple-400 font-mono text-xs font-bold tracking-widest uppercase">
+                  ✦ Synthesis
+                </span>
+                <span className="text-slate-400 text-xs ml-2">
+                  Best elements from both teams, combined by the synthesis agent
+                </span>
+              </div>
+              <div className="p-6 bg-slate-900">
+                <pre className="text-sm text-slate-300 whitespace-pre-wrap font-mono leading-relaxed">
+                  {result.synthesis}
+                </pre>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
