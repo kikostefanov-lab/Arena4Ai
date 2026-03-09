@@ -27,6 +27,9 @@ export interface Brief {
   rubric: Rubric;
   format: CompetitionFormat;
   timeLimitMs: number;
+  /** Expected stdout for automated correctness scoring. If set, the scorer
+   *  executes runnable deliverable files and compares output line-by-line. */
+  expectedOutput?: string;
 }
 
 export interface Deliverable {

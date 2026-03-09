@@ -24,6 +24,7 @@ export const briefSchema = z.object({
   rubric: rubricSchema,
   format: z.nativeEnum(CompetitionFormat),
   timeLimitMs: z.number().positive(),
+  expectedOutput: z.string().optional(),
 });
 
 export type BriefInput = z.infer<typeof briefSchema>;

@@ -1,4 +1,4 @@
-import { orchestratorUrl, orchestratorHeaders } from '../../../lib/orchestrator.js';
+import { orchestratorUrl, orchestratorHeaders } from '../../../lib/orchestrator';
 
 export async function GET() {
   const upstream = await fetch(orchestratorUrl('/competitions'), { headers: orchestratorHeaders() });
