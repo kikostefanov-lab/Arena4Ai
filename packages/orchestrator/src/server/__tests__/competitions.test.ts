@@ -249,3 +249,35 @@ describe('POST /competitions/:id/resume', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('Auth middleware', () => {
+  let app: Application;
+
+  beforeEach(() => {
+    app = createApp();
+  });
+
+  it('returns 401 when ARENA_API_KEY is set and header is missing', async () => {
+    process.env.ARENA_API_KEY = 'test-key';
+    const res = await request(app).post('/competitions').send({ brief: validBrief, teams: validTeams });
+    expect(res.status).toBe(401);
+    delete process.env.ARENA_API_KEY;
+  });
+
+  it('returns 201 when correct key is provided', async () => {
+    process.env.ARENA_API_KEY = 'test-key';
+    const res = await request(app)
+      .post('/competitions')
+      .set('Authorization', 'Bearer test-key')
+      .send({ brief: validBrief, teams: validTeams });
+    expect(res.status).toBe(201);
+    delete process.env.ARENA_API_KEY;
+  });
+
+  it('allows GET without auth key', async () => {
+    process.env.ARENA_API_KEY = 'test-key';
+    const res = await request(app).get('/competitions');
+    expect(res.status).toBe(200);
+    delete process.env.ARENA_API_KEY;
+  });
+});

@@ -1,10 +1,13 @@
-export async function POST(req: Request) {
-  const body = await req.json();
-  const res = await fetch('http://localhost:3000/competitions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  return Response.json(data, { status: res.status });
+export async function POST(request: Request) {
+  const body = await request.json();
+  const apiKey = process.env.ARENA_API_KEY;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+
+  const upstream = await fetch(
+    `${process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000'}/competitions`,
+    { method: 'POST', headers, body: JSON.stringify(body) }
+  );
+  const data = await upstream.json();
+  return Response.json(data, { status: upstream.status });
 }

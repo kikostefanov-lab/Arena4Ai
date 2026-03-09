@@ -7,12 +7,13 @@ import type { RunOptions } from '../../engine/competition-runner.js';
 import { db } from '../../db/client.js';
 import { CompetitionRepository } from '../../db/repository.js';
 import { runnerRegistry } from '../runner-registry.js';
+import { requireApiKey } from '../middleware/auth.js';
 
 export const competitionsRouter = Router();
 const repo = new CompetitionRepository(db);
 
 // POST /competitions — start a new competition
-competitionsRouter.post('/', async (req: Request, res: Response) => {
+competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) => {
   const body = req.body as {
     brief?: unknown;
     teams?: unknown;
@@ -104,7 +105,7 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /competitions/:id/cancel
-competitionsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
+competitionsRouter.post('/:id/cancel', requireApiKey, async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const runner = runnerRegistry.get(id);
   if (!runner) {
@@ -116,7 +117,7 @@ competitionsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
 });
 
 // POST /competitions/:id/pause
-competitionsRouter.post('/:id/pause', async (req: Request, res: Response) => {
+competitionsRouter.post('/:id/pause', requireApiKey, async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const runner = runnerRegistry.get(id);
   if (!runner) {
@@ -128,7 +129,7 @@ competitionsRouter.post('/:id/pause', async (req: Request, res: Response) => {
 });
 
 // POST /competitions/:id/resume
-competitionsRouter.post('/:id/resume', async (req: Request, res: Response) => {
+competitionsRouter.post('/:id/resume', requireApiKey, async (req: Request, res: Response) => {
   const id = String(req.params.id);
   const runner = runnerRegistry.get(id);
   if (!runner) {
