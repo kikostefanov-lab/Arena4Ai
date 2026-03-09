@@ -24,59 +24,191 @@ interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summ
 
 type CompetitionState = 'PENDING' | 'RUNNING' | 'JUDGING' | 'COMPLETE' | 'ERROR';
 
+// ─── Event classification ─────────────────────────────────────────────────────
+
+interface EventInfo {
+  label: string;
+  icon: string;
+  color: string;
+  bg: string;
+  text: string;
+}
+
+function getToolIcon(toolName: string): string {
+  const n = toolName.toLowerCase();
+  if (/bash|shell|run|exec|command/.test(n)) return '⚡';
+  if (/write|create|save/.test(n)) return '✍️';
+  if (/read|cat|view|open/.test(n)) return '👁️';
+  if (/search|grep|find|glob/.test(n)) return '🔍';
+  if (/python|py|node|js/.test(n)) return '🐍';
+  if (/edit|replace|patch|str/.test(n)) return '✏️';
+  if (/web|http|fetch|curl|url/.test(n)) return '🌐';
+  if (/list|ls|dir/.test(n)) return '📂';
+  if (/git/.test(n)) return '🔀';
+  return '🔧';
+}
+
+function toolCommentary(toolName: string, valStr: string): string {
+  const n = toolName.toLowerCase();
+  if (/bash|shell|run|exec/.test(n)) return `$ ${valStr}`;
+  if (/write|create/.test(n)) return `Writing to ${valStr}`;
+  if (/read|cat|view/.test(n)) return `Reading ${valStr}`;
+  if (/search|grep|find/.test(n)) return `Searching: ${valStr}`;
+  if (/edit|replace|patch|str/.test(n)) return `Patching ${valStr}`;
+  if (/glob/.test(n)) return `Glob: ${valStr}`;
+  return valStr ? `${toolName}: ${valStr}` : toolName;
+}
+
+function classifyEvent(type: string, payload: unknown): EventInfo | null {
+  const p = payload as Record<string, unknown> | null;
+  if (!p) return null;
+
+  switch (type) {
+    case 'TOOL_CALL': {
+      const tool = String(p.tool ?? 'unknown');
+      const input = (p.input ?? {}) as Record<string, unknown>;
+      const val = input.command ?? input.code ?? input.path ?? input.query ?? input.content;
+      const valStr = val ? String(val).replace(/\n/g, ' ').trim().slice(0, 80) : '';
+      const keys = Object.keys(input);
+      const text = toolCommentary(tool, valStr || (keys.length ? `${keys[0]}=…` : ''));
+      return {
+        label: tool.toUpperCase().slice(0, 8),
+        icon: getToolIcon(tool),
+        color: '#3b82f6',
+        bg: 'rgba(59,130,246,0.08)',
+        text,
+      };
+    }
+
+    case 'FILE_CREATE': {
+      const text = String(p.text ?? p.path ?? '');
+      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
+      const fname = m ? m[1] : text.slice(0, 80);
+      return { label: 'CREATE', icon: '📄', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', text: `New file: ${fname}` };
+    }
+
+    case 'FILE_MODIFY': {
+      const text = String(p.text ?? p.path ?? '');
+      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
+      const fname = m ? m[1] : text.slice(0, 80);
+      return { label: 'MODIFY', icon: '✏️', color: '#10b981', bg: 'rgba(16,185,129,0.08)', text: `Modified: ${fname}` };
+    }
+
+    case 'REASONING': {
+      if (p.text && typeof p.text === 'string') {
+        return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: p.text.trim().slice(0, 160) };
+      }
+      if (p.raw) {
+        const raw = p.raw as Record<string, unknown>;
+
+        if (raw.type === 'system' || raw.type === 'rate_limit_event') return null;
+
+        if (raw.type === 'user') {
+          const msg = raw.message as Record<string, unknown> | null;
+          const content = msg?.content;
+          if (Array.isArray(content)) {
+            const toolResult = (content as Record<string, unknown>[]).find((b) => b.type === 'tool_result');
+            if (toolResult?.content && typeof toolResult.content === 'string') {
+              const resultText = toolResult.content.replace(/\n/g, ' ').trim();
+              const isErr = /error|failed|exception|traceback|command not found/i.test(resultText);
+              return {
+                label: isErr ? 'FAIL' : 'RESULT',
+                icon: isErr ? '❌' : '✅',
+                color: isErr ? '#ef4444' : '#22c55e',
+                bg: isErr ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.06)',
+                text: resultText.slice(0, 160),
+              };
+            }
+          }
+          return null;
+        }
+
+        if (raw.type === 'result') {
+          const res = raw.result;
+          const resText = res && typeof res === 'string' ? res.trim() : null;
+          if (!resText) return null;
+          return { label: 'DONE', icon: '🏁', color: '#f97316', bg: 'rgba(249,115,22,0.08)', text: resText.slice(0, 160) };
+        }
+
+        if (raw.type === 'assistant') {
+          const msg = raw.message as Record<string, unknown> | null;
+          const content = msg?.content;
+          if (Array.isArray(content)) {
+            const blocks = content as Record<string, unknown>[];
+
+            // Text output from agent
+            const tb = blocks.find((b) => b.type === 'text');
+            if (tb?.text && typeof tb.text === 'string') {
+              return { label: 'OUTPUT', icon: '💬', color: '#a78bfa', bg: 'rgba(167,139,250,0.07)', text: tb.text.slice(0, 160) };
+            }
+
+            // Claude's internal thinking
+            const thinkBlock = blocks.find((b) => b.type === 'thinking');
+            if (thinkBlock?.thinking && typeof thinkBlock.thinking === 'string') {
+              const raw = thinkBlock.thinking.replace(/\n/g, ' ').trim();
+              // Take first natural sentence for punchy commentary
+              const sentence = raw.match(/[^.!?]{10,}[.!?]/)?.[0]?.trim() ?? raw;
+              return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: sentence.slice(0, 160) };
+            }
+
+            // Tool invocation
+            const toolBlock = blocks.find((b) => b.type === 'tool_use');
+            if (toolBlock) {
+              const toolName = String(toolBlock.name ?? 'tool');
+              const input = toolBlock.input as Record<string, unknown> | undefined;
+              const val = input?.command ?? input?.code ?? input?.path ?? input?.content ?? input?.query ?? input?.pattern;
+              const valStr = val && typeof val === 'string' ? val.replace(/\n/g, ' ').slice(0, 80) : '';
+              const text = toolCommentary(toolName, valStr);
+              return {
+                label: toolName.toUpperCase().slice(0, 8),
+                icon: getToolIcon(toolName),
+                color: '#3b82f6',
+                bg: 'rgba(59,130,246,0.08)',
+                text,
+              };
+            }
+          }
+          return null;
+        }
+      }
+      return null;
+    }
+
+    case 'ERROR': {
+      const err = p.error;
+      let text = '';
+      if (typeof err === 'string') text = err.slice(0, 160);
+      else if (err && typeof err === 'object') {
+        const e = err as Record<string, unknown>;
+        text = String(e.message ?? e.text ?? JSON.stringify(err)).slice(0, 160);
+      } else {
+        text = typeof p.raw === 'string' ? p.raw.slice(0, 120) : '';
+      }
+      if (!text) return null;
+      return { label: 'ERROR', icon: '⚠️', color: '#ef4444', bg: 'rgba(239,68,68,0.10)', text };
+    }
+
+    case 'TIME_WARNING':
+    case 'TIME_UP': {
+      const rem = p.remainingMs ?? p.remaining;
+      const text = rem != null ? `${Math.round(Number(rem) / 1000)}s remaining on the clock` : null;
+      if (!text) return null;
+      const isUp = type === 'TIME_UP';
+      return { label: isUp ? 'TIME UP' : 'TIME', icon: '⏰', color: isUp ? '#f97316' : '#eab308', bg: isUp ? 'rgba(249,115,22,0.12)' : 'rgba(234,179,8,0.10)', text };
+    }
+
+    case 'JUDGE_SCORE': {
+      const score = p.score ?? p.totalScore;
+      const crit = p.criterionId ?? p.criterion;
+      if (crit && score != null) return { label: 'SCORE', icon: '⚖️', color: '#a855f7', bg: 'rgba(168,85,247,0.10)', text: `${String(crit)} → ${score}` };
+      return null;
+    }
+
+    default: return null;
+  }
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
-
-const EVENT_ICON: Record<string, string> = {
-  TOOL_CALL:         '\u{1F527}',
-  FILE_CREATE:       '\u{1F4DD}',
-  FILE_MODIFY:       '\u{1F4DD}',
-  REASONING:         '\u{1F9E0}',
-  ERROR:             '⚠️',
-  TIME_WARNING:      '⏰',
-  TIME_UP:           '⏰',
-  JUDGE_SCORE:       '⚖️',
-  COMPETITION_START: '\u{1F680}',
-  COMPETITION_END:   '\u{1F3C1}',
-};
-
-const EVENT_LABEL: Record<string, string> = {
-  TOOL_CALL:         'TOOL',
-  FILE_CREATE:       'CREATE',
-  FILE_MODIFY:       'MODIFY',
-  REASONING:         'THINK',
-  ERROR:             'ERROR',
-  TIME_WARNING:      'TIME',
-  TIME_UP:           'TIME UP',
-  JUDGE_SCORE:       'SCORE',
-  COMPETITION_START: 'START',
-  COMPETITION_END:   'END',
-};
-
-const EVENT_COLOR: Record<string, string> = {
-  TOOL_CALL:        '#3b82f6',
-  FILE_CREATE:      '#22c55e',
-  FILE_MODIFY:      '#10b981',
-  REASONING:        '#06b6d4',
-  ERROR:            '#ef4444',
-  TIME_WARNING:     '#eab308',
-  TIME_UP:          '#f97316',
-  JUDGE_SCORE:      '#a855f7',
-  COMPETITION_START:'#e2e8f0',
-  COMPETITION_END:  '#e2e8f0',
-};
-
-const EVENT_BG: Record<string, string> = {
-  TOOL_CALL:        'rgba(59,130,246,0.08)',
-  FILE_CREATE:      'rgba(34,197,94,0.08)',
-  FILE_MODIFY:      'rgba(16,185,129,0.08)',
-  REASONING:        'rgba(6,182,212,0.06)',
-  ERROR:            'rgba(239,68,68,0.10)',
-  TIME_WARNING:     'rgba(234,179,8,0.10)',
-  TIME_UP:          'rgba(249,115,22,0.12)',
-  JUDGE_SCORE:      'rgba(168,85,247,0.10)',
-  COMPETITION_START:'rgba(226,232,240,0.05)',
-  COMPETITION_END:  'rgba(226,232,240,0.05)',
-};
 
 const HIST_COLORS: Record<string, string> = {
   TOOL_CALL:   '#3b82f6',
@@ -116,7 +248,7 @@ const GLOBAL_STYLES = `
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -155,9 +287,9 @@ const GLOBAL_STYLES = `
   100% { background: rgba(34,197,94,0); }
 }
 
-.arena-scrollbar::-webkit-scrollbar { width: 4px; }
+.arena-scrollbar::-webkit-scrollbar { width: 5px; }
 .arena-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.arena-scrollbar::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 2px; }
+.arena-scrollbar::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 3px; }
 .arena-scrollbar::-webkit-scrollbar-thumb:hover { background: #2d4060; }
 
 .arena-event-row { animation: slideIn 0.2s ease-out; }
@@ -166,106 +298,31 @@ const GLOBAL_STYLES = `
 .arena-progress-bar { animation: progressReveal 0.8s ease-out both; }
 .arena-running-border { animation: borderGlow 2s ease-in-out infinite; }
 .arena-celebration { animation: celebrationFlash 1.5s ease-out; }
-`;
 
-// ─── Event summarizer ─────────────────────────────────────────────────────────
-
-function summarizeEvent(type: string, payload: unknown): string | null {
-  const p = payload as Record<string, unknown> | null;
-  if (!p) return null;
-  switch (type) {
-    case 'TOOL_CALL': {
-      const tool = String(p.tool ?? 'unknown');
-      const input = (p.input ?? {}) as Record<string, unknown>;
-      const val = input.command ?? input.code ?? input.path ?? input.query ?? input.content;
-      if (val) {
-        const str = String(val).replace(/\n/g, ' ').trim();
-        return `${tool}  ${str.slice(0, 80)}`;
-      }
-      const keys = Object.keys(input);
-      return keys.length ? `${tool}(${keys[0]}=...)` : tool;
-    }
-    case 'FILE_CREATE':
-    case 'FILE_MODIFY': {
-      const text = String(p.text ?? '');
-      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
-      return m ? m[1] : text.slice(0, 80);
-    }
-    case 'REASONING': {
-      if (p.text && typeof p.text === 'string') return p.text.trim().slice(0, 120) || null;
-      if (p.raw) {
-        const raw = p.raw as Record<string, unknown>;
-        if (raw.type === 'system' || raw.type === 'rate_limit_event') return null;
-        if (raw.type === 'user') {
-          // Tool result received — extract tool_result content
-          const msg = raw.message as Record<string, unknown> | null;
-          const content = msg?.content;
-          if (Array.isArray(content)) {
-            const toolResult = (content as Record<string, unknown>[]).find((b) => b.type === 'tool_result');
-            if (toolResult?.content && typeof toolResult.content === 'string') {
-              return `Result: ${toolResult.content.replace(/\n/g, ' ').trim().slice(0, 100)}`;
-            }
-          }
-          return null;
-        }
-        if (raw.type === 'result') {
-          const res = raw.result;
-          return (res && typeof res === 'string') ? res.slice(0, 100) : null;
-        }
-        if (raw.type === 'assistant') {
-          const msg = raw.message as Record<string, unknown> | null;
-          const content = msg?.content;
-          if (Array.isArray(content)) {
-            const blocks = content as Record<string, unknown>[];
-            // Text content
-            const tb = blocks.find((b) => b.type === 'text');
-            if (tb?.text && typeof tb.text === 'string') return tb.text.slice(0, 120);
-            // Thinking content (Claude's reasoning)
-            const thinkBlock = blocks.find((b) => b.type === 'thinking');
-            if (thinkBlock?.thinking && typeof thinkBlock.thinking === 'string') {
-              return thinkBlock.thinking.replace(/\n/g, ' ').trim().slice(0, 120);
-            }
-            // Tool use content
-            const toolBlock = blocks.find((b) => b.type === 'tool_use');
-            if (toolBlock) {
-              const toolName = String(toolBlock.name ?? 'tool');
-              const input = toolBlock.input as Record<string, unknown> | undefined;
-              const val = input?.command ?? input?.code ?? input?.path ?? input?.content;
-              if (val && typeof val === 'string') return `${toolName}  ${val.replace(/\n/g, ' ').slice(0, 80)}`;
-              return toolName;
-            }
-          }
-          return null;
-        }
-        const content = raw.content ?? raw.text ?? raw.message;
-        if (content && typeof content === 'string') return content.slice(0, 100);
-      }
-      return null;
-    }
-    case 'ERROR': {
-      const err = p.error;
-      if (typeof err === 'string') return err.slice(0, 120);
-      if (err && typeof err === 'object') {
-        const e = err as Record<string, unknown>;
-        return String(e.message ?? e.text ?? JSON.stringify(err)).slice(0, 120);
-      }
-      return typeof p.raw === 'string' ? p.raw.slice(0, 100) : null;
-    }
-    case 'TIME_WARNING':
-    case 'TIME_UP': {
-      const rem = p.remainingMs ?? p.remaining;
-      return rem != null ? `${Math.round(Number(rem) / 1000)}s remaining` : null;
-    }
-    case 'JUDGE_SCORE': {
-      const score = p.score ?? p.totalScore;
-      const crit = p.criterionId ?? p.criterion;
-      if (crit && score != null) return `${String(crit)} → ${score}`;
-      return null;
-    }
-    default:
-      return null;
-  }
+.resize-handle {
+  flex-shrink: 0;
+  height: 5px;
+  background: #1e2d45;
+  cursor: ns-resize;
+  user-select: none;
+  transition: background 0.15s;
+  position: relative;
 }
+.resize-handle:hover, .resize-handle.dragging {
+  background: rgba(249,115,22,0.5);
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.12);
+}
+`;
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -298,7 +355,7 @@ function hexToRgb(hex: string): string {
 
 function ctrlBtn(color: string, bg: string): React.CSSProperties {
   return {
-    fontSize: '0.65rem', fontWeight: 700, padding: '0.35rem 0.85rem',
+    fontSize: '0.72rem', fontWeight: 700, padding: '0.4rem 1rem',
     background: bg, color, border: `1px solid ${color}`,
     borderRadius: '6px', cursor: 'pointer', letterSpacing: '0.5px', fontFamily: 'inherit',
     transition: 'all 0.15s ease',
@@ -311,7 +368,7 @@ function ActivitySpinner({ color, active }: { color: string; active: boolean }) 
   if (!active) return null;
   return (
     <div style={{
-      width: '14px', height: '14px', borderRadius: '50%',
+      width: '15px', height: '15px', borderRadius: '50%',
       border: `2px solid rgba(${hexToRgb(color)},0.2)`,
       borderTopColor: color,
       animation: 'spinDot 0.8s linear infinite',
@@ -329,8 +386,8 @@ function ModelBadge({ model }: { model: string }) {
   };
   return (
     <span style={{
-      fontSize: '0.58rem', fontWeight: 800,
-      padding: '0.15rem 0.5rem', borderRadius: '4px',
+      fontSize: '0.68rem', fontWeight: 800,
+      padding: '0.2rem 0.6rem', borderRadius: '4px',
       background: colors.bg, color: colors.fg,
       border: `1px solid ${colors.border}`,
       letterSpacing: '0.8px', textTransform: 'uppercase', flexShrink: 0,
@@ -345,7 +402,7 @@ function ModelBadge({ model }: { model: string }) {
 function StatusDot({ color, pulsing }: { color: string; pulsing: boolean }) {
   return (
     <span style={{
-      display: 'inline-block', width: '8px', height: '8px',
+      display: 'inline-block', width: '9px', height: '9px',
       borderRadius: '50%', background: color, flexShrink: 0,
       boxShadow: pulsing ? `0 0 6px ${color}` : 'none',
       animation: pulsing ? 'pulse 1.5s ease-in-out infinite' : 'none',
@@ -365,18 +422,18 @@ function LaneHistogram({ events }: { events: ArenaEvent[] }) {
 
   return (
     <div style={{
-      display: 'flex', width: '80px', height: '4px', borderRadius: '2px',
+      display: 'flex', width: '80px', height: '5px', borderRadius: '3px',
       overflow: 'hidden', gap: '1px', background: 'rgba(30,45,69,0.5)',
     }}>
-      {Object.entries(HIST_COLORS).map(([type, color]) => {
-        const count = counts[type] ?? 0;
+      {Object.entries(HIST_COLORS).map(([t, color]) => {
+        const count = counts[t] ?? 0;
         if (count === 0) return null;
         const pct = (count / total) * 100;
         return (
           <div
-            key={type}
-            title={`${type}: ${count}`}
-            style={{ width: `${pct}%`, background: color, minWidth: '2px', borderRadius: '1px' }}
+            key={t}
+            title={`${t}: ${count}`}
+            style={{ width: `${pct}%`, background: color, minWidth: '2px', borderRadius: '2px' }}
           />
         );
       })}
@@ -391,47 +448,44 @@ function EventRow({
 }: {
   event: ArenaEvent; competitionStartTime: number | null;
 }) {
-  const summary = summarizeEvent(event.type, event.payload);
-  if (summary === null) return null;
+  const info = classifyEvent(event.type, event.payload);
+  if (!info) return null;
 
-  const color = EVENT_COLOR[event.type] ?? '#8896ab';
-  const bg = EVENT_BG[event.type] ?? 'transparent';
-  const icon = EVENT_ICON[event.type] ?? '·';
-  const label = EVENT_LABEL[event.type] ?? event.type;
   const relTime = getRelativeTime(event.timestamp, competitionStartTime);
 
   return (
     <div className="arena-event-row" style={{
-      background: bg, borderRadius: '6px',
-      padding: '0.4rem 0.6rem', fontSize: '0.68rem', lineHeight: 1.6,
-      display: 'flex', gap: '0.4rem', alignItems: 'flex-start',
+      background: info.bg, borderRadius: '7px',
+      padding: '0.5rem 0.75rem', fontSize: '0.78rem', lineHeight: 1.55,
+      display: 'flex', gap: '0.5rem', alignItems: 'flex-start',
       transition: 'background 0.15s ease',
     }}>
       {/* Timestamp */}
       <span style={{
-        color: '#4a5568', fontSize: '0.58rem', fontFamily: 'monospace',
-        flexShrink: 0, width: '2.2rem', textAlign: 'right',
-        marginTop: '1px', letterSpacing: '-0.3px',
+        color: '#4a5568', fontSize: '0.68rem', fontFamily: 'monospace',
+        flexShrink: 0, width: '2.5rem', textAlign: 'right',
+        marginTop: '2px', letterSpacing: '-0.3px',
       }}>
         {relTime}
       </span>
       {/* Icon */}
-      <span style={{ flexShrink: 0, fontSize: '0.72rem', lineHeight: 1.5 }}>{icon}</span>
+      <span style={{ flexShrink: 0, fontSize: '0.88rem', lineHeight: 1.4 }}>{info.icon}</span>
       {/* Label badge */}
       <span style={{
-        color, fontWeight: 800, flexShrink: 0, fontSize: '0.52rem',
+        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.62rem',
         letterSpacing: '0.5px',
-        background: `rgba(${hexToRgb(color)},0.1)`,
-        padding: '0.05rem 0.35rem', borderRadius: '3px', marginTop: '1px',
+        background: `rgba(${hexToRgb(info.color)},0.12)`,
+        padding: '0.08rem 0.4rem', borderRadius: '4px', marginTop: '2px',
+        whiteSpace: 'nowrap',
       }}>
-        {label}
+        {info.label}
       </span>
       {/* Summary text */}
       <span style={{
         color: '#c4d4e8', overflow: 'hidden', textOverflow: 'ellipsis',
         whiteSpace: 'nowrap', flex: 1, minWidth: 0,
       }}>
-        {summary}
+        {info.text}
       </span>
     </div>
   );
@@ -462,19 +516,19 @@ const LanePanel = forwardRef<
     }}>
       {/* Header */}
       <div style={{
-        padding: '0.65rem 1rem',
+        padding: '0.75rem 1.1rem',
         background: 'linear-gradient(180deg, #0f1724 0%, #0d1520 100%)',
         borderBottom: `2px solid ${isRunning ? color : '#1e2d45'}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexShrink: 0, gap: '0.6rem',
         transition: 'border-color 0.3s ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0, flex: 1 }}>
           <StatusDot color={color} pulsing={isRunning && recentActivity} />
           <ModelBadge model={team.model} />
           {team.persona && (
             <span style={{
-              fontSize: '0.62rem', color: '#8896ab',
+              fontSize: '0.72rem', color: '#8896ab',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               fontStyle: 'italic',
             }}>
@@ -486,9 +540,9 @@ const LanePanel = forwardRef<
           <ActivitySpinner color={color} active={isRunning && recentActivity} />
           <LaneHistogram events={events} />
           <span style={{
-            fontSize: '0.62rem', color: '#4a5568', fontWeight: 700,
+            fontSize: '0.70rem', color: '#4a5568', fontWeight: 700,
             fontFamily: 'monospace', background: 'rgba(30,45,69,0.4)',
-            padding: '0.1rem 0.4rem', borderRadius: '3px',
+            padding: '0.12rem 0.5rem', borderRadius: '4px',
           }}>
             {events.length}
           </span>
@@ -500,25 +554,25 @@ const LanePanel = forwardRef<
         ref={ref}
         className="arena-scrollbar"
         style={{
-          flex: 1, overflowY: 'auto', padding: '0.5rem 0.5rem',
-          display: 'flex', flexDirection: 'column', gap: '2px',
+          flex: 1, overflowY: 'auto', padding: '0.6rem 0.6rem',
+          display: 'flex', flexDirection: 'column', gap: '3px',
         }}
       >
         {events.length === 0 && (
           <div style={{
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            height: '100%', gap: '0.5rem',
+            height: '100%', gap: '0.6rem',
           }}>
             {isRunning ? (
               <>
                 <ActivitySpinner color={color} active={true} />
-                <p style={{ color: '#2d4060', fontSize: '0.68rem', fontStyle: 'italic' }}>
+                <p style={{ color: '#2d4060', fontSize: '0.78rem', fontStyle: 'italic' }}>
                   Waiting for events...
                 </p>
               </>
             ) : (
-              <p style={{ color: '#2d4060', fontSize: '0.68rem', fontStyle: 'italic' }}>
+              <p style={{ color: '#2d4060', fontSize: '0.78rem', fontStyle: 'italic' }}>
                 Waiting for competition to start...
               </p>
             )}
@@ -532,18 +586,18 @@ const LanePanel = forwardRef<
       {/* Lane footer: quick stats */}
       {events.length > 0 && (
         <div style={{
-          display: 'flex', gap: '0.6rem', padding: '0.35rem 1rem',
+          display: 'flex', gap: '0.8rem', padding: '0.4rem 1.1rem',
           borderTop: '1px solid rgba(30,45,69,0.6)',
-          background: '#0d1520', flexShrink: 0,
+          background: '#0d1520', flexShrink: 0, flexWrap: 'wrap',
         }}>
-          {Object.entries(HIST_COLORS).map(([type, c]) => {
-            const count = events.filter((e) => e.type === type).length;
+          {Object.entries(HIST_COLORS).map(([evType, c]) => {
+            const count = events.filter((e) => e.type === evType).length;
             if (count === 0) return null;
             return (
-              <span key={type} style={{
-                fontSize: '0.52rem', color: c, fontWeight: 600, letterSpacing: '0.3px',
+              <span key={evType} style={{
+                fontSize: '0.65rem', color: c, fontWeight: 600, letterSpacing: '0.3px',
               }}>
-                {EVENT_ICON[type]} {count}
+                {evType === 'TOOL_CALL' ? '⚡' : evType === 'FILE_CREATE' ? '📄' : evType === 'FILE_MODIFY' ? '✏️' : evType === 'REASONING' ? '🧠' : '⚠️'} {count}
               </span>
             );
           })}
@@ -556,22 +610,22 @@ LanePanel.displayName = 'LanePanel';
 
 // ─── Score drawer ─────────────────────────────────────────────────────────────
 
+const SCORE_DRAWER_COLLAPSED = 52;
+const SCORE_DRAWER_EXPANDED = 300;
+
 function ScoreDrawer({
   result,
   teams,
+  height,
+  onToggle,
 }: {
   result: CompetitionResult;
   teams: Team[];
+  height: number;
+  onToggle: () => void;
 }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [synthOpen, setSynthOpen] = useState(true);
-
-  const didAutoOpen = useRef(false);
-  useEffect(() => {
-    if (!didAutoOpen.current) {
-      didAutoOpen.current = true;
-    }
-  }, []);
+  const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
   const winnerLabel = result.winnerId
     ? resolveLabel(teams, result.winnerId, result.winnerId)
@@ -592,42 +646,46 @@ function ScoreDrawer({
     <div className="arena-celebration" style={{
       borderTop: '2px solid rgba(34,197,94,0.4)',
       background: 'rgba(10,14,23,0.98)', flexShrink: 0,
+      height: `${height}px`, overflow: 'hidden',
+      display: 'flex', flexDirection: 'column',
+      transition: 'none',
     }}>
       {/* Collapsed strip */}
       <button
-        onClick={() => setDrawerOpen((o) => !o)}
+        onClick={onToggle}
         style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: '0.7rem',
-          padding: '0 1.25rem', height: '48px', background: 'none', border: 'none',
-          cursor: 'pointer', fontFamily: 'inherit', color: '#e2e8f0', textAlign: 'left',
-          borderBottom: drawerOpen ? '1px solid #1e2d45' : 'none',
+          width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+          padding: '0 1.4rem', height: `${SCORE_DRAWER_COLLAPSED}px`, minHeight: `${SCORE_DRAWER_COLLAPSED}px`,
+          background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+          color: '#e2e8f0', textAlign: 'left', flexShrink: 0,
+          borderBottom: isExpanded ? '1px solid #1e2d45' : 'none',
         }}
       >
-        <span style={{ fontSize: '1rem', flexShrink: 0 }}>{'\u{1F3C6}'}</span>
+        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🏆</span>
         <span style={{
-          color: '#eab308', fontSize: '0.72rem', fontWeight: 800,
+          color: '#eab308', fontSize: '0.82rem', fontWeight: 800,
           letterSpacing: '1px', flexShrink: 0,
         }}>
           {winnerLabel ?? 'DRAW'}
         </span>
         <span style={{
-          color: '#4a5568', fontSize: '0.62rem', flex: 1,
+          color: '#4a5568', fontSize: '0.72rem', flex: 1,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           letterSpacing: '0.3px',
         }}>
           {scoreSummary}
         </span>
         <span style={{
-          color: '#8896ab', fontSize: '0.62rem', flexShrink: 0,
-          background: 'rgba(30,45,69,0.4)', padding: '0.2rem 0.5rem', borderRadius: '4px',
+          color: '#8896ab', fontSize: '0.72rem', flexShrink: 0,
+          background: 'rgba(30,45,69,0.4)', padding: '0.25rem 0.6rem', borderRadius: '4px',
         }}>
-          {drawerOpen ? '▲ hide' : '▼ details'}
+          {isExpanded ? '▲ hide' : '▼ details'}
         </span>
       </button>
 
       {/* Expanded body */}
-      {drawerOpen && (
-        <div style={{ padding: '1.25rem 1.5rem 1.5rem' }}>
+      {isExpanded && (
+        <div className="arena-scrollbar" style={{ overflowY: 'auto', flex: 1, padding: '1.25rem 1.5rem 1.5rem' }}>
           {/* Score grid */}
           <div style={{
             display: 'grid',
@@ -647,18 +705,17 @@ function ScoreDrawer({
                   animationDelay: `${cardIdx * 0.15}s`,
                 }}
               >
-                {/* Card header */}
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   marginBottom: '0.75rem', paddingBottom: '0.6rem',
                   borderBottom: `1px solid ${isWinner ? 'rgba(234,179,8,0.2)' : '#1e2d45'}`,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
-                    {isWinner && <span style={{ fontSize: '0.85rem' }}>{'\u{1F3C6}'}</span>}
+                    {isWinner && <span style={{ fontSize: '0.95rem' }}>🏆</span>}
                     <ModelBadge model={label.split(':')[0]} />
                   </div>
                   <span style={{
-                    fontSize: '1.3rem', fontWeight: 900,
+                    fontSize: '1.4rem', fontWeight: 900,
                     color: isWinner ? '#eab308' : '#e2e8f0',
                     flexShrink: 0, fontFamily: 'monospace',
                   }}>
@@ -666,42 +723,30 @@ function ScoreDrawer({
                   </span>
                 </div>
 
-                {/* Team label */}
                 <div style={{
-                  fontSize: '0.65rem', fontWeight: 700, color,
+                  fontSize: '0.72rem', fontWeight: 700, color,
                   overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                   marginBottom: '0.65rem',
                 }}>
                   {label}
                 </div>
 
-                {/* Criteria with progress bars */}
                 {tr.criteriaScores.map((cs, csIdx) => {
                   const pct = cs.maxScore > 0 ? (cs.score / cs.maxScore) * 100 : 0;
                   return (
-                    <div key={cs.criterionId} style={{ marginBottom: '0.45rem' }}>
+                    <div key={cs.criterionId} style={{ marginBottom: '0.5rem' }}>
                       <div style={{
                         display: 'flex', justifyContent: 'space-between',
-                        fontSize: '0.58rem', marginBottom: '0.2rem',
+                        fontSize: '0.68rem', marginBottom: '0.22rem',
                       }}>
-                        <span style={{
-                          color: '#8896ab', overflow: 'hidden',
-                          textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%',
-                        }}>
+                        <span style={{ color: '#8896ab', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
                           {cs.criterionId}
                         </span>
-                        <span style={{
-                          color: isWinner ? '#eab308' : '#e2e8f0',
-                          fontWeight: 700, marginLeft: '0.4rem',
-                          flexShrink: 0, fontFamily: 'monospace',
-                        }}>
+                        <span style={{ color: isWinner ? '#eab308' : '#e2e8f0', fontWeight: 700, marginLeft: '0.4rem', flexShrink: 0, fontFamily: 'monospace' }}>
                           {cs.score}/{cs.maxScore}
                         </span>
                       </div>
-                      <div style={{
-                        height: '3px', background: 'rgba(30,45,69,0.6)',
-                        borderRadius: '2px', overflow: 'hidden',
-                      }}>
+                      <div style={{ height: '4px', background: 'rgba(30,45,69,0.6)', borderRadius: '2px', overflow: 'hidden' }}>
                         <div
                           className="arena-progress-bar"
                           style={{
@@ -721,10 +766,9 @@ function ScoreDrawer({
             ))}
           </div>
 
-          {/* Summary */}
           {result.summary && (
             <p style={{
-              fontSize: '0.7rem', color: '#8896ab', textAlign: 'center',
+              fontSize: '0.78rem', color: '#8896ab', textAlign: 'center',
               fontFamily: "-apple-system, 'Segoe UI', sans-serif",
               lineHeight: 1.7, maxWidth: '600px', margin: '1rem auto 0',
             }}>
@@ -732,7 +776,6 @@ function ScoreDrawer({
             </p>
           )}
 
-          {/* Synthesis */}
           {result.synthesis && (
             <div style={{
               marginTop: '1.25rem', border: '1px solid rgba(168,85,247,0.3)',
@@ -743,37 +786,25 @@ function ScoreDrawer({
                 onClick={() => setSynthOpen((o) => !o)}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
-                  background: 'rgba(168,85,247,0.07)', padding: '0.7rem 1rem',
+                  background: 'rgba(168,85,247,0.07)', padding: '0.75rem 1rem',
                   borderBottom: synthOpen ? '1px solid rgba(168,85,247,0.18)' : 'none',
                   border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                   color: 'inherit', textAlign: 'left',
                 }}
               >
-                <span style={{
-                  fontSize: '0.62rem', fontWeight: 800, color: '#a855f7',
-                  letterSpacing: '2px', textTransform: 'uppercase',
-                }}>
-                  {'✨'} Synthesis
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#a855f7', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                  ✨ Synthesis
                 </span>
-                <span style={{
-                  fontSize: '0.62rem', color: '#8896ab',
-                  fontFamily: "-apple-system, 'Segoe UI', sans-serif", flex: 1,
-                }}>
+                <span style={{ fontSize: '0.72rem', color: '#8896ab', fontFamily: "-apple-system, 'Segoe UI', sans-serif", flex: 1 }}>
                   Best elements from both teams, merged by synthesis agent
                 </span>
-                <span style={{ fontSize: '0.62rem', color: '#8896ab', flexShrink: 0 }}>
+                <span style={{ fontSize: '0.72rem', color: '#8896ab', flexShrink: 0 }}>
                   {synthOpen ? '▲' : '▼'}
                 </span>
               </button>
               {synthOpen && (
-                <div className="arena-scrollbar" style={{
-                  padding: '1rem 1.25rem', background: '#0d1520',
-                  maxHeight: '260px', overflowY: 'auto',
-                }}>
-                  <pre style={{
-                    fontSize: '0.72rem', color: '#c4d4e8', whiteSpace: 'pre-wrap',
-                    fontFamily: 'inherit', lineHeight: 1.7, margin: 0,
-                  }}>
+                <div className="arena-scrollbar" style={{ padding: '1rem 1.25rem', background: '#0d1520', maxHeight: '260px', overflowY: 'auto' }}>
+                  <pre style={{ fontSize: '0.80rem', color: '#c4d4e8', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.7, margin: 0 }}>
                     {result.synthesis}
                   </pre>
                 </div>
@@ -794,17 +825,15 @@ function StateBanner({ state }: { state: CompetitionState }) {
       <div style={{
         background: 'linear-gradient(90deg, rgba(234,179,8,0.08) 0%, rgba(234,179,8,0.15) 50%, rgba(234,179,8,0.08) 100%)',
         borderBottom: '1px solid rgba(234,179,8,0.3)',
-        padding: '0.5rem 1.25rem',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
+        padding: '0.55rem 1.4rem',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.7rem',
         animation: 'judgingPulse 2s ease-in-out infinite',
       }}>
-        <span style={{ fontSize: '0.85rem' }}>{'⚖️'}</span>
-        <span style={{
-          fontSize: '0.68rem', fontWeight: 700, color: '#eab308', letterSpacing: '2px',
-        }}>
+        <span style={{ fontSize: '1rem' }}>⚖️</span>
+        <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#eab308', letterSpacing: '2px' }}>
           JUDGING IN PROGRESS
         </span>
-        <span style={{ fontSize: '0.6rem', color: '#8896ab', fontStyle: 'italic' }}>
+        <span style={{ fontSize: '0.70rem', color: '#8896ab', fontStyle: 'italic' }}>
           AI judge is evaluating both submissions...
         </span>
       </div>
@@ -832,7 +861,43 @@ export default function CompetitionPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [competitionStartTime, setCompetitionStartTime] = useState<number | null>(null);
 
-  // One ref per lane; we store them in an array indexed by team order
+  // Resizable score drawer
+  const [scoreDrawerHeight, setScoreDrawerHeight] = useState(SCORE_DRAWER_COLLAPSED);
+  const isDragging = useRef(false);
+  const dragStartY = useRef(0);
+  const dragStartHeight = useRef(0);
+  const [isDraggingActive, setIsDraggingActive] = useState(false);
+
+  const handleResizeStart = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    dragStartY.current = e.clientY;
+    dragStartHeight.current = scoreDrawerHeight;
+    setIsDraggingActive(true);
+    e.preventDefault();
+  };
+
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (!isDragging.current) return;
+      const delta = dragStartY.current - e.clientY; // dragging up = bigger drawer
+      const newH = Math.max(SCORE_DRAWER_COLLAPSED, Math.min(600, dragStartHeight.current + delta));
+      setScoreDrawerHeight(newH);
+    };
+    const handleUp = () => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        setIsDraggingActive(false);
+      }
+    };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
+  }, []);
+
+  // One ref per lane
   const laneRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   // Fetch competition metadata
@@ -859,7 +924,7 @@ export default function CompetitionPage() {
   useEffect(() => {
     for (const el of laneRefs.current) {
       if (!el) continue;
-      if (el.scrollHeight - el.scrollTop - el.clientHeight < 100) {
+      if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
         el.scrollTop = el.scrollHeight;
       }
     }
@@ -922,7 +987,10 @@ export default function CompetitionPage() {
           if (ev.type === 'JUDGE_SCORE') setState('JUDGING');
           if (ev.type === 'COMPETITION_COMPLETE' || ev.type === 'COMPLETE') {
             setState('COMPLETE');
-            if (ev.result) setResult(ev.result);
+            if (ev.result) {
+              setResult(ev.result);
+              setScoreDrawerHeight(SCORE_DRAWER_EXPANDED);
+            }
             intentionalClose = true;
             ws.close();
             return;
@@ -953,14 +1021,12 @@ export default function CompetitionPage() {
     if (action === 'cancel') setState('COMPLETE');
   };
 
-  // Determine ordered team list: prefer fetched teams; fall back to teams seen in events
   const orderedTeams: Team[] = teams.length > 0
     ? teams
     : Array.from(teamEvents.keys()).map((tid) => ({ id: tid, model: tid }));
 
   const numTeams = Math.max(orderedTeams.length, 1);
   const stateBadge = STATE_BADGE[state] ?? STATE_BADGE.PENDING;
-
   const isRunning = state === 'RUNNING';
   const isComplete = state === 'COMPLETE';
 
@@ -974,8 +1040,7 @@ export default function CompetitionPage() {
       <div
         className={isRunning ? 'arena-running-border' : ''}
         style={{
-          display: 'grid',
-          gridTemplateRows: 'auto auto 1fr auto',
+          display: 'flex', flexDirection: 'column',
           height: '100vh', overflow: 'hidden',
           background: '#0a0e17',
           fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
@@ -986,70 +1051,63 @@ export default function CompetitionPage() {
       >
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <header style={{
-          display: 'flex', alignItems: 'center', gap: '0.75rem',
-          padding: '0.6rem 1.25rem', borderBottom: '1px solid #1e2d45',
+          display: 'flex', alignItems: 'center', gap: '0.85rem',
+          padding: '0.7rem 1.4rem', borderBottom: '1px solid #1e2d45',
           background: 'linear-gradient(180deg, rgba(15,23,36,0.98) 0%, rgba(10,14,23,0.98) 100%)',
+          flexShrink: 0,
         }}>
           <a href="/" style={{
-            fontSize: '0.65rem', color: '#f97316', fontWeight: 800,
+            fontSize: '0.75rem', color: '#f97316', fontWeight: 800,
             letterSpacing: '2.5px', textDecoration: 'none', flexShrink: 0,
-            display: 'flex', alignItems: 'center', gap: '0.35rem',
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
           }}>
-            <span style={{ fontSize: '0.8rem' }}>{'\u{1F3AE}'}</span>
+            <span style={{ fontSize: '0.9rem' }}>🎮</span>
             ARENA
           </a>
 
-          <span style={{ color: '#1e2d45', fontSize: '1rem' }}>{'│'}</span>
+          <span style={{ color: '#1e2d45', fontSize: '1.1rem' }}>│</span>
 
           <div style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center',
-            gap: '0.7rem', flexWrap: 'wrap',
+            gap: '0.8rem', flexWrap: 'wrap',
           }}>
             {briefTitle && (
-              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#e2e8f0' }}>
+              <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#e2e8f0' }}>
                 {briefTitle}
               </span>
             )}
             <span style={{
-              fontSize: '0.55rem', fontWeight: 800, padding: '0.15rem 0.55rem',
+              fontSize: '0.65rem', fontWeight: 800, padding: '0.18rem 0.6rem',
               borderRadius: '4px', letterSpacing: '1.5px',
               background: stateBadge.bg, color: stateBadge.color,
               border: `1px solid ${stateBadge.color}33`,
-              display: 'flex', alignItems: 'center', gap: '0.3rem',
+              display: 'flex', alignItems: 'center', gap: '0.35rem',
             }}>
               {isRunning && <StatusDot color={stateBadge.color} pulsing={true} />}
-              {isComplete && <span>{'✅'}</span>}
+              {isComplete && <span>✅</span>}
               {state}
             </span>
 
             {!connected && !result && (
-              <span style={{
-                fontSize: '0.6rem', color: '#eab308',
-                display: 'flex', alignItems: 'center', gap: '0.3rem',
-              }}>
+              <span style={{ fontSize: '0.70rem', color: '#eab308', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                 <StatusDot color="#eab308" pulsing={true} />
                 connecting...
               </span>
             )}
             {connected && isRunning && (
-              <span style={{
-                fontSize: '0.55rem', color: '#22c55e',
-                display: 'flex', alignItems: 'center', gap: '0.3rem',
-              }}>
+              <span style={{ fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                 <StatusDot color="#22c55e" pulsing={false} />
                 live
               </span>
             )}
             {sseError && (
-              <span style={{ fontSize: '0.6rem', color: '#ef4444' }}>{sseError}</span>
+              <span style={{ fontSize: '0.70rem', color: '#ef4444' }}>{sseError}</span>
             )}
-
             {totalEvents > 0 && (
               <span style={{
-                fontSize: '0.55rem', color: '#4a5568',
+                fontSize: '0.65rem', color: '#4a5568',
                 background: 'rgba(30,45,69,0.4)',
-                padding: '0.1rem 0.45rem', borderRadius: '3px',
-                fontFamily: 'monospace',
+                padding: '0.12rem 0.5rem', borderRadius: '3px', fontFamily: 'monospace',
               }}>
                 {totalEvents} events
               </span>
@@ -1057,7 +1115,7 @@ export default function CompetitionPage() {
           </div>
 
           {state === 'RUNNING' && (
-            <div style={{ display: 'flex', gap: '0.4rem' }}>
+            <div style={{ display: 'flex', gap: '0.45rem' }}>
               {!isPaused
                 ? <button onClick={() => sendControl('pause')} style={ctrlBtn('#eab308', 'rgba(234,179,8,0.1)')}>PAUSE</button>
                 : <button onClick={() => sendControl('resume')} style={ctrlBtn('#22c55e', 'rgba(34,197,94,0.1)')}>RESUME</button>
@@ -1067,23 +1125,22 @@ export default function CompetitionPage() {
           )}
 
           <a href={`/competitions/${id}/replay`} style={{
-            fontSize: '0.6rem', color: '#8896ab', textDecoration: 'none',
+            fontSize: '0.70rem', color: '#8896ab', textDecoration: 'none',
             border: '1px solid #1e2d45', borderRadius: '6px',
-            padding: '0.3rem 0.65rem', flexShrink: 0,
+            padding: '0.35rem 0.75rem', flexShrink: 0,
             letterSpacing: '0.5px', fontWeight: 600,
-            display: 'flex', alignItems: 'center', gap: '0.3rem',
+            display: 'flex', alignItems: 'center', gap: '0.35rem',
             transition: 'all 0.15s ease',
           }}>
-            {'▶'} REPLAY
+            ▶ REPLAY
           </a>
 
           <div style={{
             fontFamily: 'monospace',
             color: isRunning ? '#f97316' : '#8896ab',
-            fontSize: '0.85rem', fontWeight: 800,
-            flexShrink: 0, minWidth: '3.8rem', textAlign: 'right',
-            letterSpacing: '0.5px',
-            transition: 'color 0.3s ease',
+            fontSize: '0.95rem', fontWeight: 800,
+            flexShrink: 0, minWidth: '4rem', textAlign: 'right',
+            letterSpacing: '0.5px', transition: 'color 0.3s ease',
           }}>
             {formatElapsed(elapsed)}
           </div>
@@ -1096,7 +1153,7 @@ export default function CompetitionPage() {
         <div style={{
           display: 'grid',
           gridTemplateColumns: `repeat(${numTeams}, 1fr)`,
-          overflow: 'hidden', minHeight: 0,
+          overflow: 'hidden', flex: 1, minHeight: 0,
         }}>
           {orderedTeams.map((team, i) => {
             const events = [
@@ -1124,7 +1181,7 @@ export default function CompetitionPage() {
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
-              color: '#2d4060', fontSize: '0.72rem', gap: '0.75rem',
+              color: '#2d4060', fontSize: '0.82rem', gap: '0.75rem',
             }}>
               <ActivitySpinner color="#3b82f6" active={true} />
               <span>Waiting for competition data...</span>
@@ -1132,8 +1189,26 @@ export default function CompetitionPage() {
           )}
         </div>
 
+        {/* ── Resize handle (only visible when there are results) ──────────── */}
+        {result && (
+          <div
+            className={`resize-handle${isDraggingActive ? ' dragging' : ''}`}
+            onMouseDown={handleResizeStart}
+            title="Drag to resize"
+          />
+        )}
+
         {/* ── Score drawer ─────────────────────────────────────────────────── */}
-        {result && <ScoreDrawer result={result} teams={orderedTeams} />}
+        {result && (
+          <ScoreDrawer
+            result={result}
+            teams={orderedTeams}
+            height={scoreDrawerHeight}
+            onToggle={() => setScoreDrawerHeight((h) =>
+              h > SCORE_DRAWER_COLLAPSED ? SCORE_DRAWER_COLLAPSED : SCORE_DRAWER_EXPANDED
+            )}
+          />
+        )}
       </div>
     </>
   );
