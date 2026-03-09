@@ -24,15 +24,23 @@ program
   .option('--log-dir <dir>', 'Directory to write JSONL event logs', '/tmp/arena-logs')
   .option('--claude-bin <path>', 'Path to the claude CLI binary', 'claude')
   .option('--no-print', 'Suppress results table output')
+  .option('--skip-sandbox', 'Skip Docker sandbox creation (use local temp dirs instead)')
+  .option('--time-limit <ms>', 'Override brief time limit in milliseconds')
   .action(async (briefPath: string, opts: {
     teamA: string;
     teamB: string;
     logDir: string;
     claudeBin: string;
     print: boolean;
+    skipSandbox: boolean;
+    timeLimit?: string;
   }) => {
     try {
       const brief = await parseBrief(resolve(briefPath));
+
+      if (opts.timeLimit) {
+        brief.timeLimitMs = parseInt(opts.timeLimit, 10);
+      }
 
       const makeTeam = (id: string, modelSpec: string): Team => {
         const [model, persona = 'pragmatist'] = modelSpec.split(':');
@@ -46,6 +54,7 @@ program
           logDir: opts.logDir,
           claudeBin: opts.claudeBin,
           printResults: opts.print,
+          skipSandbox: opts.skipSandbox ?? false,
         },
       );
 

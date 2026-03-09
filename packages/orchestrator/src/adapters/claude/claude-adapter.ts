@@ -73,16 +73,21 @@ export class ClaudeAdapter extends BaseAdapter {
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
 
     this.executionDone = new Promise<void>((resolve, reject) => {
+      // Unset CLAUDECODE so nested claude processes are allowed.
+      const env = { ...process.env };
+      delete env['CLAUDECODE'];
+
       const child = spawn(
         this.claudeBin,
         [
-          '--output-format', 'stream-json',
-          '--no-interactive',
           '--print', this.promptText,
+          '--output-format', 'stream-json',
+          '--dangerously-skip-permissions',
         ],
         {
           cwd: this.workdir,
           stdio: ['ignore', 'pipe', 'pipe'],
+          env,
         },
       );
 

@@ -34,6 +34,11 @@ export interface RunOptions {
   claudeBin?: string;
   /** If true, print a formatted results table to stdout after judging. */
   printResults?: boolean;
+  /**
+   * Skip Docker sandbox creation (useful when Docker is not running).
+   * Adapters still run in a local temp directory.
+   */
+  skipSandbox?: boolean;
 }
 
 export interface CompetitionResult {
@@ -73,6 +78,7 @@ export class CompetitionRunner extends EventEmitter {
       sandboxImage: options.sandboxImage ?? 'node:20-alpine',
       claudeBin: options.claudeBin ?? 'claude',
       printResults: options.printResults ?? true,
+      skipSandbox: options.skipSandbox ?? false,
     };
   }
 
@@ -108,7 +114,9 @@ export class CompetitionRunner extends EventEmitter {
         const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
         workdirs[team.id] = workdir;
 
-        await sandboxManager.create(team.id, { workdir });
+        if (!this.options.skipSandbox) {
+          await sandboxManager.create(team.id, { workdir });
+        }
 
         const [modelName, personaId] = team.model.split(':');
         const persona = resolvePersona(
@@ -139,11 +147,16 @@ export class CompetitionRunner extends EventEmitter {
         clock.on(EventType.TIME_UP, () => resolve());
       });
 
-      // Start all adapters concurrently then let them run until TIME_UP.
+      // Start all adapters concurrently; errors are logged but don't crash the run.
       await Promise.all(adapters.map((a) => a.startExecution()));
       clock.start();
 
-      await raceFinished;
+      // Also resolve when all adapters finish early (success or failure).
+      const allAdaptersDone = Promise.allSettled(
+        adapters.map((a) => a.done),
+      ).then(() => undefined);
+
+      await Promise.race([raceFinished, allAdaptersDone]);
 
       // ── TIME_UP / COLLECTING ─────────────────────────────────────────────
       this.advance(CompetitionState.TIME_UP);
