@@ -15,6 +15,56 @@ const defaultCriteria: RubricCriterion[] = [
   { id: 'code-quality', description: 'Code quality and maintainability', maxScore: 10, weight: 0.5 },
 ];
 
+type Format = 'SPRINT' | 'HACKATHON' | 'RELAY_RACE' | 'RED_VS_BLUE';
+
+const FORMAT_PRESETS: Record<Format, {
+  timeLimitMins: number;
+  constraints: string;
+  deliverables: string;
+  criteria: Array<{ id: string; description: string; maxScore: number; weight: number }>;
+}> = {
+  SPRINT: {
+    timeLimitMins: 15,
+    constraints: 'Stay within the time limit.',
+    deliverables: 'solution.md',
+    criteria: [
+      { id: 'correctness', description: 'Solution is correct', maxScore: 10, weight: 0.5 },
+      { id: 'quality', description: 'Code / writing quality', maxScore: 10, weight: 0.3 },
+      { id: 'speed', description: 'Delivered promptly', maxScore: 10, weight: 0.2 },
+    ],
+  },
+  HACKATHON: {
+    timeLimitMins: 120,
+    constraints: 'Use only approved libraries.',
+    deliverables: 'README.md\nsource code',
+    criteria: [
+      { id: 'innovation', description: 'Creative and novel approach', maxScore: 10, weight: 0.35 },
+      { id: 'completeness', description: 'Deliverables are complete', maxScore: 10, weight: 0.35 },
+      { id: 'presentation', description: 'README and docs are clear', maxScore: 10, weight: 0.3 },
+    ],
+  },
+  RELAY_RACE: {
+    timeLimitMins: 30,
+    constraints: 'Do not redo prior work. Build on what the previous agent produced.',
+    deliverables: 'incremental solution',
+    criteria: [
+      { id: 'continuity', description: 'Builds coherently on prior work', maxScore: 10, weight: 0.4 },
+      { id: 'correctness', description: 'Incremental output is correct', maxScore: 10, weight: 0.4 },
+      { id: 'clarity', description: 'Handoff notes are clear', maxScore: 10, weight: 0.2 },
+    ],
+  },
+  RED_VS_BLUE: {
+    timeLimitMins: 60,
+    constraints: 'Stay within the defined scope. Document all findings.',
+    deliverables: 'attack/defense report',
+    criteria: [
+      { id: 'effectiveness', description: 'Attack or defense is effective', maxScore: 10, weight: 0.5 },
+      { id: 'documentation', description: 'Report documents findings clearly', maxScore: 10, weight: 0.3 },
+      { id: 'scope', description: 'Stays within defined scope', maxScore: 10, weight: 0.2 },
+    ],
+  },
+};
+
 export default function NewCompetitionPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
@@ -22,7 +72,7 @@ export default function NewCompetitionPage() {
 
   // Form state
   const [title, setTitle] = useState('');
-  const [format, setFormat] = useState<'SPRINT' | 'HACKATHON'>('SPRINT');
+  const [format, setFormat] = useState<Format>('SPRINT');
   const [problem, setProblem] = useState('');
   const [constraints, setConstraints] = useState('');
   const [deliverables, setDeliverables] = useState('');
@@ -33,6 +83,15 @@ export default function NewCompetitionPage() {
   const [teamAPersona, setTeamAPersona] = useState('speedrunner');
   const [teamBModel, setTeamBModel] = useState<'claude' | 'codex' | 'gemini'>('claude');
   const [teamBPersona, setTeamBPersona] = useState('architect');
+
+  const applyPreset = (selectedFormat: Format) => {
+    setFormat(selectedFormat);
+    const preset = FORMAT_PRESETS[selectedFormat];
+    setTimeLimitMins(preset.timeLimitMins);
+    setConstraints(preset.constraints);
+    setDeliverables(preset.deliverables);
+    setCriteria(preset.criteria);
+  };
 
   const addCriterion = () => {
     setCriteria([...criteria, { id: '', description: '', maxScore: 10, weight: 0.5 }]);
@@ -109,6 +168,31 @@ export default function NewCompetitionPage() {
         <section className="space-y-4">
           <h2 className="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2">Brief</h2>
 
+          <div className="mb-6">
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
+              Start From Preset
+            </label>
+            <div className="flex gap-2 flex-wrap">
+              {(['SPRINT', 'HACKATHON', 'RELAY_RACE', 'RED_VS_BLUE'] as Format[]).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => applyPreset(f)}
+                  className={`px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
+                    format === f
+                      ? 'bg-orange-500/20 border-orange-500 text-orange-400'
+                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  {f.replace(/_/g, ' ')}
+                </button>
+              ))}
+            </div>
+            <p className="text-slate-500 text-xs mt-1">
+              Selecting a preset fills in defaults you can then customize.
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm text-gray-400 mb-1">Competition Title</label>
             <input
@@ -125,11 +209,13 @@ export default function NewCompetitionPage() {
             <label className="block text-sm text-gray-400 mb-1">Format</label>
             <select
               value={format}
-              onChange={e => setFormat(e.target.value as 'SPRINT' | 'HACKATHON')}
+              onChange={e => applyPreset(e.target.value as Format)}
               className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-gray-500"
             >
               <option value="SPRINT">SPRINT</option>
               <option value="HACKATHON">HACKATHON</option>
+              <option value="RELAY_RACE">RELAY_RACE</option>
+              <option value="RED_VS_BLUE">RED_VS_BLUE</option>
             </select>
           </div>
 
