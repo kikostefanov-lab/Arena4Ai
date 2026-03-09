@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { briefSchema } from '@arena/shared';
+import { briefSchema, CompetitionFormat } from '@arena/shared';
 import type { Team } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
 import { requireApiKey } from '../middleware/auth.js';
+import { applyPreset } from '../../brief/presets.js';
 
 export const competitionsRouter = Router();
 
@@ -49,11 +50,17 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     logDir: body.options?.logDir,
   };
 
-  const runner = new CompetitionRunner(briefResult.data, teams, options);
+  const rawBrief = briefResult.data;
+  // Apply format preset defaults (fills missing rubric/time fields for known formats)
+  const mergedBrief = rawBrief.format && Object.values(CompetitionFormat).includes(rawBrief.format as CompetitionFormat)
+    ? applyPreset(rawBrief.format as CompetitionFormat, rawBrief)
+    : rawBrief;
+
+  const runner = new CompetitionRunner(mergedBrief, teams, options);
   const { competitionId } = runner;
 
   // Persist to DB before starting
-  await repo.create(competitionId, briefResult.data, teams);
+  await repo.create(competitionId, mergedBrief, teams);
 
   // Wire runner events → DB (serialize state updates to prevent SCORED overwriting COMPLETE)
   let stateQueue: Promise<void> = Promise.resolve();
@@ -106,6 +113,21 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     repo.getResult(id),
   ]);
   res.json({ id: comp.id, state: comp.state, eventCount, result });
+});
+
+// GET /competitions/:id/events — full event history for replay/analysis
+competitionsRouter.get('/:id/events', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const afterSeq = req.query.afterSeq ? Number(req.query.afterSeq) : undefined;
+
+  const comp = await repo.getCompetition(id);
+  if (!comp) {
+    res.status(404).json({ error: 'Competition not found' });
+    return;
+  }
+
+  const evts = await repo.getEvents(id, afterSeq);
+  res.json(evts);
 });
 
 // POST /competitions/:id/cancel
