@@ -45,8 +45,13 @@ export default function ReplayPage() {
   useEffect(() => {
     fetch(`/api/competitions/${id}/events`)
       .then((r) => r.json())
-      .then((events: ArenaEvent[]) => {
-        setAllEvents(events);
+      .then((data: unknown) => {
+        if (!Array.isArray(data)) {
+          const msg = (data as Record<string, unknown>)?.error as string | undefined;
+          setError(msg ?? 'Unexpected response from server');
+        } else {
+          setAllEvents(data as ArenaEvent[]);
+        }
         setLoading(false);
       })
       .catch((err: Error) => {
@@ -58,13 +63,15 @@ export default function ReplayPage() {
   const tick = useCallback(() => {
     setCursor((prev) => {
       const next = Math.min(prev + speed, allEvents.length);
-      setVisibleEvents(allEvents.slice(0, next));
-      if (next >= allEvents.length) {
-        setPlaying(false);
-      }
+      if (next >= allEvents.length) setPlaying(false);
       return next;
     });
-  }, [allEvents, speed]);
+  }, [allEvents.length, speed]);
+
+  // Sync visibleEvents when cursor changes (separate from tick to avoid calling setState inside a setState updater)
+  useEffect(() => {
+    setVisibleEvents(allEvents.slice(0, cursor));
+  }, [cursor, allEvents]);
 
   useEffect(() => {
     if (playing) {
@@ -107,6 +114,14 @@ export default function ReplayPage() {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center text-red-400 font-mono text-sm">
         Error: {error}
+      </div>
+    );
+  }
+
+  if (allEvents.length === 0) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-slate-400 font-mono text-sm">
+        No events to replay for this competition.
       </div>
     );
   }
