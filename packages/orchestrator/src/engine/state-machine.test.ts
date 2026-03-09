@@ -12,7 +12,8 @@ describe('transition()', () => {
       [CompetitionState.TIME_UP, CompetitionState.COLLECTING],
       [CompetitionState.COLLECTING, CompetitionState.JUDGING],
       [CompetitionState.JUDGING, CompetitionState.SCORED],
-      [CompetitionState.SCORED, CompetitionState.COMPLETE],
+      [CompetitionState.SCORED, CompetitionState.SYNTHESIZING],
+      [CompetitionState.SYNTHESIZING, CompetitionState.COMPLETE],
     ];
     for (const [from, to] of path) {
       expect(transition(from, to)).toBe(to);

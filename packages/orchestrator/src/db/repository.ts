@@ -1,7 +1,8 @@
 import { and, eq, gt, desc, sql } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { competitions, events, results } from './schema.js';
-import type { ArenaEvent, Brief, Team, CompetitionState } from '@arena/shared';
+import type { ArenaEvent, Brief, Team } from '@arena/shared';
+import { CompetitionState } from '@arena/shared';
 
 export interface StoredResult {
   scorecards: unknown[];
@@ -29,8 +30,8 @@ export class CompetitionRepository {
 
   async updateState(id: string, state: CompetitionState): Promise<void> {
     const patch: Partial<typeof competitions.$inferInsert> = { state: state as string };
-    if (state === 'RUNNING') patch.startedAt = new Date();
-    if (state === 'COMPLETE') patch.completedAt = new Date();
+    if (state === CompetitionState.RUNNING) patch.startedAt = new Date();
+    if (state === CompetitionState.COMPLETE) patch.completedAt = new Date();
     await this.db.update(competitions).set(patch).where(eq(competitions.id, id));
   }
 
