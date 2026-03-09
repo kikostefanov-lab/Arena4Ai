@@ -1,0 +1,33 @@
+id: code-challenge-001
+title: "Implement a Rate Limiter"
+format: SPRINT
+timeLimitMs: 1800000  # 30 minutes
+problem: |
+  Design and implement a token-bucket rate limiter in TypeScript.
+  The limiter must be usable as a middleware function and support
+  per-key limits (e.g., per IP address).
+constraints:
+  - Must be written in TypeScript with no external dependencies
+  - Must be thread-safe (assume single-threaded Node.js event loop)
+  - Must include JSDoc comments on all public APIs
+deliverables:
+  - rate-limiter.ts source file with full implementation
+  - Usage example in a comment block at the top of the file
+rubric:
+  criteria:
+    - id: correctness
+      description: Token bucket algorithm is correctly implemented
+      weight: 0.4
+      maxScore: 10
+    - id: api_design
+      description: Public API is clean, ergonomic, and well-typed
+      weight: 0.3
+      maxScore: 10
+    - id: documentation
+      description: JSDoc comments are accurate and complete
+      weight: 0.2
+      maxScore: 10
+    - id: edge_cases
+      description: Handles edge cases (zero tokens, burst, refill timing)
+      weight: 0.1
+      maxScore: 10

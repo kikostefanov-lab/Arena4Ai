@@ -1,0 +1,38 @@
+id: analysis-001
+title: "Root Cause Analysis of an E-Commerce Outage"
+format: SPRINT
+timeLimitMs: 3600000  # 60 minutes
+problem: |
+  An e-commerce platform experienced a 47-minute checkout outage during
+  peak traffic on a Black Friday sale. The following signals were observed:
+    - Checkout API latency spiked from 120ms p99 to 45,000ms p99
+    - Database connection pool exhaustion errors appeared in logs
+    - A deploy of the payment-service was rolled out 8 minutes before the incident
+    - CPU on payment-service pods stayed at 20%; memory was normal
+  Produce a complete root cause analysis and remediation plan.
+constraints:
+  - Do not speculate beyond the data provided; call out assumptions explicitly
+  - Must propose at least one short-term and one long-term remediation
+  - Must include a timeline of events
+deliverables:
+  - Root cause analysis document in Markdown
+  - Remediation plan with prioritised action items
+  - Blameless post-mortem summary (5 sentences max)
+rubric:
+  criteria:
+    - id: root_cause_accuracy
+      description: Correctly identifies the most likely root cause from the evidence
+      weight: 0.4
+      maxScore: 10
+    - id: timeline
+      description: Incident timeline is logical and consistent with the signals
+      weight: 0.2
+      maxScore: 10
+    - id: remediation
+      description: Remediations are actionable, prioritised, and address root cause
+      weight: 0.3
+      maxScore: 10
+    - id: communication
+      description: Post-mortem summary is blameless and suitable for stakeholders
+      weight: 0.1
+      maxScore: 10

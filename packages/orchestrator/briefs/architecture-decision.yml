@@ -1,0 +1,35 @@
+id: architecture-decision-001
+title: "Database Selection for a Multi-Tenant SaaS Platform"
+format: SPRINT
+timeLimitMs: 2700000  # 45 minutes
+problem: |
+  A startup is building a multi-tenant SaaS analytics platform that will
+  ingest time-series event data from up to 10,000 tenants, each with
+  millions of events per day. Choose a database technology and justify
+  the decision with a structured Architecture Decision Record (ADR).
+constraints:
+  - Must follow the ADR format (Context, Decision, Consequences)
+  - Must evaluate at least two alternative technologies
+  - Must address data isolation strategy for multi-tenancy
+  - Must address cost implications at scale
+deliverables:
+  - Completed ADR document in Markdown
+  - Comparison matrix of evaluated options
+rubric:
+  criteria:
+    - id: reasoning
+      description: Decision is well-reasoned with concrete trade-offs analysed
+      weight: 0.35
+      maxScore: 10
+    - id: completeness
+      description: ADR covers context, decision, and consequences thoroughly
+      weight: 0.25
+      maxScore: 10
+    - id: alternatives
+      description: At least two alternatives are fairly evaluated
+      weight: 0.25
+      maxScore: 10
+    - id: clarity
+      description: Writing is clear, concise, and uses correct terminology
+      weight: 0.15
+      maxScore: 10
