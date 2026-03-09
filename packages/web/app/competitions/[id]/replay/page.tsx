@@ -243,6 +243,89 @@ function LaneHistogram({ events }: { events: ArenaEvent[] }) {
   );
 }
 
+// ─── Pre-battle screen ───────────────────────────────────────────────────────
+
+const INIT_MESSAGES = [
+  'Spinning up environment...',
+  'Reading the brief...',
+  'Loading toolkit...',
+  'Allocating compute...',
+  'Preparing workspace...',
+  'Calibrating strategy...',
+  'Reviewing objectives...',
+  'Sharpening the approach...',
+  'Loading battle systems...',
+  'Standing by for launch...',
+];
+
+function PreBattleScreen({ color, label }: { color: string; label: string }) {
+  const [msgIdx, setMsgIdx] = useState(0);
+  const [progress, setProgress] = useState(8);
+
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % INIT_MESSAGES.length), 1400);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setProgress((p) => Math.min(88, p + Math.random() * 3.5 + 0.5)), 900);
+    return () => clearInterval(t);
+  }, []);
+
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
+  const rgb = result ? `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}` : '255,255,255';
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '2rem', gap: '1.4rem', position: 'relative', overflow: 'hidden',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: `radial-gradient(ellipse 70% 50% at 50% 55%, rgba(${rgb},0.07) 0%, transparent 70%)`,
+      }} />
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(${rgb},0.018) 3px, rgba(${rgb},0.018) 4px)`,
+        animation: 'scanline 5s linear infinite',
+      }} />
+
+      <div style={{ fontSize: '2.2rem', filter: `drop-shadow(0 0 14px ${color})`, animation: 'pulse 2s ease-in-out infinite' }}>
+        ⚔️
+      </div>
+
+      <div style={{ textAlign: 'center', zIndex: 1 }}>
+        <div style={{ fontSize: '0.70rem', fontWeight: 800, color, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+          {label}
+        </div>
+        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8896ab', letterSpacing: '2.5px', animation: 'pulse 2s ease-in-out infinite' }}>
+          BATTLE STATION INITIALIZING
+        </div>
+      </div>
+
+      <div style={{ width: '75%', maxWidth: '260px', zIndex: 1 }}>
+        <div style={{ height: '4px', background: 'rgba(30,45,69,0.8)', borderRadius: '2px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+          <div style={{
+            height: '100%', width: `${progress}%`, borderRadius: '2px',
+            background: `linear-gradient(90deg, ${color}66, ${color})`,
+            boxShadow: `0 0 8px ${color}80`,
+            transition: 'width 0.9s ease-out',
+          }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.68rem', color: '#8896ab', animation: 'msgFade 1.4s ease-in-out infinite' }}>
+            {INIT_MESSAGES[msgIdx]}
+          </span>
+          <span style={{ fontSize: '0.65rem', color, fontFamily: FONT, fontWeight: 700, flexShrink: 0 }}>
+            {Math.round(progress)}%
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── EventRow ────────────────────────────────────────────────────────────────
 
 function hexToRgb(hex: string): string {
@@ -598,6 +681,18 @@ export default function ReplayPage() {
           0%, 100% { box-shadow: 0 0 12px rgba(34,197,94,0.3); }
           50% { box-shadow: 0 0 20px rgba(34,197,94,0.5); }
         }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        @keyframes scanline {
+          0% { background-position: 0 0; }
+          100% { background-position: 0 40px; }
+        }
+        @keyframes msgFade {
+          0%, 85% { opacity: 1; }
+          95%, 100% { opacity: 0; }
+        }
         .event-appear {
           animation: fadeIn 0.25s ease-out;
         }
@@ -854,14 +949,19 @@ export default function ReplayPage() {
                 className="lane-scroll"
                 style={{
                   flex: 1, overflowY: 'auto',
-                  padding: '0.5rem 0.75rem',
-                  display: 'flex', flexDirection: 'column', gap: '1px',
+                  padding: teamEvents.length === 0 ? '0' : '0.5rem 0.75rem',
+                  display: 'flex', flexDirection: 'column', gap: teamEvents.length === 0 ? '0' : '3px',
                 }}
               >
-                {teamEvents.length === 0 && (
-                  <p style={{ color: '#2d4060', fontSize: '0.65rem', fontStyle: 'italic', marginTop: '0.5rem' }}>
-                    No events yet...
-                  </p>
+                {teamEvents.length === 0 && allTeamEvents.length > 0 && (
+                  <PreBattleScreen color={color} label={label} />
+                )}
+                {teamEvents.length === 0 && allTeamEvents.length === 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
+                    <p style={{ color: '#2d4060', fontSize: '0.72rem', fontStyle: 'italic' }}>
+                      No events recorded.
+                    </p>
+                  </div>
                 )}
                 {teamEvents.map((ev, evIdx) => {
                   // Determine if this event is "new" (appeared in the last tick)

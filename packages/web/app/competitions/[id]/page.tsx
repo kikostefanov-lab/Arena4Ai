@@ -287,6 +287,16 @@ const GLOBAL_STYLES = `
   100% { background: rgba(34,197,94,0); }
 }
 
+@keyframes scanline {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 40px; }
+}
+
+@keyframes msgFade {
+  0%, 85% { opacity: 1; }
+  95%, 100% { opacity: 0; }
+}
+
 .arena-scrollbar::-webkit-scrollbar { width: 5px; }
 .arena-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .arena-scrollbar::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 3px; }
@@ -491,6 +501,94 @@ function EventRow({
   );
 }
 
+// ─── Pre-battle screen ───────────────────────────────────────────────────────
+
+const INIT_MESSAGES = [
+  'Spinning up environment...',
+  'Reading the brief...',
+  'Loading toolkit...',
+  'Allocating compute...',
+  'Preparing workspace...',
+  'Calibrating strategy...',
+  'Reviewing objectives...',
+  'Sharpening the approach...',
+  'Loading battle systems...',
+  'Standing by for launch...',
+];
+
+function PreBattleScreen({ color, model, persona }: { color: string; model: string; persona?: string }) {
+  const [msgIdx, setMsgIdx] = useState(0);
+  const [progress, setProgress] = useState(8);
+  const displayName = persona ? `${model}:${persona}` : model;
+
+  useEffect(() => {
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % INIT_MESSAGES.length), 1400);
+    return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    const t = setInterval(() => setProgress((p) => Math.min(88, p + Math.random() * 3.5 + 0.5)), 900);
+    return () => clearInterval(t);
+  }, []);
+
+  const rgb = hexToRgb(color);
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      padding: '2rem', gap: '1.4rem', position: 'relative', overflow: 'hidden',
+    }}>
+      {/* Radial bg glow */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: `radial-gradient(ellipse 70% 50% at 50% 55%, rgba(${rgb},0.07) 0%, transparent 70%)`,
+      }} />
+      {/* Scanlines */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(${rgb},0.018) 3px, rgba(${rgb},0.018) 4px)`,
+        animation: 'scanline 5s linear infinite',
+      }} />
+
+      {/* Swords */}
+      <div style={{ fontSize: '2.2rem', filter: `drop-shadow(0 0 14px ${color})`, animation: 'pulse 2s ease-in-out infinite' }}>
+        ⚔️
+      </div>
+
+      {/* Team name */}
+      <div style={{ textAlign: 'center', zIndex: 1 }}>
+        <div style={{ fontSize: '0.70rem', fontWeight: 800, color, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+          {displayName}
+        </div>
+        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8896ab', letterSpacing: '2.5px', animation: 'pulse 2s ease-in-out infinite' }}>
+          BATTLE STATION INITIALIZING
+        </div>
+      </div>
+
+      {/* Progress */}
+      <div style={{ width: '75%', maxWidth: '260px', zIndex: 1 }}>
+        <div style={{ height: '4px', background: 'rgba(30,45,69,0.8)', borderRadius: '2px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+          <div style={{
+            height: '100%', width: `${progress}%`, borderRadius: '2px',
+            background: `linear-gradient(90deg, ${color}66, ${color})`,
+            boxShadow: `0 0 8px ${color}80`,
+            transition: 'width 0.9s ease-out',
+          }} />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '0.68rem', color: '#8896ab', animation: 'msgFade 1.4s ease-in-out infinite' }}>
+            {INIT_MESSAGES[msgIdx]}
+          </span>
+          <span style={{ fontSize: '0.65rem', color, fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>
+            {Math.round(progress)}%
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Lane panel ───────────────────────────────────────────────────────────────
 
 const LanePanel = forwardRef<
@@ -558,24 +656,18 @@ const LanePanel = forwardRef<
           display: 'flex', flexDirection: 'column', gap: '3px',
         }}
       >
-        {events.length === 0 && (
+        {events.length === 0 && isRunning && (
+          <PreBattleScreen color={color} model={team.model} persona={team.persona} />
+        )}
+        {events.length === 0 && !isRunning && (
           <div style={{
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
-            height: '100%', gap: '0.6rem',
+            height: '100%', gap: '0.5rem',
           }}>
-            {isRunning ? (
-              <>
-                <ActivitySpinner color={color} active={true} />
-                <p style={{ color: '#2d4060', fontSize: '0.78rem', fontStyle: 'italic' }}>
-                  Waiting for events...
-                </p>
-              </>
-            ) : (
-              <p style={{ color: '#2d4060', fontSize: '0.78rem', fontStyle: 'italic' }}>
-                Waiting for competition to start...
-              </p>
-            )}
+            <p style={{ color: '#2d4060', fontSize: '0.78rem', fontStyle: 'italic' }}>
+              Waiting for competition to start...
+            </p>
           </div>
         )}
         {events.map((ev) => (
