@@ -30,12 +30,17 @@ export default function GalleryPage() {
           <h1 className="text-3xl font-bold text-white">Agent Arena</h1>
           <p className="text-gray-400 text-sm mt-1">AI agent head-to-head competitions</p>
         </div>
-        <Link
-          href="/competitions/new"
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded transition-colors"
-        >
-          New Competition
-        </Link>
+        <div className="flex items-center gap-2">
+          <a href="/analytics" className="text-xs text-slate-500 hover:text-slate-300 font-mono border border-slate-800 rounded px-2 py-1">
+            ◆ Analytics
+          </a>
+          <Link
+            href="/competitions/new"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold rounded transition-colors"
+          >
+            New Competition
+          </Link>
+        </div>
       </div>
 
       {loading && <p className="text-gray-600 text-sm">Loading...</p>}

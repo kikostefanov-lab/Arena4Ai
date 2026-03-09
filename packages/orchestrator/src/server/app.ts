@@ -2,6 +2,7 @@ import http from 'node:http';
 import express from 'express';
 import type { Application } from 'express';
 import { competitionsRouter } from './routes/competitions.js';
+import { analyticsRouter } from './routes/analytics.js';
 import { attachWebSocket } from './websocket.js';
 
 const CORS = {
@@ -31,6 +32,7 @@ export function createApp(): Application {
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use('/competitions', competitionsRouter);
+  app.use('/analytics', analyticsRouter);
 
   return app;
 }
