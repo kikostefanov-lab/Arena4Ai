@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { formatElapsed } from '../../../lib/format';
 
 interface ArenaEvent {
   eventId: string;
@@ -66,12 +67,6 @@ function payloadSummary(payload: unknown): string {
   return str.length > 120 ? str.slice(0, 120) + '…' : str;
 }
 
-function formatElapsed(ms: number): string {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, '0')}`;
-}
 
 export default function CompetitionPage() {
   const params = useParams();

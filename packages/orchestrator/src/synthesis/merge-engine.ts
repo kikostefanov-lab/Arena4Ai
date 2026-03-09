@@ -78,7 +78,7 @@ Return ONLY the synthesized solution as a markdown document. No preamble, no exp
         if (code === 0) resolve(out.trim());
         else reject(new Error(`Synthesis agent exited with code ${code}`));
       });
-      child.on('error', reject);
+      child.on('error', (err) => { clearTimeout(timeout); reject(err); });
     });
 
     return output || null;

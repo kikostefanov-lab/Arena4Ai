@@ -94,7 +94,7 @@ export function attachWebSocket(server: Server): void {
       const result = await repo.getResult(competitionId);
       if (result) {
         const scorecards = (result.scorecards as RawScorecard[]) ?? [];
-        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary, (result as Record<string, unknown>).synthesis as string | null | undefined);
+        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary, result.synthesis);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
         return;

@@ -6,19 +6,9 @@ export const analyticsRouter = Router();
 
 analyticsRouter.get('/summary', async (_req: Request, res: Response) => {
   const competitions = await repo.list(200);
+  const completedComps = competitions.filter((c) => c.state === 'COMPLETE');
 
-  const results = await Promise.all(
-    competitions
-      .filter((c) => c.state === 'COMPLETE')
-      .map((c) => repo.getResult(c.id)),
-  );
-  const validResults = results.filter(Boolean) as Array<{
-    competitionId: string;
-    winnerId: string | null;
-    scorecards: unknown[];
-    summary: string | null;
-    synthesis: string | null;
-  }>;
+  const validResults = await repo.listResults(completedComps.map((c) => c.id));
 
   const winRates = computeWinRate(competitions as never, validResults as never);
   const completionRate = computeCompletionRate(competitions as never);
@@ -35,7 +25,7 @@ analyticsRouter.get('/summary', async (_req: Request, res: Response) => {
 
   res.json({
     totalCompetitions: competitions.length,
-    completedCompetitions: competitions.filter((c) => c.state === 'COMPLETE').length,
+    completedCompetitions: completedComps.length,
     completionRate: Number(completionRate.toFixed(3)),
     avgDurationMs,
     byModel: modelStats,

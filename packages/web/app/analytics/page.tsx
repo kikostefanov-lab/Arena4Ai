@@ -1,4 +1,5 @@
 import { orchestratorUrl, orchestratorHeaders } from '../../lib/orchestrator';
+import { formatDuration } from '../../lib/format';
 
 interface ModelStat {
   model: string;
@@ -27,13 +28,6 @@ async function getAnalytics(): Promise<AnalyticsSummary | null> {
   } catch {
     return null;
   }
-}
-
-function formatDuration(ms: number | null): string {
-  if (!ms) return '—';
-  const mins = Math.floor(ms / 60000);
-  const secs = Math.floor((ms % 60000) / 1000);
-  return `${mins}m ${secs}s`;
 }
 
 export default async function AnalyticsPage() {

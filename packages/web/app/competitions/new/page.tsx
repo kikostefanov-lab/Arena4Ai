@@ -17,6 +17,8 @@ const defaultCriteria: RubricCriterion[] = [
 
 type Format = 'SPRINT' | 'HACKATHON' | 'RELAY_RACE' | 'RED_VS_BLUE';
 
+// NOTE: Keep in sync with packages/orchestrator/src/brief/presets.ts — PRESETS.
+// The server applies presets authoritatively; this object pre-fills the UI form for editing.
 const FORMAT_PRESETS: Record<Format, {
   timeLimitMins: number;
   constraints: string;

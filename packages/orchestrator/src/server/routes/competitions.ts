@@ -52,9 +52,15 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
 
   const rawBrief = briefResult.data;
   // Apply format preset defaults (fills missing rubric/time fields for known formats)
-  const mergedBrief = rawBrief.format && Object.values(CompetitionFormat).includes(rawBrief.format as CompetitionFormat)
-    ? applyPreset(rawBrief.format as CompetitionFormat, rawBrief)
-    : rawBrief;
+  let mergedBrief = rawBrief;
+  if (rawBrief.format && Object.values(CompetitionFormat).includes(rawBrief.format as CompetitionFormat)) {
+    try {
+      mergedBrief = applyPreset(rawBrief.format as CompetitionFormat, rawBrief);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to apply format preset', details: (err as Error).message });
+      return;
+    }
+  }
 
   const runner = new CompetitionRunner(mergedBrief, teams, options);
   const { competitionId } = runner;

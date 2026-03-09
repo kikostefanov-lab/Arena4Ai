@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 
 interface ArenaEvent {
@@ -32,8 +32,8 @@ type Speed = (typeof SPEEDS)[number];
 export default function ReplayPage() {
   const { id } = useParams<{ id: string }>();
   const [allEvents, setAllEvents] = useState<ArenaEvent[]>([]);
-  const [visibleEvents, setVisibleEvents] = useState<ArenaEvent[]>([]);
   const [cursor, setCursor] = useState(0);
+  const visibleEvents = useMemo(() => allEvents.slice(0, cursor), [allEvents, cursor]);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<Speed>(1);
   const [loading, setLoading] = useState(true);
@@ -68,11 +68,6 @@ export default function ReplayPage() {
     });
   }, [allEvents.length, speed]);
 
-  // Sync visibleEvents when cursor changes (separate from tick to avoid calling setState inside a setState updater)
-  useEffect(() => {
-    setVisibleEvents(allEvents.slice(0, cursor));
-  }, [cursor, allEvents]);
-
   useEffect(() => {
     if (playing) {
       intervalRef.current = setInterval(tick, 200);
@@ -90,9 +85,7 @@ export default function ReplayPage() {
   }, [visibleEvents]);
 
   const handleScrub = (value: number) => {
-    const idx = Math.round(value);
-    setCursor(idx);
-    setVisibleEvents(allEvents.slice(0, idx));
+    setCursor(Math.round(value));
   };
 
   const teams = [...new Set(allEvents.map((e) => e.teamId))].sort();
@@ -152,7 +145,7 @@ export default function ReplayPage() {
         </button>
 
         <button
-          onClick={() => { setCursor(0); setVisibleEvents([]); setPlaying(false); }}
+          onClick={() => { setCursor(0); setPlaying(false); }}
           className="px-3 py-1.5 rounded text-xs border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-400"
         >
           ↩ Reset
