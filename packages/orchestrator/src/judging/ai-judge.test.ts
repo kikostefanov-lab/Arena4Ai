@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { aiJudge, buildJudgePrompt } from './ai-judge.js';
+import { buildJudgePrompt } from './ai-judge.js';
 
 describe('buildJudgePrompt', () => {
   const rubric = {
