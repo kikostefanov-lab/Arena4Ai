@@ -10,8 +10,17 @@ describe('CompetitionState transitions', () => {
     expect(VALID_TRANSITIONS[CompetitionState.COMPLETE] ?? []).not.toContain(CompetitionState.DRAFT);
   });
 
-  it('defines all 9 states', () => {
+  it('defines all 10 states', () => {
     const states = Object.values(CompetitionState);
-    expect(states).toHaveLength(9);
+    expect(states).toHaveLength(10);
+  });
+
+  it('allows SCORED → SYNTHESIZING → COMPLETE', () => {
+    expect(VALID_TRANSITIONS[CompetitionState.SCORED]).toContain(CompetitionState.SYNTHESIZING);
+    expect(VALID_TRANSITIONS[CompetitionState.SYNTHESIZING]).toContain(CompetitionState.COMPLETE);
+  });
+
+  it('does not allow SCORED → COMPLETE directly', () => {
+    expect(VALID_TRANSITIONS[CompetitionState.SCORED]).not.toContain(CompetitionState.COMPLETE);
   });
 });

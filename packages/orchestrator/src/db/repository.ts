@@ -7,6 +7,7 @@ export interface StoredResult {
   scorecards: unknown[];
   winner: string | null;
   summary?: string;
+  synthesis?: string | null;
 }
 
 export class CompetitionRepository {
@@ -68,6 +69,7 @@ export class CompetitionRepository {
       scorecards: result.scorecards as Record<string, unknown>[],
       winnerId: result.winner,
       summary: result.summary,
+      synthesis: result.synthesis ?? null,
     });
   }
 

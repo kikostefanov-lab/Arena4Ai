@@ -28,4 +28,5 @@ export const results = pgTable('results', {
   scorecards:    jsonb('scorecards').notNull(),
   winnerId:      text('winner_id'),
   summary:       text('summary'),
+  synthesis:     text('synthesis'),
 });
