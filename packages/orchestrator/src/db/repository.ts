@@ -27,22 +27,13 @@ export class CompetitionRepository {
   }
 
   async updateState(id: string, state: CompetitionState): Promise<void> {
-    const patch: Record<string, unknown> = { state };
+    const patch: Partial<typeof competitions.$inferInsert> = { state: state as string };
     if (state === 'RUNNING') patch.startedAt = new Date();
     if (state === 'COMPLETE') patch.completedAt = new Date();
-    await this.db.update(competitions).set(patch as never).where(eq(competitions.id, id));
+    await this.db.update(competitions).set(patch).where(eq(competitions.id, id));
   }
 
   async appendEvent(event: ArenaEvent): Promise<void> {
-    const existing = await this.db
-      .select({ seq: events.seq })
-      .from(events)
-      .where(eq(events.competitionId, event.competitionId))
-      .orderBy(desc(events.seq))
-      .limit(1);
-
-    const seq = (existing[0]?.seq ?? 0) + 1;
-
     await this.db.insert(events).values({
       id: event.eventId,
       competitionId: event.competitionId,
@@ -51,7 +42,7 @@ export class CompetitionRepository {
       type: event.type,
       payload: event.payload as Record<string, unknown>,
       metadata: event.metadata as Record<string, unknown>,
-      seq,
+      // seq is serial — auto-assigned by Postgres
     });
   }
 
