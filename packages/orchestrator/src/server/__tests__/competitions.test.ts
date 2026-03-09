@@ -2,31 +2,26 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompetitionState, CompetitionFormat } from '@arena/shared';
 import request from 'supertest';
 
-// Mock DB client and repository — must be before any module imports.
-vi.mock('../../db/client.js', () => ({ db: {} }));
-vi.mock('../../db/repository.js', () => {
-  const knownIds = new Set<string>();
-  const MockRepo = vi.fn().mockImplementation(() => ({
+// Mock the shared repo singleton — must be before any module imports.
+const knownIds = new Set<string>();
+vi.mock('../repo.js', () => ({
+  repo: {
     create: vi.fn().mockImplementation((id: string) => {
       knownIds.add(id);
-      return Promise.resolve();
+      return Promise.resolve(undefined);
     }),
     updateState: vi.fn().mockResolvedValue(undefined),
     appendEvent: vi.fn().mockResolvedValue(undefined),
     saveResult: vi.fn().mockResolvedValue(undefined),
-    getCompetition: vi.fn().mockImplementation((id: string) => {
-      if (knownIds.has(id)) {
-        return Promise.resolve({ id, state: 'COMPLETE', startedAt: null, completedAt: null });
-      }
-      return Promise.resolve(null);
-    }),
+    getCompetition: vi.fn().mockImplementation((id: string) =>
+      Promise.resolve(knownIds.has(id) ? { id, state: 'COMPLETE', startedAt: null, completedAt: null } : null)
+    ),
     getEvents: vi.fn().mockResolvedValue([]),
     countEvents: vi.fn().mockResolvedValue(0),
     getResult: vi.fn().mockResolvedValue(null),
     list: vi.fn().mockResolvedValue([]),
-  }));
-  return { CompetitionRepository: MockRepo };
-});
+  },
+}));
 vi.mock('../runner-registry.js', () => ({ runnerRegistry: new Map() }));
 vi.mock('../websocket.js', () => ({ attachWebSocket: vi.fn() }));
 

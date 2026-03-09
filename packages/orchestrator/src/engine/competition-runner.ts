@@ -111,9 +111,7 @@ export class CompetitionRunner extends EventEmitter {
     this._cancelled = true;
     this._cancelResolve?.(); // unblock the run() Promise.race
     this._clock?.stop();
-    for (const adapter of this._activeAdapters) {
-      await adapter.shutdown();
-    }
+    await Promise.all(this._activeAdapters.map(a => a.shutdown()));
   }
 
   /** Pause the running competition — freezes the clock (adapters keep running). */
@@ -150,53 +148,51 @@ export class CompetitionRunner extends EventEmitter {
       // ── LAUNCHING ────────────────────────────────────────────────────────
       this.advance(CompetitionState.LAUNCHING);
 
-      const workdirs: Record<string, string> = {};
-      const adapters: BaseAdapter[] = [];
+      const adapters: BaseAdapter[] = await Promise.all(
+        teams.map(async (team) => {
+          const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
 
-      for (const team of teams) {
-        const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
-        workdirs[team.id] = workdir;
+          // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
+          const [provider, personaId] = team.model.split(':');
+          const persona = resolvePersona(
+            personaId ?? team.persona,
+            brief.format,
+          );
 
-        // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
-        const [provider, personaId] = team.model.split(':');
-        const persona = resolvePersona(
-          personaId ?? team.persona,
-          brief.format,
-        );
+          let adapter: BaseAdapter;
+          switch (provider) {
+            case 'codex':
+              adapter = new CodexAdapter(team.id, {
+                workdir,
+                competitionId: this.competition.id,
+                codexBin: this.options.codexBin,
+                sandbox: sandboxManager,
+              });
+              break;
+            case 'gemini':
+              adapter = new GeminiAdapter(team.id, {
+                workdir,
+                competitionId: this.competition.id,
+                geminiBin: this.options.geminiBin,
+                sandbox: sandboxManager,
+              });
+              break;
+            case 'claude':
+            default:
+              adapter = new ClaudeAdapter(team.id, {
+                workdir,
+                competitionId: this.competition.id,
+                claudeBin: this.options.claudeBin,
+                sandbox: sandboxManager,
+              });
+          }
 
-        let adapter: BaseAdapter;
-        switch (provider) {
-          case 'codex':
-            adapter = new CodexAdapter(team.id, {
-              workdir,
-              competitionId: this.competition.id,
-              codexBin: this.options.codexBin,
-              sandbox: sandboxManager,
-            });
-            break;
-          case 'gemini':
-            adapter = new GeminiAdapter(team.id, {
-              workdir,
-              competitionId: this.competition.id,
-              geminiBin: this.options.geminiBin,
-              sandbox: sandboxManager,
-            });
-            break;
-          case 'claude':
-          default:
-            adapter = new ClaudeAdapter(team.id, {
-              workdir,
-              competitionId: this.competition.id,
-              claudeBin: this.options.claudeBin,
-              sandbox: sandboxManager,
-            });
-        }
-
-        adapter.on('arenaEvent', forwardEvent);
-        await adapter.injectBrief(brief, persona.systemPrompt);
-        adapters.push(adapter);
-        this._activeAdapters.push(adapter);
-      }
+          adapter.on('arenaEvent', forwardEvent);
+          await adapter.injectBrief(brief, persona.systemPrompt);
+          return adapter;
+        })
+      );
+      this._activeAdapters.push(...adapters);
 
       // ── RUNNING ──────────────────────────────────────────────────────────
       this.advance(CompetitionState.RUNNING);

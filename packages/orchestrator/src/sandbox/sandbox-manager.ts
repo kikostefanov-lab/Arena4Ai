@@ -67,33 +67,26 @@ export class SandboxManager {
     return child;
   }
 
+  private runDockerCommand(subcommand: string, name: string): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const proc = spawn('docker', [subcommand, name], { stdio: 'ignore' });
+      proc.on('close', () => resolve());
+      proc.on('error', () => resolve());
+    });
+  }
+
   async killContainer(teamId: string): Promise<void> {
     const name = this.containerNames.get(teamId);
-    if (!name) return;
-    await new Promise<void>((resolve) => {
-      const proc = spawn('docker', ['kill', name], { stdio: 'ignore' });
-      proc.on('close', () => resolve());
-      proc.on('error', () => resolve()); // don't throw if docker not running
-    });
+    if (name) await this.runDockerCommand('kill', name);
   }
 
   async pauseContainer(teamId: string): Promise<void> {
     const name = this.containerNames.get(teamId);
-    if (!name) return;
-    await new Promise<void>((resolve) => {
-      const proc = spawn('docker', ['pause', name], { stdio: 'ignore' });
-      proc.on('close', () => resolve());
-      proc.on('error', () => resolve());
-    });
+    if (name) await this.runDockerCommand('pause', name);
   }
 
   async resumeContainer(teamId: string): Promise<void> {
     const name = this.containerNames.get(teamId);
-    if (!name) return;
-    await new Promise<void>((resolve) => {
-      const proc = spawn('docker', ['unpause', name], { stdio: 'ignore' });
-      proc.on('close', () => resolve());
-      proc.on('error', () => resolve());
-    });
+    if (name) await this.runDockerCommand('unpause', name);
   }
 }

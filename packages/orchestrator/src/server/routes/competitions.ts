@@ -4,13 +4,11 @@ import { briefSchema } from '@arena/shared';
 import type { Team } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
-import { db } from '../../db/client.js';
-import { CompetitionRepository } from '../../db/repository.js';
+import { repo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
 import { requireApiKey } from '../middleware/auth.js';
 
 export const competitionsRouter = Router();
-const repo = new CompetitionRepository(db);
 
 // POST /competitions — start a new competition
 competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) => {
@@ -99,8 +97,10 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     res.status(404).json({ error: 'Competition not found' });
     return;
   }
-  const eventCount = await repo.countEvents(id);
-  const result = await repo.getResult(id);
+  const [eventCount, result] = await Promise.all([
+    repo.countEvents(id),
+    repo.getResult(id),
+  ]);
   res.json({ id: comp.id, state: comp.state, eventCount, result });
 });
 

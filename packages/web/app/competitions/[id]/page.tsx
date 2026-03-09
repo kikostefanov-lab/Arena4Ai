@@ -159,12 +159,24 @@ export default function CompetitionPage() {
 
           const teamId = event.teamId ?? '';
           if (teamId === 'team-a') {
-            setTeamAEvents(prev => [...prev, event]);
+            setTeamAEvents(prev => {
+              const next = [...prev, event];
+              return next.length > 500 ? next.slice(-500) : next;
+            });
           } else if (teamId === 'team-b') {
-            setTeamBEvents(prev => [...prev, event]);
+            setTeamBEvents(prev => {
+              const next = [...prev, event];
+              return next.length > 500 ? next.slice(-500) : next;
+            });
           } else {
-            setTeamAEvents(prev => [...prev, event]);
-            setTeamBEvents(prev => [...prev, event]);
+            setTeamAEvents(prev => {
+              const next = [...prev, event];
+              return next.length > 500 ? next.slice(-500) : next;
+            });
+            setTeamBEvents(prev => {
+              const next = [...prev, event];
+              return next.length > 500 ? next.slice(-500) : next;
+            });
           }
         } catch { /* ignore parse errors */ }
       };

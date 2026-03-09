@@ -1,11 +1,32 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { IncomingMessage } from 'node:http';
 import type { Server } from 'node:http';
-import { db } from '../db/client.js';
-import { CompetitionRepository } from '../db/repository.js';
+import { repo } from './repo.js';
 import { runnerRegistry } from './runner-registry.js';
 
-const repo = new CompetitionRepository(db);
+type RawScorecard = {
+  teamId: string;
+  finalScore: number;
+  rank: number;
+  judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number }> }>;
+};
+
+function normalizeResult(
+  scorecards: RawScorecard[],
+  winnerId: string | null,
+  summary?: string | null,
+) {
+  return {
+    winnerId,
+    teams: scorecards.map((sc) => ({
+      teamId: sc.teamId,
+      totalScore: sc.finalScore,
+      criteriaScores: sc.judgeResults?.[0]?.scores ?? [],
+      rank: sc.rank,
+    })),
+    ...(summary ? { summary } : {}),
+  };
+}
 
 export function attachWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
@@ -70,17 +91,8 @@ export function attachWebSocket(server: Server): void {
       // Check if already complete
       const result = await repo.getResult(competitionId);
       if (result) {
-        const scorecards = (result.scorecards as Array<{ teamId: string; finalScore: number; rank: number; judgeResults: Array<{ scores: Array<{ criterionId: string; score: number }> }> }>) ?? [];
-        const normalized = {
-          winnerId: result.winnerId ?? null,
-          teams: scorecards.map((sc) => ({
-            teamId: sc.teamId,
-            totalScore: sc.finalScore,
-            criteriaScores: sc.judgeResults?.[0]?.scores ?? [],
-            rank: sc.rank,
-          })),
-          summary: result.summary,
-        };
+        const scorecards = (result.scorecards as RawScorecard[]) ?? [];
+        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
         return;
@@ -99,16 +111,8 @@ export function attachWebSocket(server: Server): void {
       const onStateChange = (state: unknown) => { send({ type: 'STATE_CHANGE', state }); };
       const onResult = (r: unknown) => {
         // r is CompetitionResult from the runner: { competition, scorecards, winner }
-        const runnerResult = r as { scorecards?: Array<{ teamId: string; finalScore: number; rank: number; judgeResults: Array<{ scores: Array<{ criterionId: string; score: number }> }> }>; winner?: string | null };
-        const normalized = {
-          winnerId: runnerResult.winner ?? null,
-          teams: (runnerResult.scorecards ?? []).map((sc) => ({
-            teamId: sc.teamId,
-            totalScore: sc.finalScore,
-            criteriaScores: sc.judgeResults?.[0]?.scores ?? [],
-            rank: sc.rank,
-          })),
-        };
+        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null };
+        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
       };
