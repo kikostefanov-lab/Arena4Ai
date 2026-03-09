@@ -74,4 +74,35 @@ describe('ClockManager', () => {
     const clock = new ClockManager(1000);
     expect(clock.elapsed()).toBe(0);
   });
+
+  describe('pause and resume', () => {
+    it('freezes elapsed time while paused', () => {
+      const clock = new ClockManager(5000);
+
+      clock.start();
+      vi.advanceTimersByTime(300);
+      clock.pause();
+      // Time advances but clock is paused — elapsed should stay at 300
+      vi.advanceTimersByTime(500);
+
+      expect(clock.elapsed()).toBe(300);
+    });
+
+    it('resumes accounting from where it left off after multiple pause/resume cycles', () => {
+      const clock = new ClockManager(5000);
+
+      clock.start();
+      vi.advanceTimersByTime(200); // elapsed: 200
+      clock.pause();
+      vi.advanceTimersByTime(100); // paused: 100 (not counted)
+      clock.resume();
+      vi.advanceTimersByTime(300); // elapsed: 500
+      clock.pause();
+      vi.advanceTimersByTime(400); // paused: 400 (not counted)
+      clock.resume();
+      vi.advanceTimersByTime(100); // elapsed: 600
+
+      expect(clock.elapsed()).toBe(600);
+    });
+  });
 });

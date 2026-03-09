@@ -71,6 +71,7 @@ export class CompetitionRunner extends EventEmitter {
   private competition: Competition;
   private readonly options: Required<RunOptions>;
   private _cancelled = false;
+  private _cancelResolve?: () => void;
   private _activeAdapters: BaseAdapter[] = [];
   private _clock?: ClockManager;
 
@@ -108,6 +109,7 @@ export class CompetitionRunner extends EventEmitter {
   /** Cancel the running competition — shuts down all adapters and stops the clock. */
   async cancel(): Promise<void> {
     this._cancelled = true;
+    this._cancelResolve?.(); // unblock the run() Promise.race
     this._clock?.stop();
     for (const adapter of this._activeAdapters) {
       await adapter.shutdown();
@@ -213,7 +215,10 @@ export class CompetitionRunner extends EventEmitter {
         adapters.map((a) => a.done),
       ).then(() => undefined);
 
-      await Promise.race([raceFinished, allAdaptersDone]);
+      const cancelPromise = new Promise<void>((resolve) => {
+        this._cancelResolve = resolve;
+      });
+      await Promise.race([raceFinished, allAdaptersDone, cancelPromise]);
 
       // ── TIME_UP / COLLECTING ─────────────────────────────────────────────
       this.advance(CompetitionState.TIME_UP);

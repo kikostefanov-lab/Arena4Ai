@@ -189,7 +189,8 @@ export default function CompetitionPage() {
   }, [id]);
 
   const sendControl = async (action: 'cancel' | 'pause' | 'resume') => {
-    await fetch(`/api/competitions/${id}?action=${action}`, { method: 'POST' });
+    const res = await fetch(`/api/competitions/${id}?action=${action}`, { method: 'POST' });
+    if (!res.ok) return; // don't update UI state if the request failed
     if (action === 'pause') setIsPaused(true);
     if (action === 'resume') setIsPaused(false);
     if (action === 'cancel') setState('COMPLETE');
