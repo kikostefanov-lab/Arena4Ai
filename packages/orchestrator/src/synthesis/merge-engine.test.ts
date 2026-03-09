@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { synthesizeDeliverables } from './merge-engine.js';
 import type { Deliverable, BriefInput } from '@arena/shared';
 import { CompetitionFormat } from '@arena/shared';
@@ -6,8 +7,11 @@ import { CompetitionFormat } from '@arena/shared';
 // Mock child_process.spawn so tests don't actually call Claude
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => {
-    const { EventEmitter } = require('node:events');
-    const child = new EventEmitter();
+    const child = new EventEmitter() as EventEmitter & {
+      stdout: EventEmitter;
+      stderr: EventEmitter;
+      kill: ReturnType<typeof vi.fn>;
+    };
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
     child.kill = vi.fn();

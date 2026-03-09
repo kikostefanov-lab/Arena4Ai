@@ -67,17 +67,18 @@ Return ONLY the synthesized solution as a markdown document. No preamble, no exp
       child.stdout.on('data', (chunk: Buffer) => {
         out += chunk.toString();
       });
+      // Cap at 3 minutes — synthesis is post-competition, blocking COMPLETE
+      const timeout = setTimeout(() => {
+        child.kill();
+        reject(new Error('Synthesis timed out after 3 minutes'));
+      }, 180_000);
+
       child.on('close', (code) => {
+        clearTimeout(timeout);
         if (code === 0) resolve(out.trim());
         else reject(new Error(`Synthesis agent exited with code ${code}`));
       });
       child.on('error', reject);
-
-      // Cap at 3 minutes — synthesis is post-competition, blocking COMPLETE
-      setTimeout(() => {
-        child.kill();
-        reject(new Error('Synthesis timed out after 3 minutes'));
-      }, 180_000);
     });
 
     return output || null;
