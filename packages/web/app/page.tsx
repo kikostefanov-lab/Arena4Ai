@@ -80,6 +80,15 @@ export default function GalleryPage() {
                 }`}>
                   {comp.state}
                 </span>
+                {comp.state === 'COMPLETE' && (
+                  <a
+                    href={`/competitions/${comp.id}/replay`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-xs text-slate-500 hover:text-orange-400 font-mono ml-auto"
+                  >
+                    ▶ Replay
+                  </a>
+                )}
               </div>
             </div>
           </Link>

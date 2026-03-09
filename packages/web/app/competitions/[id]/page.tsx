@@ -255,6 +255,12 @@ export default function CompetitionPage() {
             </button>
           </div>
         )}
+        <a
+          href={`/competitions/${id}/replay`}
+          className="text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded px-2 py-1 font-mono"
+        >
+          ▶ Replay
+        </a>
         <div className="font-mono text-gray-400 text-sm tabular-nums">
           {formatElapsed(elapsed)}
         </div>
