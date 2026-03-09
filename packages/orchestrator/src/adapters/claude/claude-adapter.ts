@@ -82,6 +82,7 @@ export class ClaudeAdapter extends BaseAdapter {
         [
           '--print', this.promptText,
           '--output-format', 'stream-json',
+          '--verbose',
           '--dangerously-skip-permissions',
         ],
         {
@@ -131,11 +132,27 @@ export class ClaudeAdapter extends BaseAdapter {
   }
 
   async collectDeliverables(): Promise<Deliverable> {
-    // In a full implementation this would walk the sandbox filesystem.
-    // For now, return a stub so the interface is satisfied and tests can stub it.
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+
+    let files: Array<{ path: string; content: string }> = [];
+    try {
+      const entries = await readdir(this.workdir, { withFileTypes: true });
+      files = await Promise.all(
+        entries
+          .filter((e) => e.isFile())
+          .map(async (e) => ({
+            path: e.name,
+            content: await readFile(join(this.workdir, e.name), 'utf-8'),
+          }))
+      );
+    } catch {
+      // workdir may not exist if sandbox was skipped
+    }
+
     return {
       teamId: this.teamId,
-      files: [],
+      files,
       collectedAt: new Date().toISOString(),
     };
   }
