@@ -1,3 +1,11 @@
+export async function GET() {
+  const upstream = await fetch(
+    `${process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000'}/competitions`
+  );
+  const data = await upstream.json();
+  return Response.json(data);
+}
+
 export async function POST(request: Request) {
   const body = await request.json();
   const apiKey = process.env.ARENA_API_KEY;
