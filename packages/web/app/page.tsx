@@ -14,12 +14,13 @@ interface CompetitionSummary {
 export default function GalleryPage() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/competitions')
       .then((r) => r.json())
       .then((data: CompetitionSummary[]) => { setCompetitions(data); setLoading(false); })
-      .catch(() => setLoading(false));
+      .catch(() => { setError('Failed to load competitions — is the API server running?'); setLoading(false); });
   }, []);
 
   return (
@@ -38,6 +39,10 @@ export default function GalleryPage() {
       </div>
 
       {loading && <p className="text-gray-600 text-sm">Loading...</p>}
+
+      {!loading && error && (
+        <p className="text-red-400 text-sm text-center py-8">{error}</p>
+      )}
 
       {!loading && competitions.length === 0 && (
         <div className="text-center py-20 text-gray-600">
