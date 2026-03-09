@@ -28,6 +28,7 @@ vi.mock('../../db/repository.js', () => {
   return { CompetitionRepository: MockRepo };
 });
 vi.mock('../runner-registry.js', () => ({ runnerRegistry: new Map() }));
+vi.mock('../websocket.js', () => ({ attachWebSocket: vi.fn() }));
 
 // Mock CompetitionRunner — must be declared before importing modules that use it.
 // vi.mock is hoisted to the top of the file by Vitest automatically.

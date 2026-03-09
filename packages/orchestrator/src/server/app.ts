@@ -2,6 +2,7 @@ import http from 'node:http';
 import express from 'express';
 import type { Application } from 'express';
 import { competitionsRouter } from './routes/competitions.js';
+import { attachWebSocket } from './websocket.js';
 
 export function createApp(): Application {
   const app = express();
@@ -22,5 +23,7 @@ export function createApp(): Application {
 
 export function createServer(): http.Server {
   const app = createApp();
-  return http.createServer(app);
+  const server = http.createServer(app);
+  attachWebSocket(server);
+  return server;
 }
