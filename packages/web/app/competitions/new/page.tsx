@@ -18,12 +18,11 @@ const defaultCriteria: RubricCriterion[] = [
 type Format = 'SPRINT' | 'HACKATHON' | 'RELAY_RACE' | 'RED_VS_BLUE';
 
 // NOTE: Keep in sync with packages/orchestrator/src/brief/presets.ts — PRESETS.
-// The server applies presets authoritatively; this object pre-fills the UI form for editing.
 const FORMAT_PRESETS: Record<Format, {
   timeLimitMins: number;
   constraints: string;
   deliverables: string;
-  criteria: Array<{ id: string; description: string; maxScore: number; weight: number }>;
+  criteria: RubricCriterion[];
 }> = {
   SPRINT: {
     timeLimitMins: 15,
@@ -67,12 +66,46 @@ const FORMAT_PRESETS: Record<Format, {
   },
 };
 
+const FORMAT_COLORS: Record<Format, { bg: string; color: string; activeBg: string }> = {
+  SPRINT:      { bg: 'transparent', color: '#8896ab', activeBg: 'rgba(6,182,212,0.12)',   },
+  HACKATHON:   { bg: 'transparent', color: '#8896ab', activeBg: 'rgba(168,85,247,0.12)',  },
+  RELAY_RACE:  { bg: 'transparent', color: '#8896ab', activeBg: 'rgba(34,197,94,0.12)',   },
+  RED_VS_BLUE: { bg: 'transparent', color: '#8896ab', activeBg: 'rgba(239,68,68,0.12)',   },
+};
+
+const FORMAT_ACTIVE_COLOR: Record<Format, string> = {
+  SPRINT:      '#06b6d4',
+  HACKATHON:   '#a855f7',
+  RELAY_RACE:  '#22c55e',
+  RED_VS_BLUE: '#ef4444',
+};
+
+const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'guardian', 'pioneer'];
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box',
+  background: '#0d1520', border: '1px solid #1e2d45', borderRadius: '4px',
+  padding: '0.5rem 0.75rem', color: '#e2e8f0',
+  fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+  fontSize: '0.72rem', outline: 'none',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: '0.55rem', fontWeight: 700,
+  color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+};
+
+const sectionHeaderStyle: React.CSSProperties = {
+  fontSize: '0.6rem', fontWeight: 700, color: '#f97316',
+  letterSpacing: '2px', textTransform: 'uppercase',
+  borderBottom: '1px solid #1e2d45', paddingBottom: '0.6rem', marginBottom: '1.25rem',
+};
+
 export default function NewCompetitionPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Form state
   const [title, setTitle] = useState('');
   const [format, setFormat] = useState<Format>('SPRINT');
   const [problem, setProblem] = useState('');
@@ -86,32 +119,28 @@ export default function NewCompetitionPage() {
   const [teamBModel, setTeamBModel] = useState<'claude' | 'codex' | 'gemini'>('claude');
   const [teamBPersona, setTeamBPersona] = useState('architect');
 
-  const applyPreset = (selectedFormat: Format) => {
-    setFormat(selectedFormat);
-    const preset = FORMAT_PRESETS[selectedFormat];
-    setTimeLimitMins(preset.timeLimitMins);
-    setConstraints(preset.constraints);
-    setDeliverables(preset.deliverables);
-    setCriteria(preset.criteria);
+  const applyPreset = (f: Format) => {
+    setFormat(f);
+    const p = FORMAT_PRESETS[f];
+    setTimeLimitMins(p.timeLimitMins);
+    setConstraints(p.constraints);
+    setDeliverables(p.deliverables);
+    setCriteria(p.criteria);
   };
 
-  const addCriterion = () => {
+  const addCriterion = () =>
     setCriteria([...criteria, { id: '', description: '', maxScore: 10, weight: 0.5 }]);
-  };
 
-  const removeCriterion = (idx: number) => {
+  const removeCriterion = (idx: number) =>
     setCriteria(criteria.filter((_, i) => i !== idx));
-  };
 
-  const updateCriterion = (idx: number, field: keyof RubricCriterion, value: string | number) => {
+  const updateCriterion = (idx: number, field: keyof RubricCriterion, value: string | number) =>
     setCriteria(criteria.map((c, i) => i === idx ? { ...c, [field]: value } : c));
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     setError(null);
-
     try {
       const body = {
         brief: {
@@ -119,15 +148,11 @@ export default function NewCompetitionPage() {
           title,
           format,
           problem,
-          constraints: constraints.split('\n').map(s => s.trim()).filter(Boolean),
-          deliverables: deliverables.split('\n').map(s => s.trim()).filter(Boolean),
+          constraints: constraints.split('\n').map((s) => s.trim()).filter(Boolean),
+          deliverables: deliverables.split('\n').map((s) => s.trim()).filter(Boolean),
           timeLimitMs: timeLimitMins * 60 * 1000,
           rubric: {
-            criteria: criteria.map(c => ({
-              ...c,
-              maxScore: Number(c.maxScore),
-              weight: Number(c.weight),
-            })),
+            criteria: criteria.map((c) => ({ ...c, maxScore: Number(c.maxScore), weight: Number(c.weight) })),
           },
           ...(expectedOutput.trim() ? { expectedOutput: expectedOutput.trim() } : {}),
         },
@@ -135,23 +160,15 @@ export default function NewCompetitionPage() {
           { id: 'team-a', model: teamAModel, persona: teamAPersona },
           { id: 'team-b', model: teamBModel, persona: teamBPersona },
         ],
-        options: {
-          claudeBin: 'claude',
-          logDir: '/tmp/arena-logs',
-        },
+        options: { claudeBin: 'claude', logDir: '/tmp/arena-logs' },
       };
-
       const res = await fetch('/api/competitions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
-
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Failed to create competition: ${res.status} ${text}`);
+        throw new Error(`${res.status} ${text}`);
       }
-
       const data = await res.json();
       router.push(`/competitions/${data.competitionId}`);
     } catch (err) {
@@ -161,277 +178,317 @@ export default function NewCompetitionPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-10">
-      <h1 className="text-3xl font-bold mb-2 text-white">Configure Competition</h1>
-      <p className="text-gray-400 mb-8 text-sm">Configure a head-to-head AI agent challenge</p>
+    <div style={{
+      minHeight: '100vh', background: '#0a0e17', color: '#e2e8f0',
+      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+    }}>
+      <div style={{ maxWidth: '760px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {/* Basic Info */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2">Brief</h2>
+        {/* Header */}
+        <div style={{ marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+            <a href="/" style={{ fontSize: '0.6rem', color: '#f97316', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}>
+              ◆ ARENA
+            </a>
+            <span style={{ color: '#1e2d45' }}>│</span>
+            <span style={{ fontSize: '0.6rem', color: '#8896ab', letterSpacing: '1px' }}>NEW COMPETITION</span>
+          </div>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 800, color: '#e2e8f0', margin: 0 }}>
+            Configure Brief
+          </h1>
+          <p style={{ fontSize: '0.7rem', color: '#8896ab', marginTop: '0.35rem' }}>
+            Set up a head-to-head AI agent challenge
+          </p>
+        </div>
 
-          <div className="mb-6">
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-              Start From Preset
-            </label>
-            <div className="flex gap-2 flex-wrap">
-              {(['SPRINT', 'HACKATHON', 'RELAY_RACE', 'RED_VS_BLUE'] as Format[]).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => applyPreset(f)}
-                  className={`px-3 py-1.5 rounded text-xs font-mono font-bold border transition-colors ${
-                    format === f
-                      ? 'bg-orange-500/20 border-orange-500 text-orange-400'
-                      : 'bg-slate-800 border-slate-700 text-slate-400 hover:border-slate-500'
-                  }`}
-                >
-                  {f.replace(/_/g, ' ')}
-                </button>
+        <form onSubmit={handleSubmit}>
+
+          {/* ── BRIEF ─────────────────────────────────────────── */}
+          <div style={{ marginBottom: '2rem' }}>
+            <div style={sectionHeaderStyle}>▸ Brief</div>
+
+            {/* Preset buttons */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <div style={labelStyle}>Format preset</div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {(['SPRINT', 'HACKATHON', 'RELAY_RACE', 'RED_VS_BLUE'] as Format[]).map((f) => {
+                  const active = format === f;
+                  const activeColor = FORMAT_ACTIVE_COLOR[f];
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => applyPreset(f)}
+                      style={{
+                        fontSize: '0.6rem', fontWeight: 700, padding: '0.3rem 0.75rem',
+                        borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
+                        border: `1px solid ${active ? activeColor : '#1e2d45'}`,
+                        background: active ? FORMAT_COLORS[f].activeBg : 'transparent',
+                        color: active ? activeColor : '#8896ab',
+                        fontFamily: 'inherit',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      {f.replace(/_/g, ' ')}
+                    </button>
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: '0.6rem', color: '#4a5568', marginTop: '0.5rem' }}>
+                Selecting a preset fills in defaults you can customize below.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={labelStyle}>Competition title</label>
+              <input
+                type="text" required value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Fibonacci API Challenge"
+                style={inputStyle}
+              />
+            </div>
+
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={labelStyle}>Problem statement</label>
+              <textarea
+                required value={problem}
+                onChange={(e) => setProblem(e.target.value)}
+                rows={4} placeholder="Describe the problem agents must solve…"
+                style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+              <div>
+                <label style={labelStyle}>Constraints (one per line)</label>
+                <textarea
+                  value={constraints} onChange={(e) => setConstraints(e.target.value)}
+                  rows={3} placeholder={'No external APIs\nTypeScript only'}
+                  style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Deliverables (one per line)</label>
+                <textarea
+                  value={deliverables} onChange={(e) => setDeliverables(e.target.value)}
+                  rows={3} placeholder={'Working implementation\nREADME'}
+                  style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Time limit (minutes)</label>
+              <input
+                type="number" min={1} max={120} value={timeLimitMins}
+                onChange={(e) => setTimeLimitMins(Number(e.target.value))}
+                style={{ ...inputStyle, width: '7rem' }}
+              />
+            </div>
+          </div>
+
+          {/* ── RUBRIC ────────────────────────────────────────── */}
+          <div style={{ marginBottom: '2rem' }}>
+            <div style={sectionHeaderStyle}>▸ Rubric</div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '0.75rem' }}>
+              {criteria.map((c, idx) => (
+                <div key={idx} style={{
+                  background: '#111827', border: '1px solid #1e2d45',
+                  borderRadius: '5px', padding: '0.85rem',
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 6rem 6rem', gap: '0.6rem', marginBottom: '0.6rem' }}>
+                    <div>
+                      <label style={labelStyle}>ID</label>
+                      <input
+                        type="text" required value={c.id}
+                        onChange={(e) => updateCriterion(idx, 'id', e.target.value)}
+                        placeholder="criterion-id"
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Max score</label>
+                      <input
+                        type="number" min={1} required value={c.maxScore}
+                        onChange={(e) => updateCriterion(idx, 'maxScore', Number(e.target.value))}
+                        style={inputStyle}
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Weight</label>
+                      <input
+                        type="number" min={0} max={1} step={0.01} required value={c.weight}
+                        onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value))}
+                        style={inputStyle}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <label style={labelStyle}>Description</label>
+                      <input
+                        type="text" required value={c.description}
+                        onChange={(e) => updateCriterion(idx, 'description', e.target.value)}
+                        placeholder="What this criterion evaluates"
+                        style={inputStyle}
+                      />
+                    </div>
+                    {criteria.length > 1 && (
+                      <button
+                        type="button" onClick={() => removeCriterion(idx)}
+                        style={{
+                          fontSize: '0.65rem', color: '#4a5568', background: 'none', border: 'none',
+                          cursor: 'pointer', padding: '0.45rem 0.5rem', fontFamily: 'inherit',
+                          flexShrink: 0, transition: 'color 0.15s',
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#4a5568'; }}
+                      >
+                        ✕ remove
+                      </button>
+                    )}
+                  </div>
+                </div>
               ))}
             </div>
-            <p className="text-slate-500 text-xs mt-1">
-              Selecting a preset fills in defaults you can then customize.
-            </p>
-          </div>
 
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Competition Title</label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500"
-              placeholder="e.g. Fibonacci API Challenge"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Format</label>
-            <select
-              value={format}
-              onChange={e => applyPreset(e.target.value as Format)}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-gray-500"
+            <button
+              type="button" onClick={addCriterion}
+              style={{
+                fontSize: '0.62rem', color: '#8896ab', background: 'none',
+                border: '1px solid #1e2d45', borderRadius: '4px',
+                padding: '0.35rem 0.75rem', cursor: 'pointer', fontFamily: 'inherit',
+                transition: 'border-color 0.15s, color 0.15s', marginBottom: '1.25rem',
+              }}
+              onMouseEnter={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#2d4060'; b.style.color = '#e2e8f0'; }}
+              onMouseLeave={(e) => { const b = e.currentTarget as HTMLButtonElement; b.style.borderColor = '#1e2d45'; b.style.color = '#8896ab'; }}
             >
-              <option value="SPRINT">SPRINT</option>
-              <option value="HACKATHON">HACKATHON</option>
-              <option value="RELAY_RACE">RELAY_RACE</option>
-              <option value="RED_VS_BLUE">RED_VS_BLUE</option>
-            </select>
-          </div>
+              + Add criterion
+            </button>
 
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Problem Statement</label>
-            <textarea
-              required
-              value={problem}
-              onChange={e => setProblem(e.target.value)}
-              rows={4}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
-              placeholder="Describe the problem agents must solve..."
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Constraints (one per line)</label>
+              <label style={labelStyle}>
+                Expected output
+                <span style={{ color: '#4a5568', fontWeight: 400, marginLeft: '0.5rem' }}>
+                  optional — enables automated correctness scoring
+                </span>
+              </label>
               <textarea
-                value={constraints}
-                onChange={e => setConstraints(e.target.value)}
-                rows={3}
-                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
-                placeholder="No external APIs&#10;TypeScript only"
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Deliverables (one per line)</label>
-              <textarea
-                value={deliverables}
-                onChange={e => setDeliverables(e.target.value)}
-                rows={3}
-                className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
-                placeholder="Working implementation&#10;README"
+                value={expectedOutput} onChange={(e) => setExpectedOutput(e.target.value)}
+                rows={4} placeholder="Paste expected stdout here, one line per output…"
+                style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }}
               />
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">Time Limit (minutes)</label>
-            <input
-              type="number"
-              min={1}
-              max={120}
-              value={timeLimitMins}
-              onChange={e => setTimeLimitMins(Number(e.target.value))}
-              className="w-32 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white focus:outline-none focus:border-gray-500"
-            />
-          </div>
-        </section>
+          {/* ── AGENTS ────────────────────────────────────────── */}
+          <div style={{ marginBottom: '2rem' }}>
+            <div style={sectionHeaderStyle}>▸ Agents</div>
 
-        {/* Rubric */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2">Rubric</h2>
-          <div className="space-y-3">
-            {criteria.map((criterion, idx) => (
-              <div key={idx} className="bg-gray-900 border border-gray-800 rounded p-3 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">ID</label>
-                    <input
-                      type="text"
-                      required
-                      value={criterion.id}
-                      onChange={e => updateCriterion(idx, 'id', e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                      placeholder="criterion-id"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Max Score</label>
-                      <input
-                        type="number"
-                        min={1}
-                        required
-                        value={criterion.maxScore}
-                        onChange={e => updateCriterion(idx, 'maxScore', Number(e.target.value))}
-                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-500 mb-1">Weight</label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={1}
-                        step={0.01}
-                        required
-                        value={criterion.weight}
-                        onChange={e => updateCriterion(idx, 'weight', Number(e.target.value))}
-                        className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                      />
-                    </div>
-                  </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              {/* Team A */}
+              <div style={{
+                background: '#111827',
+                border: '1px solid #1e2d45',
+                borderLeft: '3px solid #3b82f6',
+                borderRadius: '5px', padding: '1rem',
+              }}>
+                <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#3b82f6', letterSpacing: '1.5px', marginBottom: '1rem' }}>
+                  AGENT A
                 </div>
-                <div className="flex gap-2 items-start">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 mb-1">Description</label>
-                    <input
-                      type="text"
-                      required
-                      value={criterion.description}
-                      onChange={e => updateCriterion(idx, 'description', e.target.value)}
-                      className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                      placeholder="What this criterion evaluates"
-                    />
-                  </div>
-                  {criteria.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeCriterion(idx)}
-                      className="mt-5 text-red-500 hover:text-red-400 text-sm px-2"
-                    >
-                      Remove
-                    </button>
-                  )}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={labelStyle}>Model</label>
+                  <select
+                    value={teamAModel}
+                    onChange={(e) => setTeamAModel(e.target.value as 'claude' | 'codex' | 'gemini')}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                  >
+                    <option value="claude">claude</option>
+                    <option value="codex">codex</option>
+                    <option value="gemini">gemini</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Persona</label>
+                  <input
+                    type="text" value={teamAPersona}
+                    onChange={(e) => setTeamAPersona(e.target.value)}
+                    list="personas-a"
+                    style={inputStyle}
+                  />
+                  <datalist id="personas-a">
+                    {PERSONAS.map((p) => <option key={p} value={p} />)}
+                  </datalist>
                 </div>
               </div>
-            ))}
+
+              {/* Team B */}
+              <div style={{
+                background: '#111827',
+                border: '1px solid #1e2d45',
+                borderLeft: '3px solid #a855f7',
+                borderRadius: '5px', padding: '1rem',
+              }}>
+                <div style={{ fontSize: '0.6rem', fontWeight: 700, color: '#a855f7', letterSpacing: '1.5px', marginBottom: '1rem' }}>
+                  AGENT B
+                </div>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={labelStyle}>Model</label>
+                  <select
+                    value={teamBModel}
+                    onChange={(e) => setTeamBModel(e.target.value as 'claude' | 'codex' | 'gemini')}
+                    style={{ ...inputStyle, cursor: 'pointer' }}
+                  >
+                    <option value="claude">claude</option>
+                    <option value="codex">codex</option>
+                    <option value="gemini">gemini</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Persona</label>
+                  <input
+                    type="text" value={teamBPersona}
+                    onChange={(e) => setTeamBPersona(e.target.value)}
+                    list="personas-b"
+                    style={inputStyle}
+                  />
+                  <datalist id="personas-b">
+                    {PERSONAS.map((p) => <option key={p} value={p} />)}
+                  </datalist>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)',
+              borderRadius: '4px', padding: '0.75rem 1rem',
+              color: '#ef4444', fontSize: '0.7rem', marginBottom: '1.25rem',
+            }}>
+              {error}
+            </div>
+          )}
+
+          {/* Submit */}
           <button
-            type="button"
-            onClick={addCriterion}
-            className="text-sm text-gray-400 hover:text-gray-200 border border-gray-700 hover:border-gray-500 rounded px-3 py-1.5 transition-colors"
+            type="submit" disabled={submitting}
+            style={{
+              width: '100%', padding: '0.75rem',
+              background: submitting ? '#1e2d45' : '#f97316',
+              color: submitting ? '#4a5568' : '#0a0e17',
+              border: 'none', borderRadius: '5px', cursor: submitting ? 'not-allowed' : 'pointer',
+              fontSize: '0.72rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase',
+              fontFamily: 'inherit', transition: 'background 0.15s',
+            }}
           >
-            + Add Criterion
+            {submitting ? 'Launching…' : '▶ Launch Competition'}
           </button>
-
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">
-              Expected Output <span className="text-gray-600">(optional — enables automated correctness scoring)</span>
-            </label>
-            <textarea
-              value={expectedOutput}
-              onChange={e => setExpectedOutput(e.target.value)}
-              rows={4}
-              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white placeholder-gray-600 focus:outline-none focus:border-gray-500 font-mono text-sm"
-              placeholder="Paste expected stdout here, one line per output line..."
-            />
-          </div>
-        </section>
-
-        {/* Teams */}
-        <section className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-200 border-b border-gray-800 pb-2">Teams</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {/* Team A */}
-            <div className="bg-gray-900 border border-gray-800 rounded p-4 space-y-3">
-              <h3 className="text-sm font-medium text-blue-400">Team A</h3>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Model</label>
-                <select
-                  value={teamAModel}
-                  onChange={e => setTeamAModel(e.target.value as 'claude' | 'codex' | 'gemini')}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                >
-                  <option value="claude">Claude</option>
-                  <option value="codex">Codex</option>
-                  <option value="gemini">Gemini</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Persona</label>
-                <input
-                  type="text"
-                  value={teamAPersona}
-                  onChange={e => setTeamAPersona(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                />
-              </div>
-            </div>
-            {/* Team B */}
-            <div className="bg-gray-900 border border-gray-800 rounded p-4 space-y-3">
-              <h3 className="text-sm font-medium text-purple-400">Team B</h3>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Model</label>
-                <select
-                  value={teamBModel}
-                  onChange={e => setTeamBModel(e.target.value as 'claude' | 'codex' | 'gemini')}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                >
-                  <option value="claude">Claude</option>
-                  <option value="codex">Codex</option>
-                  <option value="gemini">Gemini</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Persona</label>
-                <input
-                  type="text"
-                  value={teamBPersona}
-                  onChange={e => setTeamBPersona(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-gray-500"
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {error && (
-          <div className="bg-red-950 border border-red-800 rounded p-3 text-red-400 text-sm font-mono">
-            {error}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold rounded transition-colors"
-        >
-          {submitting ? 'Starting Competition...' : 'Start Competition'}
-        </button>
-      </form>
+        </form>
+      </div>
     </div>
   );
 }

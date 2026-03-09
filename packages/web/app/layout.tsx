@@ -6,19 +6,10 @@ export const metadata: Metadata = {
   description: 'AI Agent Competition Platform',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-gray-950 text-gray-100 min-h-screen">
-        <nav className="border-b border-gray-800 px-6 py-4">
-          <a href="/" className="text-xl font-bold tracking-tight text-white hover:text-gray-300 transition-colors">
-            Agent Arena
-          </a>
-        </nav>
+      <body style={{ margin: 0, padding: 0, background: '#0a0e17' }}>
         <main>{children}</main>
       </body>
     </html>
