@@ -1,8 +1,14 @@
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import type { Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
+import { claudeEnv } from '../utils/claude-env.js';
+
+export const JUDGE_IDS = {
+  automated: 'automated',
+  aiClaude: 'ai-claude',
+} as const;
 
 export interface AiJudgeOptions {
-  /** Model identifier to label this judge, e.g. 'ai-claude-opus'. */
+  /** Model identifier to label this judge, e.g. 'ai-claude'. */
   judgeId: string;
   /** Path to the claude CLI binary. Defaults to 'claude'. */
   claudeBin?: string;
@@ -11,9 +17,8 @@ export interface AiJudgeOptions {
 /**
  * Ask a Claude model to evaluate a deliverable against a rubric.
  *
- * Builds a structured prompt, calls the claude CLI synchronously
- * (judges run after TIME_UP so blocking is acceptable), and parses
- * the JSON response back into a JudgeResult.
+ * Builds a structured prompt, calls the claude CLI asynchronously,
+ * and parses the JSON response back into a JudgeResult.
  *
  * Falls back to zero scores if the CLI call fails or returns
  * unparseable output — the automated scorer acts as the safety net.
@@ -56,22 +61,30 @@ Return ONLY a JSON object with this exact shape (no markdown, no prose):
   }));
 
   try {
-    const env = { ...process.env };
-    delete env['CLAUDECODE'];
+    const stdout = await new Promise<string>((resolve, reject) => {
+      const child = spawn(
+        claudeBin,
+        ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
+        { env: claudeEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
+      );
 
-    const result = spawnSync(
-      claudeBin,
-      ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
-      { encoding: 'utf8', timeout: 120_000, env },
-    );
+      let out = '';
+      child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+      child.on('close', (code) => {
+        if (code === 0) resolve(out);
+        else reject(new Error(`AI judge exited with code ${code}`));
+      });
+      child.on('error', reject);
 
-    if (result.status === 0 && result.stdout) {
-      const jsonMatch = result.stdout.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]) as { scores: CriterionScore[] };
-        if (Array.isArray(parsed.scores)) {
-          scores = parsed.scores;
-        }
+      // Kill after 120s to avoid hanging the judging phase
+      setTimeout(() => { child.kill(); reject(new Error('AI judge timed out')); }, 120_000);
+    });
+
+    const jsonMatch = stdout.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as { scores: CriterionScore[] };
+      if (Array.isArray(parsed.scores)) {
+        scores = parsed.scores;
       }
     }
   } catch {

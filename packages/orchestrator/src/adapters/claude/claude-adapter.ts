@@ -1,9 +1,12 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { readdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import type { Brief, Deliverable } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './claude-normalizer.js';
+import { claudeEnv } from '../../utils/claude-env.js';
 
 export interface ClaudeAdapterOptions {
   /** Working directory for the Claude Code process (the sandbox root). */
@@ -73,10 +76,6 @@ export class ClaudeAdapter extends BaseAdapter {
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
 
     this.executionDone = new Promise<void>((resolve, reject) => {
-      // Unset CLAUDECODE so nested claude processes are allowed.
-      const env = { ...process.env };
-      delete env['CLAUDECODE'];
-
       const child = spawn(
         this.claudeBin,
         [
@@ -88,7 +87,7 @@ export class ClaudeAdapter extends BaseAdapter {
         {
           cwd: this.workdir,
           stdio: ['ignore', 'pipe', 'pipe'],
-          env,
+          env: claudeEnv(),
         },
       );
 
@@ -132,9 +131,6 @@ export class ClaudeAdapter extends BaseAdapter {
   }
 
   async collectDeliverables(): Promise<Deliverable> {
-    const { readdir, readFile } = await import('node:fs/promises');
-    const { join } = await import('node:path');
-
     let files: Array<{ path: string; content: string }> = [];
     try {
       const entries = await readdir(this.workdir, { withFileTypes: true });

@@ -39,7 +39,12 @@ program
       const brief = await parseBrief(resolve(briefPath));
 
       if (opts.timeLimit) {
-        brief.timeLimitMs = parseInt(opts.timeLimit, 10);
+        const ms = Number(opts.timeLimit);
+        if (!Number.isFinite(ms) || ms <= 0) {
+          console.error(`[arena] fatal: --time-limit must be a positive number, got: ${opts.timeLimit}`);
+          process.exit(1);
+        }
+        brief.timeLimitMs = ms;
       }
 
       const makeTeam = (id: string, modelSpec: string): Team => {
