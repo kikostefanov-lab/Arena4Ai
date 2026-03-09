@@ -20,7 +20,8 @@ interface ArenaEvent {
 
 interface CriterionScore { criterionId: string; score: number; maxScore: number; }
 interface TeamResult { teamId: string; totalScore: number; criteriaScores: CriterionScore[]; }
-interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: string | null; }
+interface TeamDeliverable { teamId: string; files: { path: string; content: string }[]; }
+interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: string | null; deliverables?: TeamDeliverable[]; }
 
 type CompetitionState = 'PENDING' | 'RUNNING' | 'JUDGING' | 'COMPLETE' | 'ERROR';
 
@@ -767,6 +768,8 @@ function ScoreDrawer({
   onToggle: () => void;
 }) {
   const [synthOpen, setSynthOpen] = useState(true);
+  const [subsOpen, setSubsOpen] = useState(false);
+  const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
   const winnerLabel = result.winnerId
@@ -949,6 +952,135 @@ function ScoreDrawer({
                   <pre style={{ fontSize: '0.80rem', color: '#c4d4e8', whiteSpace: 'pre-wrap', fontFamily: 'inherit', lineHeight: 1.7, margin: 0 }}>
                     {result.synthesis}
                   </pre>
+                </div>
+              )}
+            </div>
+          )}
+
+          {result.deliverables && result.deliverables.length > 0 && (
+            <div style={{
+              marginTop: '1.25rem', border: '1px solid rgba(59,130,246,0.25)',
+              borderRadius: '10px', overflow: 'hidden',
+              maxWidth: '700px', marginLeft: 'auto', marginRight: 'auto',
+            }}>
+              <button
+                onClick={() => setSubsOpen((o) => !o)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  background: 'rgba(59,130,246,0.06)', padding: '0.75rem 1rem',
+                  borderBottom: subsOpen ? '1px solid rgba(59,130,246,0.15)' : 'none',
+                  border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  color: 'inherit', textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#3b82f6', letterSpacing: '2px', textTransform: 'uppercase' }}>
+                  📦 Submissions
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#8896ab', fontFamily: "-apple-system, 'Segoe UI', sans-serif", flex: 1 }}>
+                  Files delivered by each team
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#8896ab', flexShrink: 0 }}>
+                  {subsOpen ? '▲' : '▼'}
+                </span>
+              </button>
+              {subsOpen && (
+                <div className="arena-scrollbar" style={{ padding: '1rem 1.25rem', background: '#0d1520', overflowY: 'auto', maxHeight: '400px' }}>
+                  {result.deliverables.map((td, tdIdx) => {
+                    const teamObj = teams.find((t) => t.id === td.teamId);
+                    const label = teamObj
+                      ? (teamObj.persona ? `${teamObj.model}:${teamObj.persona}` : teamObj.model)
+                      : td.teamId;
+                    const color = LANE_COLORS[tdIdx] ?? '#8896ab';
+                    const currentFileIdx = activeFileIdx[td.teamId] ?? 0;
+                    const currentFile = td.files[currentFileIdx];
+
+                    return (
+                      <div key={td.teamId} style={{
+                        marginBottom: tdIdx < result.deliverables!.length - 1 ? '1.25rem' : 0,
+                        border: `1px solid rgba(${hexToRgb(color)},0.2)`,
+                        borderRadius: '8px', overflow: 'hidden',
+                      }}>
+                        {/* Team header */}
+                        <div style={{
+                          padding: '0.5rem 0.85rem',
+                          background: `rgba(${hexToRgb(color)},0.08)`,
+                          borderBottom: `1px solid rgba(${hexToRgb(color)},0.15)`,
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase' }}>
+                            {label}
+                          </span>
+                          <span style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                            {td.files.length} {td.files.length === 1 ? 'file' : 'files'}
+                          </span>
+                        </div>
+
+                        {td.files.length === 0 && (
+                          <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#4a5568', fontStyle: 'italic' }}>
+                            No files submitted
+                          </div>
+                        )}
+
+                        {td.files.length > 0 && (
+                          <>
+                            {/* File tabs */}
+                            {td.files.length > 1 && (
+                              <div style={{
+                                display: 'flex', gap: '2px', padding: '0.4rem 0.6rem',
+                                background: '#0a0e17', borderBottom: '1px solid #1e2d45',
+                                flexWrap: 'wrap',
+                              }}>
+                                {td.files.map((f, fIdx) => (
+                                  <button
+                                    key={fIdx}
+                                    onClick={() => setActiveFileIdx((prev) => ({ ...prev, [td.teamId]: fIdx }))}
+                                    style={{
+                                      fontSize: '0.68rem', padding: '0.2rem 0.6rem',
+                                      borderRadius: '4px', cursor: 'pointer',
+                                      fontFamily: 'inherit', border: 'none',
+                                      background: fIdx === currentFileIdx ? `rgba(${hexToRgb(color)},0.15)` : 'transparent',
+                                      color: fIdx === currentFileIdx ? color : '#4a5568',
+                                      fontWeight: fIdx === currentFileIdx ? 700 : 400,
+                                      transition: 'all 0.1s ease',
+                                    }}
+                                  >
+                                    {f.path}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* File content */}
+                            {currentFile && (
+                              <div>
+                                {td.files.length === 1 && (
+                                  <div style={{
+                                    padding: '0.35rem 0.85rem',
+                                    background: '#0a0e17', borderBottom: '1px solid #1e2d45',
+                                    fontSize: '0.68rem', color: '#4a5568', fontFamily: 'monospace',
+                                  }}>
+                                    {currentFile.path}
+                                  </div>
+                                )}
+                                <pre style={{
+                                  fontSize: '0.78rem', color: '#c4d4e8',
+                                  whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                                  lineHeight: 1.6, margin: 0,
+                                  padding: '0.85rem 1rem',
+                                  background: '#0d1520',
+                                  overflowX: 'auto',
+                                }}>
+                                  {currentFile.content.length > 5000
+                                    ? `${currentFile.content.slice(0, 5000)}\n\n… (truncated — ${currentFile.content.length - 5000} chars remaining)`
+                                    : currentFile.content}
+                                </pre>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

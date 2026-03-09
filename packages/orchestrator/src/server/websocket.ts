@@ -11,11 +11,17 @@ type RawScorecard = {
   judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number }> }>;
 };
 
+type TeamDeliverable = {
+  teamId: string;
+  files: { path: string; content: string }[];
+};
+
 function normalizeResult(
   scorecards: RawScorecard[],
   winnerId: string | null,
   summary?: string | null,
   synthesis?: string | null,
+  deliverables?: TeamDeliverable[] | null,
 ) {
   return {
     winnerId,
@@ -27,6 +33,7 @@ function normalizeResult(
     })),
     ...(summary ? { summary } : {}),
     ...(synthesis ? { synthesis } : {}),
+    ...(deliverables ? { deliverables } : {}),
   };
 }
 
@@ -94,7 +101,7 @@ export function attachWebSocket(server: Server): void {
       const result = await repo.getResult(competitionId);
       if (result) {
         const scorecards = (result.scorecards as RawScorecard[]) ?? [];
-        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary, result.synthesis);
+        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary, result.synthesis, result.deliverables as TeamDeliverable[] | null);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
         return;
@@ -112,9 +119,9 @@ export function attachWebSocket(server: Server): void {
       const onArenaEvent = (event: unknown) => { seq++; send({ ...(event as object), _seq: seq }); };
       const onStateChange = (state: unknown) => { send({ type: 'STATE_CHANGE', state }); };
       const onResult = (r: unknown) => {
-        // r is CompetitionResult from the runner: { competition, scorecards, winner, synthesis }
-        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; synthesis?: string | null };
-        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, undefined, runnerResult.synthesis);
+        // r is CompetitionResult from the runner: { competition, scorecards, winner, synthesis, deliverables }
+        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; synthesis?: string | null; deliverables?: TeamDeliverable[] };
+        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, undefined, runnerResult.synthesis, runnerResult.deliverables);
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
       };

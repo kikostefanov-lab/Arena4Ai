@@ -54,11 +54,17 @@ export interface RunOptions {
   aiJudgeCount?: 1 | 2;
 }
 
+export interface TeamDeliverable {
+  teamId: string;
+  files: { path: string; content: string }[];
+}
+
 export interface CompetitionResult {
   competition: Competition;
   scorecards: ScoreCard[];
   winner: string | null;
   synthesis: string | null;  // synthesized hybrid solution
+  deliverables: TeamDeliverable[];
 }
 
 /**
@@ -283,11 +289,17 @@ export class CompetitionRunner extends EventEmitter {
         printResults(brief, scorecards);
       }
 
+      const teamDeliverables: TeamDeliverable[] = deliverables.map((d) => ({
+        teamId: d.teamId,
+        files: d.files,
+      }));
+
       const result: CompetitionResult = {
         competition: { ...this.competition },
         scorecards,
         winner: scorecards.find((c) => c.rank === 1)?.teamId ?? null,
         synthesis,
+        deliverables: teamDeliverables,
       };
 
       this.emit('result', result);

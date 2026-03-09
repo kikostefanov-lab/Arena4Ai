@@ -23,10 +23,16 @@ export const events = pgTable('events', {
   uniqueIndex('events_competition_seq_uidx').on(t.competitionId, t.seq),
 ]);
 
+export interface TeamDeliverable {
+  teamId: string;
+  files: { path: string; content: string }[];
+}
+
 export const results = pgTable('results', {
   competitionId: text('competition_id').primaryKey().references(() => competitions.id),
   scorecards:    jsonb('scorecards').notNull(),
   winnerId:      text('winner_id'),
   summary:       text('summary'),
   synthesis:     text('synthesis'),
+  deliverables:  jsonb('deliverables').$type<TeamDeliverable[]>(),
 });

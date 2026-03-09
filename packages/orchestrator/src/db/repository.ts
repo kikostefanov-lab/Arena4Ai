@@ -1,6 +1,7 @@
 import { and, eq, gt, desc, sql, inArray } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { competitions, events, results } from './schema.js';
+import type { TeamDeliverable } from './schema.js';
 import type { ArenaEvent, Brief, Team } from '@arena/shared';
 import { CompetitionState } from '@arena/shared';
 
@@ -9,6 +10,7 @@ export interface StoredResult {
   winner: string | null;
   summary?: string;
   synthesis?: string | null;
+  deliverables?: TeamDeliverable[];
 }
 
 export class CompetitionRepository {
@@ -71,6 +73,7 @@ export class CompetitionRepository {
       winnerId: result.winner,
       summary: result.summary,
       synthesis: result.synthesis ?? null,
+      deliverables: result.deliverables ?? null,
     });
   }
 

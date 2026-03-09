@@ -83,6 +83,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
       scorecards: result.scorecards,
       winner: result.winner,
       synthesis: result.synthesis,   // synthesized hybrid solution
+      deliverables: result.deliverables,
     }).catch(console.error);
   });
 
