@@ -200,7 +200,7 @@ export default async function AnalyticsPage() {
                 <span style={sectionLabelStyle}>▸ HEAD-TO-HEAD</span>
               </div>
 
-              {Object.keys(data.headToHead).length === 0 ? (
+              {(!data.headToHead || Object.keys(data.headToHead).length === 0) ? (
                 <div style={{ padding: '2.5rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
                   Not enough data
                 </div>
@@ -280,7 +280,7 @@ export default async function AnalyticsPage() {
                 <span style={sectionLabelStyle}>▸ BY FORMAT</span>
               </div>
 
-              {data.byFormat.length === 0 ? (
+              {(!data.byFormat || data.byFormat.length === 0) ? (
                 <div style={{ color: '#8896ab', fontSize: '0.75rem' }}>No format data available.</div>
               ) : (
                 <div style={{
@@ -288,7 +288,7 @@ export default async function AnalyticsPage() {
                   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                   gap: '0.75rem',
                 }}>
-                  {data.byFormat.map((f) => {
+                  {(data.byFormat ?? []).map((f) => {
                     const color = FORMAT_BADGE_COLORS[f.format] ?? '#8896ab';
                     return (
                       <div key={f.format} style={{
@@ -327,7 +327,7 @@ export default async function AnalyticsPage() {
                 <span style={sectionLabelStyle}>▸ RECENT COMPETITIONS</span>
               </div>
 
-              {data.recentCompetitions.length === 0 ? (
+              {(!data.recentCompetitions || data.recentCompetitions.length === 0) ? (
                 <div style={{ padding: '2.5rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
                   No completed competitions yet.
                 </div>
@@ -343,7 +343,7 @@ export default async function AnalyticsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.recentCompetitions.map((comp) => (
+                    {(data.recentCompetitions ?? []).map((comp) => (
                       <tr key={comp.id} style={{ borderBottom: '1px solid rgba(30,45,69,0.6)' }}>
                         <td style={{ padding: '0.6rem 1rem' }}>
                           <a

@@ -97,13 +97,28 @@ function summarizeEvent(type: string, payload: unknown): string | null {
       return m ? m[1] : text.slice(0, 80);
     }
     case 'REASONING': {
-      if (p.text) return String(p.text).trim().slice(0, 100) || null;
+      if (p.text && typeof p.text === 'string') return p.text.trim().slice(0, 100) || null;
       if (p.raw) {
         const raw = p.raw as Record<string, unknown>;
-        if (raw.type === 'system') return null;
-        if (raw.type === 'result') return raw.result ? String(raw.result).slice(0, 80) : null;
+        // Filter out noise types
+        if (raw.type === 'system' || raw.type === 'user' || raw.type === 'rate_limit_event') return null;
+        if (raw.type === 'result') {
+          const res = raw.result;
+          return (res && typeof res === 'string') ? res.slice(0, 80) : null;
+        }
+        if (raw.type === 'assistant') {
+          // Extract text from Claude message content blocks
+          const msg = raw.message as Record<string, unknown> | null;
+          const content = msg?.content;
+          if (Array.isArray(content)) {
+            const tb = (content as Record<string, unknown>[]).find((b) => b.type === 'text');
+            if (tb?.text && typeof tb.text === 'string') return tb.text.slice(0, 100);
+          }
+          return null;
+        }
+        // Other types: only use string values
         const content = raw.content ?? raw.text ?? raw.message;
-        if (content) return String(content).slice(0, 80);
+        if (content && typeof content === 'string') return content.slice(0, 80);
       }
       return null;
     }
