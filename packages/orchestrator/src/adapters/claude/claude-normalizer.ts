@@ -1,6 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import { EventType, type ArenaEvent } from '@arena/shared';
 
+// Strip ANSI escape codes from strings before embedding in events
+const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
+function stripAnsi(s: string): string {
+  return s.replace(ANSI_RE, '');
+}
+
 interface NormalizeContext {
   competitionId: string;
   teamId: string;
@@ -55,7 +61,7 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
     }
 
     case 'text': {
-      const text = String(msg.text ?? '');
+      const text = stripAnsi(String(msg.text ?? ''));
       const isFile = FILE_PATH_RE.test(text);
       return makeEvent(
         isFile ? EventType.FILE_CREATE : EventType.REASONING,

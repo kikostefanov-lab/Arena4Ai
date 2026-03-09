@@ -22,6 +22,7 @@ import { resolvePersona } from '../adapters/claude/claude-personas.js';
 import { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { EventLogger } from '../events/event-logger.js';
 import { scoreDeliverable } from '../judging/rubric-scorer.js';
+import { aiJudge } from '../judging/ai-judge.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { printResults } from '../judging/results-reporter.js';
 
@@ -170,11 +171,22 @@ export class CompetitionRunner extends EventEmitter {
       // ── JUDGING ──────────────────────────────────────────────────────────
       this.advance(CompetitionState.JUDGING);
 
-      const judgeResults = deliverables.map((d) =>
-        scoreDeliverable('automated', d, brief.rubric),
+      const claudeBin = this.options.claudeBin;
+
+      // Run automated + AI cross-judge in parallel for each deliverable
+      console.log('[arena] judging with automated scorer + AI cross-judge...');
+      const judgeResults = await Promise.all(
+        deliverables.map(async (d) => {
+          const automated = scoreDeliverable('automated', d, brief.rubric);
+          const ai = await aiJudge(d, brief.rubric, {
+            judgeId: 'ai-claude',
+            claudeBin,
+          });
+          return [automated, ai];
+        }),
       );
 
-      const scorecards = aggregate(judgeResults);
+      const scorecards = aggregate(judgeResults.flat());
 
       // ── SCORED / COMPLETE ─────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);

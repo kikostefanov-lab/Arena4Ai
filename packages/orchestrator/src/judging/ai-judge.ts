@@ -56,10 +56,13 @@ Return ONLY a JSON object with this exact shape (no markdown, no prose):
   }));
 
   try {
+    const env = { ...process.env };
+    delete env['CLAUDECODE'];
+
     const result = spawnSync(
       claudeBin,
-      ['--output-format', 'text', '--no-interactive', '--print', prompt],
-      { encoding: 'utf8', timeout: 60_000 },
+      ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
+      { encoding: 'utf8', timeout: 120_000, env },
     );
 
     if (result.status === 0 && result.stdout) {

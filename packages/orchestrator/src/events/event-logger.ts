@@ -1,4 +1,5 @@
 import { createWriteStream, type WriteStream } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ArenaEvent } from '@arena/shared';
 
@@ -26,6 +27,7 @@ export class EventLogger {
 
   /** Open (or re-open) the log file for appending. */
   async open(): Promise<void> {
+    await mkdir(this.logDir, { recursive: true });
     return new Promise<void>((resolve, reject) => {
       const ws = createWriteStream(this.filePath, { flags: 'a', encoding: 'utf8' });
       ws.on('open', () => {
