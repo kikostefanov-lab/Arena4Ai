@@ -35,232 +35,402 @@ function parseAgentKey(key: string): { model: string; persona: string | null } {
   return { model: key.slice(0, colon), persona: key.slice(colon + 1) };
 }
 
-const FORMAT_BADGE_COLORS: Record<string, string> = {
-  SPRINT: '#06b6d4',
-  HACKATHON: '#a855f7',
-  RELAY_RACE: '#22c55e',
-  RED_VS_BLUE: '#ef4444',
+const MODEL_COLORS: Record<string, string> = {
+  claude: '#3b82f6',
+  codex: '#22c55e',
+  gemini: '#a855f7',
+};
+
+const MODEL_ICONS: Record<string, string> = {
+  claude: '\uD83D\uDD35',
+  codex: '\uD83D\uDFE2',
+  gemini: '\uD83D\uDFE3',
+};
+
+const FORMAT_BADGE_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
+  SPRINT:      { color: '#06b6d4', icon: '\u26A1',       label: 'SPRINT' },
+  HACKATHON:   { color: '#a855f7', icon: '\uD83D\uDD28', label: 'HACKATHON' },
+  RELAY_RACE:  { color: '#22c55e', icon: '\uD83D\uDD04', label: 'RELAY' },
+  RED_VS_BLUE: { color: '#ef4444', icon: '\u2694\uFE0F', label: 'RED\u00D7BLUE' },
 };
 
 function FormatBadge({ format }: { format: string | null }) {
-  if (!format) return <span style={{ color: '#2d4060' }}>—</span>;
-  const color = FORMAT_BADGE_COLORS[format] ?? '#8896ab';
+  if (!format) return <span style={{ color: '#2d4060' }}>\u2014</span>;
+  const cfg = FORMAT_BADGE_CONFIG[format];
+  const color = cfg?.color ?? '#8896ab';
+  const icon = cfg?.icon ?? '';
+  const label = cfg?.label ?? format;
   return (
     <span style={{
-      display: 'inline-block',
-      padding: '0.15rem 0.45rem',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '0.25rem',
+      padding: '0.15rem 0.5rem',
       borderRadius: '3px',
       background: `${color}1a`,
-      border: `1px solid ${color}55`,
+      border: `1px solid ${color}44`,
       color,
       fontSize: '0.58rem',
       fontWeight: 700,
       letterSpacing: '1px',
       textTransform: 'uppercase',
     }}>
-      {format}
+      <span style={{ fontSize: '0.65rem' }}>{icon}</span> {label}
     </span>
   );
+}
+
+function getModelColorForKey(key: string): string {
+  const base = key.split(':')[0]?.toLowerCase() ?? '';
+  return MODEL_COLORS[base] ?? '#8896ab';
+}
+
+function getModelIcon(key: string): string {
+  const base = key.split(':')[0]?.toLowerCase() ?? '';
+  return MODEL_ICONS[base] ?? '\u2B24';
+}
+
+function h2hCellBg(wins: number, losses: number): string {
+  const total = wins + losses;
+  if (total === 0) return 'transparent';
+  const ratio = wins / total;
+  if (ratio >= 0.7) return 'rgba(34,197,94,0.15)';
+  if (ratio >= 0.5) return 'rgba(34,197,94,0.07)';
+  if (ratio >= 0.3) return 'rgba(239,68,68,0.07)';
+  return 'rgba(239,68,68,0.15)';
 }
 
 export default async function AnalyticsPage() {
   const data = await getAnalytics();
 
-  const sectionHeaderStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.6rem',
-    marginBottom: '0.75rem',
-  };
+  const font = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
 
-  const sectionLabelStyle: React.CSSProperties = {
-    fontSize: '0.58rem',
-    fontWeight: 700,
-    color: '#8896ab',
+  const thStyle: React.CSSProperties = {
+    textAlign: 'left',
+    padding: '0.6rem 1rem',
+    fontSize: '0.55rem',
+    color: '#4a5568',
     textTransform: 'uppercase',
-    letterSpacing: '2px',
+    letterSpacing: '1.5px',
+    fontWeight: 700,
+    fontFamily: font,
   };
 
-  const cardStyle: React.CSSProperties = {
-    border: '1px solid #1e2d45',
-    borderRadius: '6px',
-    overflow: 'hidden',
-    marginBottom: '1.75rem',
-  };
-
-  const cardHeaderStyle: React.CSSProperties = {
-    background: '#0d1520',
-    padding: '0.75rem 1rem',
-    borderBottom: '1px solid #1e2d45',
-  };
+  const thRightStyle: React.CSSProperties = { ...thStyle, textAlign: 'right' };
 
   return (
     <div style={{
       minHeight: '100vh',
       background: '#0a0e17',
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: font,
       color: '#e2e8f0',
     }}>
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' }}>
-          <a href="/" style={{ fontSize: '0.62rem', color: '#8896ab', textDecoration: 'none', letterSpacing: '0.5px' }}>
-            ← Gallery
-          </a>
-          <span style={{ color: '#1e2d45' }}>│</span>
-          <span style={{ fontSize: '0.62rem', color: '#f97316', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase' }}>
-            ◆ ANALYTICS
-          </span>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: '2.25rem',
+          paddingBottom: '1.25rem',
+          borderBottom: '1px solid #1e2d45',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <a href="/" style={{
+              fontSize: '0.62rem', color: '#8896ab', textDecoration: 'none',
+              letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
+              border: '1px solid #1e2d45', borderRadius: '4px',
+            }}>
+              \u2190 Gallery
+            </a>
+            <span style={{ color: '#1e2d45' }}>\u2502</span>
+            <div>
+              <span style={{
+                fontSize: '0.6rem', color: '#f97316', fontWeight: 700,
+                letterSpacing: '3px', textTransform: 'uppercase',
+              }}>
+                \uD83D\uDCCA Analytics
+              </span>
+              <div style={{ fontSize: '0.52rem', color: '#4a5568', marginTop: '0.15rem', letterSpacing: '1px' }}>
+                Performance dashboard
+              </div>
+            </div>
+          </div>
         </div>
 
         {!data ? (
-          <div style={{ color: '#8896ab', fontSize: '0.75rem' }}>
-            Could not reach orchestrator. Is it running?
+          <div style={{
+            textAlign: 'center', padding: '4rem 2rem',
+            background: '#111827', border: '1px solid #1e2d45', borderRadius: '8px',
+          }}>
+            <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>\u26A0\uFE0F</div>
+            <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>
+              Could not reach orchestrator. Is it running?
+            </p>
           </div>
         ) : (
           <>
             {/* Section 1: Overview tiles */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.75rem', marginBottom: '1.75rem' }}>
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, 1fr)',
+              gap: '0.75rem',
+              marginBottom: '2rem',
+            }}>
               {[
-                { label: 'Total', value: data.totalCompetitions },
-                { label: 'Completed', value: data.completedCompetitions },
-                { label: 'Avg Duration', value: formatDuration(data.avgDurationMs) },
-                { label: 'Syntheses', value: data.synthesisCount },
-              ].map(({ label, value }) => (
+                { icon: '\uD83D\uDCCA', label: 'Total Battles', value: data.totalCompetitions, accent: '#3b82f6' },
+                { icon: '\u2705', label: 'Completed', value: data.completedCompetitions, accent: '#22c55e' },
+                { icon: '\u23F1\uFE0F', label: 'Avg Duration', value: formatDuration(data.avgDurationMs), accent: '#f97316' },
+                { icon: '\uD83D\uDD2C', label: 'Syntheses', value: data.synthesisCount, accent: '#a855f7' },
+              ].map(({ icon, label, value, accent }) => (
                 <div key={label} style={{
                   background: '#111827',
                   border: '1px solid #1e2d45',
+                  borderLeft: `3px solid ${accent}`,
                   borderRadius: '6px',
-                  padding: '1rem',
+                  padding: '1rem 1.1rem',
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}>
-                  <div style={{ fontSize: '0.55rem', color: '#8896ab', textTransform: 'uppercase', letterSpacing: '2px', marginBottom: '0.4rem', fontWeight: 700 }}>
+                  <div style={{
+                    position: 'absolute', top: '0.8rem', right: '0.9rem',
+                    fontSize: '1.4rem', opacity: 0.15,
+                  }}>
+                    {icon}
+                  </div>
+                  <div style={{
+                    fontSize: '0.52rem', color: '#8896ab', textTransform: 'uppercase',
+                    letterSpacing: '2px', marginBottom: '0.5rem', fontWeight: 700,
+                  }}>
                     {label}
                   </div>
-                  <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#e2e8f0' }}>{value}</div>
+                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#e2e8f0' }}>
+                    {value}
+                  </div>
                 </div>
               ))}
             </div>
 
             {/* Section 2: Win Rate by Agent */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <div style={sectionHeaderStyle}>
-                  <span style={sectionLabelStyle}>▸ Win Rate by Agent</span>
-                  <span style={{ fontSize: '0.55rem', color: '#4a5568' }}>model:persona</span>
-                </div>
+            <div style={{
+              border: '1px solid #1e2d45',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              marginBottom: '2rem',
+            }}>
+              <div style={{
+                background: '#0d1520',
+                padding: '0.75rem 1rem',
+                borderBottom: '1px solid #1e2d45',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <span style={{
+                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  textTransform: 'uppercase', letterSpacing: '2px',
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                  \uD83C\uDFC6 Win Rate by Agent
+                </span>
+                <span style={{ fontSize: '0.5rem', color: '#4a5568', letterSpacing: '1px' }}>
+                  model:persona
+                </span>
               </div>
 
               {data.byModel.length === 0 ? (
-                <div style={{ padding: '2.5rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
+                <div style={{ padding: '3rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
                   No completed competitions yet.
                 </div>
-              ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '1px solid #1e2d45' }}>
-                      <th style={{ textAlign: 'left', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Model</th>
-                      <th style={{ textAlign: 'left', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Persona</th>
-                      <th style={{ textAlign: 'right', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>W</th>
-                      <th style={{ textAlign: 'right', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Total</th>
-                      <th style={{ textAlign: 'right', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Win %</th>
-                      <th style={{ padding: '0.55rem 1rem', width: '7rem' }} />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.byModel.map((stat) => {
-                      const { model, persona } = parseAgentKey(stat.model);
-                      return (
-                        <tr key={stat.model} style={{ borderBottom: '1px solid rgba(30,45,69,0.6)' }}>
-                          <td style={{ padding: '0.6rem 1rem', color: '#f97316', fontWeight: 700 }}>{model}</td>
-                          <td style={{ padding: '0.6rem 1rem', color: '#8896ab' }}>
-                            {persona ?? <span style={{ color: '#2d4060' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: '#e2e8f0' }}>{stat.wins}</td>
-                          <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: '#8896ab' }}>{stat.total}</td>
-                          <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: '#e2e8f0', fontWeight: 700 }}>
-                            {(stat.winRate * 100).toFixed(0)}%
-                          </td>
-                          <td style={{ padding: '0.6rem 1rem' }}>
-                            <div style={{ height: '4px', background: '#1e2d45', borderRadius: '2px', overflow: 'hidden', width: '100%' }}>
-                              <div style={{ height: '100%', background: '#f97316', borderRadius: '2px', width: `${stat.winRate * 100}%` }} />
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              )}
+              ) : (() => {
+                const sorted = [...data.byModel].sort((a, b) => b.winRate - a.winRate);
+                const topWinRate = sorted[0]?.winRate ?? 0;
+                return (
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid #1e2d45' }}>
+                        <th style={{ ...thStyle, width: '2rem' }}>#</th>
+                        <th style={thStyle}>Agent</th>
+                        <th style={thRightStyle}>W</th>
+                        <th style={thRightStyle}>Total</th>
+                        <th style={thRightStyle}>Win %</th>
+                        <th style={{ ...thStyle, width: '9rem' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {sorted.map((stat, idx) => {
+                        const { model, persona } = parseAgentKey(stat.model);
+                        const modelColor = getModelColorForKey(stat.model);
+                        const modelIcon = getModelIcon(stat.model);
+                        const isTop = stat.winRate === topWinRate && stat.winRate > 0;
+                        return (
+                          <tr key={stat.model} style={{
+                            borderBottom: '1px solid rgba(30,45,69,0.5)',
+                            background: isTop ? 'rgba(234,179,8,0.04)' : 'transparent',
+                          }}>
+                            <td style={{ padding: '0.65rem 1rem', color: '#4a5568', fontSize: '0.6rem', fontWeight: 700 }}>
+                              {isTop ? '\uD83E\uDD47' : `${idx + 1}`}
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem' }}>
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontSize: '0.7rem' }}>{modelIcon}</span>
+                                <span style={{ color: modelColor, fontWeight: 700 }}>{model}</span>
+                                {persona && (
+                                  <span style={{ color: '#8896ab', fontSize: '0.62rem' }}>:{persona}</span>
+                                )}
+                              </span>
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#e2e8f0', fontWeight: 600 }}>
+                              {stat.wins}
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#8896ab' }}>
+                              {stat.total}
+                            </td>
+                            <td style={{
+                              padding: '0.65rem 1rem', textAlign: 'right',
+                              color: isTop ? '#eab308' : '#e2e8f0',
+                              fontWeight: 700,
+                            }}>
+                              {(stat.winRate * 100).toFixed(0)}%
+                            </td>
+                            <td style={{ padding: '0.65rem 1rem' }}>
+                              <div style={{
+                                height: '6px', background: '#1a2234', borderRadius: '3px',
+                                overflow: 'hidden', width: '100%',
+                              }}>
+                                <div style={{
+                                  height: '100%',
+                                  background: isTop
+                                    ? 'linear-gradient(90deg, #eab308, #f97316)'
+                                    : modelColor,
+                                  borderRadius: '3px',
+                                  width: `${stat.winRate * 100}%`,
+                                  transition: 'width 0.5s ease',
+                                }} />
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+              })()}
             </div>
 
             {/* Section 3: Head-to-Head Matrix */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <span style={sectionLabelStyle}>▸ HEAD-TO-HEAD</span>
+            <div style={{
+              border: '1px solid #1e2d45',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              marginBottom: '2rem',
+            }}>
+              <div style={{
+                background: '#0d1520',
+                padding: '0.75rem 1rem',
+                borderBottom: '1px solid #1e2d45',
+              }}>
+                <span style={{
+                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  textTransform: 'uppercase', letterSpacing: '2px',
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                  \u2694\uFE0F Head-to-Head
+                </span>
               </div>
 
               {(!data.headToHead || Object.keys(data.headToHead).length === 0) ? (
-                <div style={{ padding: '2.5rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
-                  Not enough data
+                <div style={{ padding: '3rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
+                  Not enough data for head-to-head analysis.
                 </div>
               ) : (() => {
                 const personas = Object.keys(data.headToHead);
                 return (
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.68rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.66rem' }}>
                       <thead>
                         <tr style={{ borderBottom: '1px solid #1e2d45' }}>
-                          <th style={{ padding: '0.55rem 0.75rem', textAlign: 'left', fontSize: '0.55rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600, minWidth: '130px' }}>
-                            vs →
+                          <th style={{
+                            padding: '0.6rem 0.75rem', textAlign: 'left',
+                            fontSize: '0.52rem', color: '#4a5568', textTransform: 'uppercase',
+                            letterSpacing: '1.5px', fontWeight: 700, minWidth: '130px',
+                          }}>
+                            vs \u2192
                           </th>
-                          {personas.map((p) => (
-                            <th key={p} style={{ padding: '0.55rem 0.75rem', textAlign: 'center', fontSize: '0.58rem', color: '#8896ab', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                              {p}
-                            </th>
-                          ))}
+                          {personas.map((p) => {
+                            const icon = getModelIcon(p);
+                            return (
+                              <th key={p} style={{
+                                padding: '0.6rem 0.75rem', textAlign: 'center',
+                                fontSize: '0.56rem', color: getModelColorForKey(p),
+                                fontWeight: 700, whiteSpace: 'nowrap',
+                              }}>
+                                <span style={{ marginRight: '0.2rem' }}>{icon}</span> {p}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
                       <tbody>
                         {personas.map((rowPersona) => (
-                          <tr key={rowPersona} style={{ borderBottom: '1px solid rgba(30,45,69,0.6)' }}>
-                            <td style={{ padding: '0.6rem 0.75rem', color: '#f97316', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                          <tr key={rowPersona} style={{ borderBottom: '1px solid rgba(30,45,69,0.5)' }}>
+                            <td style={{
+                              padding: '0.65rem 0.75rem',
+                              color: getModelColorForKey(rowPersona),
+                              fontWeight: 700, whiteSpace: 'nowrap',
+                            }}>
+                              <span style={{ marginRight: '0.3rem' }}>{getModelIcon(rowPersona)}</span>
                               {rowPersona}
                             </td>
                             {personas.map((colPersona) => {
                               if (rowPersona === colPersona) {
                                 return (
-                                  <td key={colPersona} style={{ padding: '0.6rem 0.75rem', textAlign: 'center', color: '#2d4060' }}>
-                                    —
+                                  <td key={colPersona} style={{
+                                    padding: '0.65rem 0.75rem', textAlign: 'center',
+                                    background: 'rgba(30,45,69,0.15)',
+                                  }}>
+                                    <span style={{
+                                      display: 'inline-block', width: '18px', height: '2px',
+                                      background: '#2d4060', borderRadius: '1px',
+                                    }} />
                                   </td>
                                 );
                               }
                               const cell = data.headToHead[rowPersona]?.[colPersona];
                               if (!cell) {
                                 return (
-                                  <td key={colPersona} style={{ padding: '0.6rem 0.75rem', textAlign: 'center', color: '#2d4060' }}>
-                                    —
+                                  <td key={colPersona} style={{
+                                    padding: '0.65rem 0.75rem', textAlign: 'center', color: '#2d4060',
+                                  }}>
+                                    \u2014
                                   </td>
                                 );
                               }
                               return (
-                                <td key={colPersona} style={{ padding: '0.6rem 0.75rem', textAlign: 'center' }}>
+                                <td key={colPersona} style={{
+                                  padding: '0.65rem 0.75rem', textAlign: 'center',
+                                  background: h2hCellBg(cell.wins, cell.losses),
+                                }}>
                                   {cell.wins > 0 && (
                                     <span style={{ color: '#22c55e', fontWeight: 700 }}>{cell.wins}W</span>
                                   )}
                                   {cell.wins > 0 && cell.losses > 0 && (
-                                    <span style={{ color: '#8896ab', margin: '0 0.2rem' }}> </span>
+                                    <span style={{ color: '#4a5568', margin: '0 0.2rem' }}>/</span>
                                   )}
                                   {cell.losses > 0 && (
                                     <span style={{ color: '#ef4444', fontWeight: 700 }}>{cell.losses}L</span>
                                   )}
                                   {cell.draws > 0 && (
-                                    <span style={{ color: '#8896ab', fontWeight: 700, marginLeft: cell.wins > 0 || cell.losses > 0 ? '0.2rem' : '0' }}>
+                                    <span style={{
+                                      color: '#8896ab', fontWeight: 700,
+                                      marginLeft: cell.wins > 0 || cell.losses > 0 ? '0.25rem' : '0',
+                                    }}>
                                       {cell.draws}D
                                     </span>
                                   )}
                                   {cell.wins === 0 && cell.losses === 0 && cell.draws === 0 && (
-                                    <span style={{ color: '#2d4060' }}>—</span>
+                                    <span style={{ color: '#2d4060' }}>\u2014</span>
                                   )}
                                 </td>
                               );
@@ -275,32 +445,59 @@ export default async function AnalyticsPage() {
             </div>
 
             {/* Section 4: By Format */}
-            <div style={{ marginBottom: '1.75rem' }}>
-              <div style={{ ...sectionHeaderStyle, marginBottom: '0.75rem' }}>
-                <span style={sectionLabelStyle}>▸ BY FORMAT</span>
+            <div style={{ marginBottom: '2rem' }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '0.6rem',
+                marginBottom: '0.85rem',
+              }}>
+                <span style={{
+                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  textTransform: 'uppercase', letterSpacing: '2px',
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                  \uD83C\uDFAF By Format
+                </span>
               </div>
 
               {(!data.byFormat || data.byFormat.length === 0) ? (
-                <div style={{ color: '#8896ab', fontSize: '0.75rem' }}>No format data available.</div>
+                <div style={{
+                  color: '#8896ab', fontSize: '0.75rem',
+                  padding: '2rem', textAlign: 'center',
+                  background: '#111827', border: '1px solid #1e2d45', borderRadius: '8px',
+                }}>
+                  No format data available.
+                </div>
               ) : (
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: '0.75rem',
                 }}>
                   {(data.byFormat ?? []).map((f) => {
-                    const color = FORMAT_BADGE_COLORS[f.format] ?? '#8896ab';
+                    const cfg = FORMAT_BADGE_CONFIG[f.format];
+                    const color = cfg?.color ?? '#8896ab';
+                    const icon = cfg?.icon ?? '\uD83D\uDCCB';
+                    const completionPct = f.total > 0 ? (f.completed / f.total) * 100 : 0;
                     return (
                       <div key={f.format} style={{
                         background: '#111827',
                         border: `1px solid ${color}33`,
-                        borderRadius: '6px',
-                        padding: '1rem',
+                        borderTop: `3px solid ${color}`,
+                        borderRadius: '8px',
+                        padding: '1.1rem',
+                        position: 'relative',
+                        overflow: 'hidden',
                       }}>
-                        <div style={{ marginBottom: '0.6rem' }}>
+                        <div style={{
+                          position: 'absolute', top: '0.8rem', right: '0.8rem',
+                          fontSize: '1.8rem', opacity: 0.08,
+                        }}>
+                          {icon}
+                        </div>
+                        <div style={{ marginBottom: '0.8rem' }}>
                           <FormatBadge format={f.format} />
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
                             <span style={{ color: '#8896ab' }}>Total</span>
                             <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.total}</span>
@@ -308,6 +505,16 @@ export default async function AnalyticsPage() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
                             <span style={{ color: '#8896ab' }}>Completed</span>
                             <span style={{ color: '#22c55e', fontWeight: 700 }}>{f.completed}</span>
+                          </div>
+                          {/* Completion progress bar */}
+                          <div style={{
+                            height: '3px', background: '#1a2234', borderRadius: '2px',
+                            overflow: 'hidden', margin: '0.1rem 0',
+                          }}>
+                            <div style={{
+                              height: '100%', background: color, borderRadius: '2px',
+                              width: `${completionPct}%`,
+                            }} />
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
                             <span style={{ color: '#8896ab' }}>Avg Duration</span>
@@ -322,57 +529,94 @@ export default async function AnalyticsPage() {
             </div>
 
             {/* Section 5: Recent Competitions */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <span style={sectionLabelStyle}>▸ RECENT COMPETITIONS</span>
+            <div style={{
+              border: '1px solid #1e2d45',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              marginBottom: '2rem',
+            }}>
+              <div style={{
+                background: '#0d1520',
+                padding: '0.75rem 1rem',
+                borderBottom: '1px solid #1e2d45',
+              }}>
+                <span style={{
+                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  textTransform: 'uppercase', letterSpacing: '2px',
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                }}>
+                  \uD83D\uDCDC Recent Competitions
+                </span>
               </div>
 
               {(!data.recentCompetitions || data.recentCompetitions.length === 0) ? (
-                <div style={{ padding: '2.5rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
+                <div style={{ padding: '3rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
                   No completed competitions yet.
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
                   <thead>
                     <tr style={{ borderBottom: '1px solid #1e2d45' }}>
-                      <th style={{ textAlign: 'left', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Title</th>
-                      <th style={{ textAlign: 'left', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Format</th>
-                      <th style={{ textAlign: 'left', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Agents</th>
-                      <th style={{ textAlign: 'left', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Winner</th>
-                      <th style={{ textAlign: 'right', padding: '0.55rem 1rem', fontSize: '0.58rem', color: '#4a5568', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 600 }}>Duration</th>
+                      <th style={thStyle}>Title</th>
+                      <th style={thStyle}>Format</th>
+                      <th style={thStyle}>Matchup</th>
+                      <th style={thStyle}>Winner</th>
+                      <th style={thRightStyle}>Duration</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(data.recentCompetitions ?? []).map((comp) => (
-                      <tr key={comp.id} style={{ borderBottom: '1px solid rgba(30,45,69,0.6)' }}>
-                        <td style={{ padding: '0.6rem 1rem' }}>
-                          <a
-                            href={`/competitions/${comp.id}`}
-                            style={{ color: '#3b82f6', textDecoration: 'none', fontWeight: 600 }}
-                          >
-                            {comp.title}
-                          </a>
-                        </td>
-                        <td style={{ padding: '0.6rem 1rem' }}>
-                          <FormatBadge format={comp.format} />
-                        </td>
-                        <td style={{ padding: '0.6rem 1rem', color: '#8896ab' }}>
-                          {comp.agents.length >= 2
-                            ? <>{comp.agents[0]} <span style={{ color: '#2d4060' }}>vs</span> {comp.agents[1]}</>
-                            : comp.agents.join(', ')}
-                        </td>
-                        <td style={{ padding: '0.6rem 1rem' }}>
-                          {comp.winner ? (
-                            <span style={{ color: '#f97316', fontWeight: 700 }}>★ {comp.winner}</span>
-                          ) : (
-                            <span style={{ color: '#2d4060' }}>—</span>
-                          )}
-                        </td>
-                        <td style={{ padding: '0.6rem 1rem', textAlign: 'right', color: '#8896ab' }}>
-                          {formatDuration(comp.durationMs)}
-                        </td>
-                      </tr>
-                    ))}
+                    {(data.recentCompetitions ?? []).map((comp) => {
+                      const winnerColor = comp.winner ? getModelColorForKey(comp.winner) : '#8896ab';
+                      return (
+                        <tr key={comp.id} style={{ borderBottom: '1px solid rgba(30,45,69,0.5)' }}>
+                          <td style={{ padding: '0.65rem 1rem' }}>
+                            <a
+                              href={`/competitions/${comp.id}`}
+                              style={{
+                                color: '#3b82f6', textDecoration: 'none', fontWeight: 600,
+                                display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+                              }}
+                            >
+                              <span style={{ fontSize: '0.65rem', opacity: 0.7 }}>\uD83C\uDFC6</span>
+                              {comp.title}
+                            </a>
+                          </td>
+                          <td style={{ padding: '0.65rem 1rem' }}>
+                            <FormatBadge format={comp.format} />
+                          </td>
+                          <td style={{ padding: '0.65rem 1rem', color: '#8896ab' }}>
+                            {comp.agents.length >= 2 ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
+                                <span style={{ color: getModelColorForKey(comp.agents[0]), fontWeight: 600 }}>
+                                  {comp.agents[0]}
+                                </span>
+                                <span style={{ color: '#4a5568', fontSize: '0.58rem', fontWeight: 700 }}>VS</span>
+                                <span style={{ color: getModelColorForKey(comp.agents[1]), fontWeight: 600 }}>
+                                  {comp.agents[1]}
+                                </span>
+                              </span>
+                            ) : (
+                              comp.agents.join(', ')
+                            )}
+                          </td>
+                          <td style={{ padding: '0.65rem 1rem' }}>
+                            {comp.winner ? (
+                              <span style={{
+                                color: winnerColor, fontWeight: 700,
+                                display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+                              }}>
+                                <span style={{ color: '#eab308' }}>\u2605</span> {comp.winner}
+                              </span>
+                            ) : (
+                              <span style={{ color: '#2d4060' }}>\u2014</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#8896ab' }}>
+                            {formatDuration(comp.durationMs)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
