@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeWinRate, computeCompletionRate } from './stats-aggregator.js';
+import { computeWinRate, computeCompletionRate, computeAvgDurationMs } from './stats-aggregator.js';
 
 describe('computeWinRate', () => {
   it('counts wins and totals correctly', () => {
@@ -37,5 +37,30 @@ describe('computeCompletionRate', () => {
 
   it('returns 0 for empty', () => {
     expect(computeCompletionRate([])).toBe(0);
+  });
+});
+
+describe('computeAvgDurationMs', () => {
+  it('returns average duration for completed competitions', () => {
+    const start1 = new Date('2026-01-01T00:00:00Z');
+    const end1 = new Date('2026-01-01T00:01:00Z'); // 60s
+    const start2 = new Date('2026-01-01T00:00:00Z');
+    const end2 = new Date('2026-01-01T00:02:00Z'); // 120s
+    const comps = [
+      { id: 'c1', teams: [], state: 'COMPLETE', startedAt: start1, completedAt: end1 },
+      { id: 'c2', teams: [], state: 'COMPLETE', startedAt: start2, completedAt: end2 },
+    ];
+    expect(computeAvgDurationMs(comps as never)).toBe(90_000); // (60000 + 120000) / 2
+  });
+
+  it('returns null when no completed competitions', () => {
+    expect(computeAvgDurationMs([])).toBeNull();
+  });
+
+  it('ignores competitions with missing timestamps', () => {
+    const comps = [
+      { id: 'c1', teams: [], state: 'COMPLETE', startedAt: null, completedAt: null },
+    ];
+    expect(computeAvgDurationMs(comps as never)).toBeNull();
   });
 });

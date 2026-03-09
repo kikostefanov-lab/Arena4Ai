@@ -1,4 +1,4 @@
-import { orchestratorUrl } from '../../lib/orchestrator';
+import { orchestratorUrl, orchestratorHeaders } from '../../lib/orchestrator';
 
 interface ModelStat {
   model: string;
@@ -19,6 +19,7 @@ interface AnalyticsSummary {
 async function getAnalytics(): Promise<AnalyticsSummary | null> {
   try {
     const res = await fetch(orchestratorUrl('/analytics/summary'), {
+      headers: orchestratorHeaders(),
       cache: 'no-store',
     });
     if (!res.ok) return null;
