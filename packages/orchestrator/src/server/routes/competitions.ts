@@ -55,9 +55,12 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   // Persist to DB before starting
   await repo.create(competitionId, briefResult.data, teams);
 
-  // Wire runner events → DB
+  // Wire runner events → DB (serialize state updates to prevent SCORED overwriting COMPLETE)
+  let stateQueue: Promise<void> = Promise.resolve();
   runner.on('stateChange', (state) => {
-    repo.updateState(competitionId, state).catch(console.error);
+    stateQueue = stateQueue.then(() =>
+      repo.updateState(competitionId, state).catch(console.error),
+    );
   });
   runner.on('arenaEvent', (event) => {
     repo.appendEvent(event).catch(console.error);
@@ -66,6 +69,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     repo.saveResult(competitionId, {
       scorecards: result.scorecards,
       winner: result.winner,
+      synthesis: result.synthesis,   // synthesized hybrid solution
     }).catch(console.error);
   });
 

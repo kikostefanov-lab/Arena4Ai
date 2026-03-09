@@ -28,6 +28,7 @@ import { scoreDeliverable } from '../judging/rubric-scorer.js';
 import { aiJudge, JUDGE_IDS } from '../judging/ai-judge.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { printResults } from '../judging/results-reporter.js';
+import { synthesizeDeliverables } from '../synthesis/merge-engine.js';
 
 export interface RunOptions {
   /** Directory where JSONL event logs are written. Defaults to OS tmp dir. */
@@ -47,12 +48,15 @@ export interface RunOptions {
    * Adapters still run in a local temp directory.
    */
   skipSandbox?: boolean;
+  /** Skip synthesis phase (useful in tests or when Claude is unavailable). */
+  skipSynthesis?: boolean;
 }
 
 export interface CompetitionResult {
   competition: Competition;
   scorecards: ScoreCard[];
   winner: string | null;
+  synthesis: string | null;  // synthesized hybrid solution
 }
 
 /**
@@ -93,6 +97,7 @@ export class CompetitionRunner extends EventEmitter {
       geminiBin: options.geminiBin ?? 'gemini',
       printResults: options.printResults ?? true,
       skipSandbox: options.skipSandbox ?? false,
+      skipSynthesis: options.skipSynthesis ?? false,
     };
   }
 
@@ -243,8 +248,20 @@ export class CompetitionRunner extends EventEmitter {
 
       const scorecards = aggregate(judgeResults);
 
-      // ── SCORED / COMPLETE ─────────────────────────────────────────────────
+      // ── SCORED ───────────────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);
+
+      // ── SYNTHESIZING ─────────────────────────────────────────────────────
+      this.advance(CompetitionState.SYNTHESIZING);
+      let synthesis: string | null = null;
+      if (!this.options.skipSynthesis) {
+        console.log('[arena] synthesizing deliverables...');
+        synthesis = await synthesizeDeliverables(brief, deliverables, {
+          claudeBin: this.options.claudeBin,
+        });
+      }
+
+      // ── COMPLETE ──────────────────────────────────────────────────────────
       this.advance(CompetitionState.COMPLETE);
       this.competition.completedAt = new Date().toISOString();
 
@@ -256,6 +273,7 @@ export class CompetitionRunner extends EventEmitter {
         competition: { ...this.competition },
         scorecards,
         winner: scorecards.find((c) => c.rank === 1)?.teamId ?? null,
+        synthesis,
       };
 
       this.emit('result', result);
