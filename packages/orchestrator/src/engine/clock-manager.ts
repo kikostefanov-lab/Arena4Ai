@@ -17,6 +17,10 @@ export class ClockManager extends EventEmitter {
   private intervalId: ReturnType<typeof setInterval> | null = null;
   private warnFired = false;
   private upFired = false;
+  /** Timestamp when pause() was called, or undefined if not paused. */
+  private _pausedAt: number | undefined;
+  /** Total milliseconds accumulated during all pause periods. */
+  private _totalPausedMs = 0;
 
   constructor(limitMs: number) {
     super();
@@ -28,6 +32,8 @@ export class ClockManager extends EventEmitter {
     this.startedAt = Date.now();
     this.warnFired = false;
     this.upFired = false;
+    this._pausedAt = undefined;
+    this._totalPausedMs = 0;
 
     this.intervalId = setInterval(() => this._tick(), TICK_MS);
   }
@@ -39,10 +45,26 @@ export class ClockManager extends EventEmitter {
     }
   }
 
-  /** Milliseconds elapsed since start(), or 0 if not yet started. */
+  pause(): void {
+    if (this._pausedAt !== undefined) return; // already paused
+    if (this.intervalId === null) return; // not running
+    this._pausedAt = Date.now();
+    clearInterval(this.intervalId);
+    this.intervalId = null;
+  }
+
+  resume(): void {
+    if (this._pausedAt === undefined) return; // not paused
+    this._totalPausedMs += Date.now() - this._pausedAt;
+    this._pausedAt = undefined;
+    this.intervalId = setInterval(() => this._tick(), TICK_MS);
+  }
+
+  /** Milliseconds elapsed since start(), excluding any paused time, or 0 if not yet started. */
   elapsed(): number {
     if (this.startedAt === null) return 0;
-    return Date.now() - this.startedAt;
+    const pausedNow = this._pausedAt !== undefined ? Date.now() - this._pausedAt : 0;
+    return Date.now() - this.startedAt - this._totalPausedMs - pausedNow;
   }
 
   private _tick(): void {

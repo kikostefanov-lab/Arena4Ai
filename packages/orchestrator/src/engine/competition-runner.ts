@@ -70,6 +70,9 @@ export interface CompetitionResult {
 export class CompetitionRunner extends EventEmitter {
   private competition: Competition;
   private readonly options: Required<RunOptions>;
+  private _cancelled = false;
+  private _activeAdapters: BaseAdapter[] = [];
+  private _clock?: ClockManager;
 
   constructor(brief: Brief, teams: [Team, Team], options: RunOptions = {}) {
     super();
@@ -102,19 +105,23 @@ export class CompetitionRunner extends EventEmitter {
     this.emit('stateChange', this.competition.state);
   }
 
-  /** Cancel the running competition (stub — full implementation in Task 8). */
+  /** Cancel the running competition — shuts down all adapters and stops the clock. */
   async cancel(): Promise<void> {
-    // TODO: implement graceful cancellation
+    this._cancelled = true;
+    this._clock?.stop();
+    for (const adapter of this._activeAdapters) {
+      await adapter.shutdown();
+    }
   }
 
-  /** Pause the running competition (stub — full implementation in Task 8). */
+  /** Pause the running competition — freezes the clock (adapters keep running). */
   pause(): void {
-    // TODO: implement pause
+    this._clock?.pause();
   }
 
-  /** Resume a paused competition (stub — full implementation in Task 8). */
+  /** Resume a paused competition — restores the clock. */
   resume(): void {
-    // TODO: implement resume
+    this._clock?.resume();
   }
 
   /** Run the competition end-to-end and return the result. */
@@ -183,6 +190,7 @@ export class CompetitionRunner extends EventEmitter {
         adapter.on('arenaEvent', forwardEvent);
         await adapter.injectBrief(brief, persona.systemPrompt);
         adapters.push(adapter);
+        this._activeAdapters.push(adapter);
       }
 
       // ── RUNNING ──────────────────────────────────────────────────────────
@@ -190,6 +198,7 @@ export class CompetitionRunner extends EventEmitter {
       this.competition.startedAt = new Date().toISOString();
 
       const clock = new ClockManager(brief.timeLimitMs);
+      this._clock = clock;
 
       const raceFinished = new Promise<void>((resolve) => {
         clock.on(EventType.TIME_UP, () => resolve());

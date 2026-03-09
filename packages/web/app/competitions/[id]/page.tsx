@@ -84,6 +84,7 @@ export default function CompetitionPage() {
   const [elapsed, setElapsed] = useState(0);
   const [connected, setConnected] = useState(false);
   const [sseError, setSseError] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
 
   const laneARef = useRef<HTMLDivElement>(null);
   const laneBRef = useRef<HTMLDivElement>(null);
@@ -187,6 +188,13 @@ export default function CompetitionPage() {
     return () => { ws?.close(); };
   }, [id]);
 
+  const sendControl = async (action: 'cancel' | 'pause' | 'resume') => {
+    await fetch(`/api/competitions/${id}?action=${action}`, { method: 'POST' });
+    if (action === 'pause') setIsPaused(true);
+    if (action === 'resume') setIsPaused(false);
+    if (action === 'cancel') setState('COMPLETE');
+  };
+
   const teamAScore = result?.teams.find(t => t.teamId === 'team-a');
   const teamBScore = result?.teams.find(t => t.teamId === 'team-b');
 
@@ -208,6 +216,31 @@ export default function CompetitionPage() {
             )}
           </div>
         </div>
+        {state === 'RUNNING' && (
+          <div className="flex items-center gap-2">
+            {!isPaused ? (
+              <button
+                onClick={() => sendControl('pause')}
+                className="text-xs px-3 py-1 bg-yellow-900 text-yellow-300 rounded hover:bg-yellow-800"
+              >
+                Pause
+              </button>
+            ) : (
+              <button
+                onClick={() => sendControl('resume')}
+                className="text-xs px-3 py-1 bg-green-900 text-green-300 rounded hover:bg-green-800"
+              >
+                Resume
+              </button>
+            )}
+            <button
+              onClick={() => sendControl('cancel')}
+              className="text-xs px-3 py-1 bg-red-900 text-red-300 rounded hover:bg-red-800"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
         <div className="font-mono text-gray-400 text-sm tabular-nums">
           {formatElapsed(elapsed)}
         </div>
