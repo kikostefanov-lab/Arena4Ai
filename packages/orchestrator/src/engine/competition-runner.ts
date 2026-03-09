@@ -63,7 +63,7 @@ export interface CompetitionResult {
  * Orchestrates the full competition lifecycle:
  *
  *   DRAFT → CONFIGURED → LAUNCHING → RUNNING → TIME_UP
- *         → COLLECTING → JUDGING → SCORED → COMPLETE
+ *         → COLLECTING → JUDGING → SCORED → SYNTHESIZING → COMPLETE
  *
  * Events emitted (extends EventEmitter):
  *   'stateChange'  (state: CompetitionState)
