@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+import { computeOverallScore } from './score-aggregator.js';
 
 export const JUDGE_IDS = {
   automated: 'automated',
@@ -98,16 +99,10 @@ Return ONLY a JSON object with this exact shape (no markdown, no prose):
     return { ...s, score: Math.max(0, Math.min(max, s.score)) };
   });
 
-  const overallScore = scores.reduce((sum, s) => {
-    const criterion = rubric.criteria.find((c) => c.id === s.criterionId);
-    if (!criterion) return sum;
-    return sum + (s.score / criterion.maxScore) * criterion.weight;
-  }, 0);
-
   return {
     judgeId,
     teamId: deliverable.teamId,
     scores,
-    overallScore: Math.min(1, Math.max(0, overallScore)),
+    overallScore: computeOverallScore(scores, rubric),
   };
 }

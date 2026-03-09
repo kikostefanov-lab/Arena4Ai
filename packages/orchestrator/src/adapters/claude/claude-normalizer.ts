@@ -1,35 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { EventType, type ArenaEvent } from '@arena/shared';
-
-// Strip ANSI escape codes from strings before embedding in events
-const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]/g;
-function stripAnsi(s: string): string {
-  return s.replace(ANSI_RE, '');
-}
-
-interface NormalizeContext {
-  competitionId: string;
-  teamId: string;
-}
-
-/** Regex to detect file paths created/modified in text output. */
-const FILE_PATH_RE = /(?:created?|wrote?|writing|modified?)\s+(?:file\s+)?(\S+\.\w+)/i;
-
-function makeEvent(
-  type: EventType,
-  payload: unknown,
-  ctx: NormalizeContext,
-): ArenaEvent {
-  return {
-    eventId: randomUUID(),
-    competitionId: ctx.competitionId,
-    teamId: ctx.teamId,
-    timestamp: new Date().toISOString(),
-    type,
-    payload,
-    metadata: {},
-  };
-}
+import {
+  stripAnsi,
+  makeEvent,
+  FILE_PATH_RE,
+  type NormalizeContext,
+} from '../normalizer-utils.js';
 
 /**
  * Normalise a single line of Claude Code's JSON-lines stdout into a
@@ -79,3 +54,5 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
       return makeEvent(EventType.REASONING, { raw: msg }, ctx);
   }
 }
+
+export type { NormalizeContext };

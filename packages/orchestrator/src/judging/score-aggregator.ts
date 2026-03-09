@@ -1,4 +1,17 @@
-import type { JudgeResult, ScoreCard } from '@arena/shared';
+import type { JudgeResult, ScoreCard, CriterionScore, Rubric } from '@arena/shared';
+
+/**
+ * Compute the weighted overall score in [0, 1] from per-criterion scores.
+ * Used by both the automated scorer and the AI judge.
+ */
+export function computeOverallScore(scores: CriterionScore[], rubric: Rubric): number {
+  const raw = scores.reduce((sum, s) => {
+    const criterion = rubric.criteria.find((c) => c.id === s.criterionId);
+    if (!criterion) return sum;
+    return sum + (s.score / criterion.maxScore) * criterion.weight;
+  }, 0);
+  return Math.min(1, Math.max(0, raw));
+}
 
 /**
  * Aggregate multiple JudgeResults (potentially from different judges)

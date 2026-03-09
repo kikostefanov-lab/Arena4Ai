@@ -1,12 +1,10 @@
-import { spawn, type ChildProcess } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { randomUUID } from 'node:crypto';
-import type { Brief, Deliverable } from '@arena/shared';
+import type { Brief } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './claude-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
+import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
 export interface ClaudeAdapterOptions {
   /** Working directory for the Claude Code process (the sandbox root). */
@@ -18,6 +16,8 @@ export interface ClaudeAdapterOptions {
    * Defaults to 'claude' (expected on PATH).
    */
   claudeBin?: string;
+  /** Optional sandbox manager for Docker-based isolation. */
+  sandbox?: SandboxManager;
 }
 
 /**
@@ -33,40 +33,14 @@ export interface ClaudeAdapterOptions {
  *   6. adapter.shutdown()                   — kills process if still running
  */
 export class ClaudeAdapter extends BaseAdapter {
-  private readonly workdir: string;
-  private readonly competitionId: string;
   private readonly claudeBin: string;
 
-  private promptText = '';
-  private process: ChildProcess | null = null;
-  private executionDone: Promise<void> = Promise.resolve();
-
   constructor(teamId: string, options: ClaudeAdapterOptions) {
-    super(teamId);
-    this.workdir = options.workdir;
-    this.competitionId = options.competitionId;
+    super(teamId, options.workdir, options.competitionId, options.sandbox);
     this.claudeBin = options.claudeBin ?? 'claude';
   }
 
-  async injectBrief(brief: Brief, persona: string): Promise<void> {
-    const constraints =
-      brief.constraints.length > 0
-        ? `\nConstraints:\n${brief.constraints.map((c) => `- ${c}`).join('\n')}`
-        : '';
-
-    const deliverables = brief.deliverables.map((d) => `- ${d}`).join('\n');
-
-    this.promptText = [
-      `[PERSONA]\n${persona}`,
-      `[BRIEF: ${brief.title}]`,
-      brief.problem,
-      constraints,
-      `[DELIVERABLES]\n${deliverables}`,
-      `[TIME LIMIT] ${Math.round(brief.timeLimitMs / 60_000)} minutes`,
-    ]
-      .filter(Boolean)
-      .join('\n\n');
-  }
+  // injectBrief, collectDeliverables, shutdown, done — inherited from BaseAdapter
 
   async startExecution(): Promise<void> {
     if (!this.promptText) {
@@ -76,20 +50,30 @@ export class ClaudeAdapter extends BaseAdapter {
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
 
     this.executionDone = new Promise<void>((resolve, reject) => {
-      const child = spawn(
-        this.claudeBin,
-        [
-          '--print', this.promptText,
-          '--output-format', 'stream-json',
-          '--verbose',
-          '--dangerously-skip-permissions',
-        ],
-        {
-          cwd: this.workdir,
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: claudeEnv(),
-        },
-      );
+      const claudeArgs = [
+        '--print', this.promptText,
+        '--output-format', 'stream-json',
+        '--verbose',
+        '--dangerously-skip-permissions',
+      ];
+
+      const child = this.sandbox
+        ? this.sandbox.spawnInContainer(
+            this.teamId,
+            this.workdir,
+            this.claudeBin,
+            claudeArgs,
+            claudeEnv(),
+          )
+        : spawn(
+            this.claudeBin,
+            claudeArgs,
+            {
+              cwd: this.workdir,
+              stdio: ['ignore', 'pipe', 'pipe'],
+              env: claudeEnv(),
+            },
+          );
 
       this.process = child;
 
@@ -129,39 +113,7 @@ export class ClaudeAdapter extends BaseAdapter {
 
     // We don't await here — the caller uses the emitted events + shutdown().
   }
-
-  async collectDeliverables(): Promise<Deliverable> {
-    let files: Array<{ path: string; content: string }> = [];
-    try {
-      const entries = await readdir(this.workdir, { withFileTypes: true });
-      files = await Promise.all(
-        entries
-          .filter((e) => e.isFile())
-          .map(async (e) => ({
-            path: e.name,
-            content: await readFile(join(this.workdir, e.name), 'utf-8'),
-          }))
-      );
-    } catch {
-      // workdir may not exist if sandbox was skipped
-    }
-
-    return {
-      teamId: this.teamId,
-      files,
-      collectedAt: new Date().toISOString(),
-    };
-  }
-
-  async shutdown(): Promise<void> {
-    if (this.process) {
-      this.process.kill('SIGTERM');
-      this.process = null;
-    }
-  }
-
-  /** Resolves when the claude process exits cleanly (useful in tests). */
-  get done(): Promise<void> {
-    return this.executionDone;
-  }
 }
+
+// Re-export for convenience — callers that only need the Brief type
+export type { Brief };

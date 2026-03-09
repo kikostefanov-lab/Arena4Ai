@@ -129,7 +129,11 @@ export class CompetitionRunner extends EventEmitter {
   /** Run the competition end-to-end and return the result. */
   async run(): Promise<CompetitionResult> {
     const { brief, teams } = this.competition;
-    const sandboxManager = new SandboxManager({ image: this.options.sandboxImage });
+    let sandboxManager: SandboxManager | undefined;
+    if (!this.options.skipSandbox) {
+      sandboxManager = new SandboxManager();
+      await sandboxManager.verify();
+    }
     const logger = new EventLogger(this.options.logDir, this.competition.id);
 
     await logger.open();
@@ -153,10 +157,6 @@ export class CompetitionRunner extends EventEmitter {
         const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
         workdirs[team.id] = workdir;
 
-        if (!this.options.skipSandbox) {
-          await sandboxManager.create(team.id, { workdir });
-        }
-
         // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
         const [provider, personaId] = team.model.split(':');
         const persona = resolvePersona(
@@ -171,6 +171,7 @@ export class CompetitionRunner extends EventEmitter {
               workdir,
               competitionId: this.competition.id,
               codexBin: this.options.codexBin,
+              sandbox: sandboxManager,
             });
             break;
           case 'gemini':
@@ -178,6 +179,7 @@ export class CompetitionRunner extends EventEmitter {
               workdir,
               competitionId: this.competition.id,
               geminiBin: this.options.geminiBin,
+              sandbox: sandboxManager,
             });
             break;
           case 'claude':
@@ -186,6 +188,7 @@ export class CompetitionRunner extends EventEmitter {
               workdir,
               competitionId: this.competition.id,
               claudeBin: this.options.claudeBin,
+              sandbox: sandboxManager,
             });
         }
 
@@ -262,7 +265,6 @@ export class CompetitionRunner extends EventEmitter {
       this.emit('result', result);
       return result;
     } finally {
-      await sandboxManager.destroyAll();
       await logger.close();
     }
   }

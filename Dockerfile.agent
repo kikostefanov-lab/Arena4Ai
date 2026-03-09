@@ -1,0 +1,6 @@
+FROM node:20-slim
+
+# Install all three agent CLIs globally
+RUN npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
+
+WORKDIR /workspace

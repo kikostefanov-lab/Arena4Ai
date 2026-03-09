@@ -1,86 +1,85 @@
-import { EventEmitter } from 'node:events';
-import { createSandbox, type SandboxHandle, type SandboxOptions } from './docker-runtime.js';
-import Docker from 'dockerode';
+import { spawn } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 
-export interface ManagedSandbox {
-  teamId: string;
-  handle: SandboxHandle;
-  createdAt: string;
-}
+const AGENT_IMAGE = process.env.ARENA_AGENT_IMAGE ?? 'arena-agent:latest';
 
 /**
- * SandboxManager owns the lifecycle of all sandbox containers for a
- * single competition.  It ensures containers are always cleaned up,
- * even if the competition aborts.
+ * SandboxManager provides Docker-based isolation for agent processes.
  *
- * Events:
- *   'sandboxCreated'  (sandbox: ManagedSandbox)
- *   'sandboxDestroyed' (teamId: string)
- *   'error'           (err: Error)
+ * Each team gets one container's worth of isolation — the agent CLI runs
+ * inside `arena-agent:latest` with the team workdir bind-mounted at /workspace.
+ *
+ * Events still flow back via stdout piping (same as no-sandbox mode).
  */
-export class SandboxManager extends EventEmitter {
-  private readonly sandboxes = new Map<string, ManagedSandbox>();
-  private readonly docker: Docker;
-  private readonly baseOptions: Omit<SandboxOptions, 'name'>;
+export class SandboxManager {
+  private readonly containerNames = new Map<string, string>();
 
-  constructor(
-    baseOptions: Omit<SandboxOptions, 'name'> = {},
-    docker: Docker = new Docker(),
-  ) {
-    super();
-    this.docker = docker;
-    this.baseOptions = baseOptions;
+  /**
+   * Verify the agent image is available locally.
+   * Throws a helpful error if not built yet.
+   */
+  async verify(): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn('docker', ['image', 'inspect', AGENT_IMAGE], { stdio: 'ignore' });
+      proc.on('close', (code) => {
+        if (code === 0) resolve();
+        else reject(new Error(
+          `arena-agent image not found. Build it first:\n  docker build -f Dockerfile.agent -t ${AGENT_IMAGE} .`
+        ));
+      });
+    });
   }
 
   /**
-   * Create and register a sandbox for a team.
-   * Throws if a sandbox for this teamId already exists.
+   * Spawn an agent CLI inside a Docker container.
+   * Returns the ChildProcess (stdout/stderr still piped — identical to direct spawn).
    */
-  async create(teamId: string, overrides: Partial<SandboxOptions> = {}): Promise<ManagedSandbox> {
-    if (this.sandboxes.has(teamId)) {
-      throw new Error(`Sandbox for team "${teamId}" already exists.`);
-    }
+  spawnInContainer(
+    teamId: string,
+    workdir: string,
+    command: string,
+    args: string[],
+    env: NodeJS.ProcessEnv,
+  ): ChildProcess {
+    const containerName = `arena-${teamId}-${Date.now()}`;
+    this.containerNames.set(teamId, containerName);
 
-    const options: SandboxOptions = {
-      ...this.baseOptions,
-      ...overrides,
-      name: teamId,
-    };
+    const dockerArgs = [
+      'run',
+      '--rm',
+      '--name', containerName,
+      '-v', `${workdir}:/workspace`,
+      '-w', '/workspace',
+      '--network', 'host',
+      '--memory', '2g',
+      '--cpus', '1',
+      ...Object.entries(env).flatMap(([k, v]) => v !== undefined ? ['-e', `${k}=${v}`] : []),
+      AGENT_IMAGE,
+      command,
+      ...args,
+    ];
 
-    const handle = await createSandbox(options, this.docker);
-    const sandbox: ManagedSandbox = {
-      teamId,
-      handle,
-      createdAt: new Date().toISOString(),
-    };
+    const child = spawn('docker', dockerArgs, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
 
-    this.sandboxes.set(teamId, sandbox);
-    this.emit('sandboxCreated', sandbox);
-    return sandbox;
+    child.on('close', () => this.containerNames.delete(teamId));
+    return child;
   }
 
-  /** Retrieve an active sandbox by teamId. */
-  get(teamId: string): ManagedSandbox | undefined {
-    return this.sandboxes.get(teamId);
+  async killContainer(teamId: string): Promise<void> {
+    const name = this.containerNames.get(teamId);
+    if (!name) return;
+    spawn('docker', ['kill', name], { stdio: 'ignore' });
   }
 
-  /** Destroy the sandbox for a single team. */
-  async destroy(teamId: string): Promise<void> {
-    const sandbox = this.sandboxes.get(teamId);
-    if (!sandbox) return;
-    await sandbox.handle.destroy();
-    this.sandboxes.delete(teamId);
-    this.emit('sandboxDestroyed', teamId);
+  async pauseContainer(teamId: string): Promise<void> {
+    const name = this.containerNames.get(teamId);
+    if (name) spawn('docker', ['pause', name], { stdio: 'ignore' });
   }
 
-  /** Destroy all managed sandboxes. Safe to call multiple times. */
-  async destroyAll(): Promise<void> {
-    const ids = [...this.sandboxes.keys()];
-    await Promise.allSettled(ids.map((id) => this.destroy(id)));
-  }
-
-  /** Number of active sandboxes. */
-  get count(): number {
-    return this.sandboxes.size;
+  async resumeContainer(teamId: string): Promise<void> {
+    const name = this.containerNames.get(teamId);
+    if (name) spawn('docker', ['unpause', name], { stdio: 'ignore' });
   }
 }

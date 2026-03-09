@@ -1,4 +1,5 @@
 // @arena/orchestrator barrel export
+export { createApp } from './server/app.js';
 export { CompetitionRunner } from './engine/competition-runner.js';
 export type { CompetitionResult, RunOptions } from './engine/competition-runner.js';
 export { transition } from './engine/state-machine.js';
