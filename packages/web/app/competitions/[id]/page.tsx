@@ -119,6 +119,7 @@ export default function CompetitionPage() {
     let ws: WebSocket;
     let lastSeq = 0;
     let retries = 0;
+    let intentionalClose = false;
     const MAX_RETRIES = 5;
 
     function connect() {
@@ -150,6 +151,7 @@ export default function CompetitionPage() {
           if (event.type === 'COMPETITION_COMPLETE' || event.type === 'COMPLETE') {
             setState('COMPLETE');
             if (event.result) setResult(event.result);
+            intentionalClose = true;
             ws.close();
             return;
           }
@@ -174,7 +176,7 @@ export default function CompetitionPage() {
       ws.onclose = () => {
         setConnected(false);
         // Reconnect with backoff if competition not complete
-        if (retries < MAX_RETRIES) {
+        if (!intentionalClose && retries < MAX_RETRIES) {
           retries++;
           setTimeout(connect, Math.min(1000 * retries, 5000));
         }
