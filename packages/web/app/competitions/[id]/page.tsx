@@ -297,6 +297,20 @@ const GLOBAL_STYLES = `
   95%, 100% { opacity: 0; }
 }
 
+@keyframes launchFlash {
+  0%   { opacity: 0; }
+  10%  { opacity: 1; }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes launchText {
+  0%   { opacity: 0; transform: translateY(16px) scale(0.85); }
+  15%  { opacity: 1; transform: translateY(0)    scale(1); }
+  75%  { opacity: 1; transform: translateY(0)    scale(1); }
+  100% { opacity: 0; transform: translateY(-12px) scale(1.1); }
+}
+
 .arena-scrollbar::-webkit-scrollbar { width: 5px; }
 .arena-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .arena-scrollbar::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 3px; }
@@ -396,11 +410,11 @@ function ModelBadge({ model }: { model: string }) {
   };
   return (
     <span style={{
-      fontSize: '0.68rem', fontWeight: 800,
-      padding: '0.2rem 0.6rem', borderRadius: '4px',
+      fontSize: '0.82rem', fontWeight: 900,
+      padding: '0.25rem 0.7rem', borderRadius: '5px',
       background: colors.bg, color: colors.fg,
       border: `1px solid ${colors.border}`,
-      letterSpacing: '0.8px', textTransform: 'uppercase', flexShrink: 0,
+      letterSpacing: '1px', textTransform: 'uppercase', flexShrink: 0,
     }}>
       {name}
     </span>
@@ -465,27 +479,27 @@ function EventRow({
 
   return (
     <div className="arena-event-row" style={{
-      background: info.bg, borderRadius: '7px',
-      padding: '0.5rem 0.75rem', fontSize: '0.78rem', lineHeight: 1.55,
-      display: 'flex', gap: '0.5rem', alignItems: 'flex-start',
+      background: info.bg, borderRadius: '8px',
+      padding: '0.55rem 0.8rem', fontSize: '0.88rem', lineHeight: 1.5,
+      display: 'flex', gap: '0.55rem', alignItems: 'flex-start',
       transition: 'background 0.15s ease',
     }}>
       {/* Timestamp */}
       <span style={{
-        color: '#4a5568', fontSize: '0.68rem', fontFamily: 'monospace',
-        flexShrink: 0, width: '2.5rem', textAlign: 'right',
+        color: '#4a5568', fontSize: '0.75rem', fontFamily: 'monospace',
+        flexShrink: 0, width: '2.8rem', textAlign: 'right',
         marginTop: '2px', letterSpacing: '-0.3px',
       }}>
         {relTime}
       </span>
       {/* Icon */}
-      <span style={{ flexShrink: 0, fontSize: '0.88rem', lineHeight: 1.4 }}>{info.icon}</span>
+      <span style={{ flexShrink: 0, fontSize: '1.0rem', lineHeight: 1.4 }}>{info.icon}</span>
       {/* Label badge */}
       <span style={{
-        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.62rem',
+        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.72rem',
         letterSpacing: '0.5px',
         background: `rgba(${hexToRgb(info.color)},0.12)`,
-        padding: '0.08rem 0.4rem', borderRadius: '4px', marginTop: '2px',
+        padding: '0.1rem 0.45rem', borderRadius: '4px', marginTop: '1px',
         whiteSpace: 'nowrap',
       }}>
         {info.label}
@@ -522,7 +536,7 @@ function PreBattleScreen({ color, model, persona }: { color: string; model: stri
   const displayName = persona ? `${model}:${persona}` : model;
 
   useEffect(() => {
-    const t = setInterval(() => setMsgIdx((i) => (i + 1) % INIT_MESSAGES.length), 1400);
+    const t = setInterval(() => setMsgIdx((i) => (i + 1) % INIT_MESSAGES.length), 1600);
     return () => clearInterval(t);
   }, []);
 
@@ -537,50 +551,50 @@ function PreBattleScreen({ color, model, persona }: { color: string; model: stri
     <div style={{
       flex: 1, display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
-      padding: '2rem', gap: '1.4rem', position: 'relative', overflow: 'hidden',
+      padding: '2rem', gap: '2rem', position: 'relative', overflow: 'hidden',
     }}>
       {/* Radial bg glow */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: `radial-gradient(ellipse 70% 50% at 50% 55%, rgba(${rgb},0.07) 0%, transparent 70%)`,
+        background: `radial-gradient(ellipse 70% 55% at 50% 50%, rgba(${rgb},0.10) 0%, transparent 70%)`,
       }} />
       {/* Scanlines */}
       <div style={{
         position: 'absolute', inset: 0, pointerEvents: 'none',
-        backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(${rgb},0.018) 3px, rgba(${rgb},0.018) 4px)`,
+        backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(${rgb},0.02) 3px, rgba(${rgb},0.02) 4px)`,
         animation: 'scanline 5s linear infinite',
       }} />
 
       {/* Swords */}
-      <div style={{ fontSize: '2.2rem', filter: `drop-shadow(0 0 14px ${color})`, animation: 'pulse 2s ease-in-out infinite' }}>
+      <div style={{ fontSize: '3.5rem', filter: `drop-shadow(0 0 22px ${color})`, animation: 'pulse 2s ease-in-out infinite', zIndex: 1 }}>
         ⚔️
       </div>
 
       {/* Team name */}
       <div style={{ textAlign: 'center', zIndex: 1 }}>
-        <div style={{ fontSize: '0.70rem', fontWeight: 800, color, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+        <div style={{ fontSize: '1.25rem', fontWeight: 900, color, letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.5rem', textShadow: `0 0 20px ${color}80` }}>
           {displayName}
         </div>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8896ab', letterSpacing: '2.5px', animation: 'pulse 2s ease-in-out infinite' }}>
+        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#8896ab', letterSpacing: '3px', animation: 'pulse 2s ease-in-out infinite' }}>
           BATTLE STATION INITIALIZING
         </div>
       </div>
 
       {/* Progress */}
-      <div style={{ width: '75%', maxWidth: '260px', zIndex: 1 }}>
-        <div style={{ height: '4px', background: 'rgba(30,45,69,0.8)', borderRadius: '2px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+      <div style={{ width: '78%', maxWidth: '320px', zIndex: 1 }}>
+        <div style={{ height: '6px', background: 'rgba(30,45,69,0.8)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.65rem' }}>
           <div style={{
-            height: '100%', width: `${progress}%`, borderRadius: '2px',
-            background: `linear-gradient(90deg, ${color}66, ${color})`,
-            boxShadow: `0 0 8px ${color}80`,
+            height: '100%', width: `${progress}%`, borderRadius: '3px',
+            background: `linear-gradient(90deg, ${color}55, ${color})`,
+            boxShadow: `0 0 10px ${color}80`,
             transition: 'width 0.9s ease-out',
           }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.68rem', color: '#8896ab', animation: 'msgFade 1.4s ease-in-out infinite' }}>
+          <span style={{ fontSize: '0.85rem', color: '#8896ab', animation: 'msgFade 1.6s ease-in-out infinite' }}>
             {INIT_MESSAGES[msgIdx]}
           </span>
-          <span style={{ fontSize: '0.65rem', color, fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>
+          <span style={{ fontSize: '0.82rem', color, fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>
             {Math.round(progress)}%
           </span>
         </div>
@@ -602,45 +616,60 @@ const LanePanel = forwardRef<
     competitionStartTime: number | null;
   }
 >(({ team, color, events, borderLeft, isRunning, competitionStartTime }, ref) => {
+  const hasRenderable = events.some((e) => classifyEvent(e.type, e.payload) !== null);
   const recentActivity = events.length > 0 &&
     (Date.now() - new Date(events[events.length - 1].timestamp).getTime()) < 5000;
+
+  // Flash "BATTLE COMMENCED" when first renderable event arrives
+  const [showLaunch, setShowLaunch] = useState(false);
+  const wasRenderable = useRef(false);
+  useEffect(() => {
+    if (hasRenderable && !wasRenderable.current) {
+      wasRenderable.current = true;
+      setShowLaunch(true);
+      const t = setTimeout(() => setShowLaunch(false), 2400);
+      return () => clearTimeout(t);
+    }
+  }, [hasRenderable]);
+
+  const rgb = hexToRgb(color);
 
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', minWidth: 0,
-      overflow: 'hidden',
+      overflow: 'hidden', position: 'relative',
       borderLeft: borderLeft ? '1px solid #1e2d45' : 'none',
       background: '#0a0e17',
     }}>
       {/* Header */}
       <div style={{
-        padding: '0.75rem 1.1rem',
+        padding: '0.85rem 1.2rem',
         background: 'linear-gradient(180deg, #0f1724 0%, #0d1520 100%)',
-        borderBottom: `2px solid ${isRunning ? color : '#1e2d45'}`,
+        borderBottom: `3px solid ${isRunning ? color : '#1e2d45'}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexShrink: 0, gap: '0.6rem',
+        flexShrink: 0, gap: '0.7rem',
         transition: 'border-color 0.3s ease',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', minWidth: 0, flex: 1 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flex: 1 }}>
           <StatusDot color={color} pulsing={isRunning && recentActivity} />
           <ModelBadge model={team.model} />
           {team.persona && (
             <span style={{
-              fontSize: '0.72rem', color: '#8896ab',
+              fontSize: '0.90rem', color, fontWeight: 700,
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              fontStyle: 'italic',
+              letterSpacing: '0.5px',
             }}>
-              {team.persona}
+              :{team.persona}
             </span>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexShrink: 0 }}>
           <ActivitySpinner color={color} active={isRunning && recentActivity} />
           <LaneHistogram events={events} />
           <span style={{
-            fontSize: '0.70rem', color: '#4a5568', fontWeight: 700,
+            fontSize: '0.78rem', color: '#4a5568', fontWeight: 700,
             fontFamily: 'monospace', background: 'rgba(30,45,69,0.4)',
-            padding: '0.12rem 0.5rem', borderRadius: '4px',
+            padding: '0.15rem 0.55rem', borderRadius: '4px',
           }}>
             {events.length}
           </span>
@@ -652,20 +681,21 @@ const LanePanel = forwardRef<
         ref={ref}
         className="arena-scrollbar"
         style={{
-          flex: 1, overflowY: 'auto', padding: '0.6rem 0.6rem',
-          display: 'flex', flexDirection: 'column', gap: '3px',
+          flex: 1, overflowY: 'auto',
+          padding: hasRenderable ? '0.6rem 0.6rem' : '0',
+          display: 'flex', flexDirection: 'column', gap: hasRenderable ? '3px' : '0',
         }}
       >
-        {events.length === 0 && isRunning && (
+        {!hasRenderable && isRunning && (
           <PreBattleScreen color={color} model={team.model} persona={team.persona} />
         )}
-        {events.length === 0 && !isRunning && (
+        {!hasRenderable && !isRunning && (
           <div style={{
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',
             height: '100%', gap: '0.5rem',
           }}>
-            <p style={{ color: '#2d4060', fontSize: '0.78rem', fontStyle: 'italic' }}>
+            <p style={{ color: '#2d4060', fontSize: '0.88rem', fontStyle: 'italic' }}>
               Waiting for competition to start...
             </p>
           </div>
@@ -676,9 +706,9 @@ const LanePanel = forwardRef<
       </div>
 
       {/* Lane footer: quick stats */}
-      {events.length > 0 && (
+      {hasRenderable && (
         <div style={{
-          display: 'flex', gap: '0.8rem', padding: '0.4rem 1.1rem',
+          display: 'flex', gap: '0.9rem', padding: '0.45rem 1.2rem',
           borderTop: '1px solid rgba(30,45,69,0.6)',
           background: '#0d1520', flexShrink: 0, flexWrap: 'wrap',
         }}>
@@ -686,13 +716,33 @@ const LanePanel = forwardRef<
             const count = events.filter((e) => e.type === evType).length;
             if (count === 0) return null;
             return (
-              <span key={evType} style={{
-                fontSize: '0.65rem', color: c, fontWeight: 600, letterSpacing: '0.3px',
-              }}>
+              <span key={evType} style={{ fontSize: '0.72rem', color: c, fontWeight: 600, letterSpacing: '0.3px' }}>
                 {evType === 'TOOL_CALL' ? '⚡' : evType === 'FILE_CREATE' ? '📄' : evType === 'FILE_MODIFY' ? '✏️' : evType === 'REASONING' ? '🧠' : '⚠️'} {count}
               </span>
             );
           })}
+        </div>
+      )}
+
+      {/* BATTLE COMMENCED flash overlay */}
+      {showLaunch && (
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          background: `radial-gradient(ellipse 65% 45% at 50% 45%, rgba(${rgb},0.28) 0%, transparent 70%)`,
+          animation: 'launchFlash 2.4s ease-out forwards',
+          zIndex: 20, gap: '0.8rem',
+        }}>
+          <div style={{ fontSize: '3rem', animation: 'launchText 2.4s ease-out forwards', filter: `drop-shadow(0 0 24px ${color})` }}>
+            ⚔️
+          </div>
+          <div style={{
+            color, fontWeight: 900, fontSize: '1.2rem', letterSpacing: '4px',
+            animation: 'launchText 2.4s ease-out forwards',
+            textShadow: `0 0 30px ${color}`,
+          }}>
+            BATTLE COMMENCED!
+          </div>
         </div>
       )}
     </div>
@@ -1164,12 +1214,12 @@ export default function CompetitionPage() {
             gap: '0.8rem', flexWrap: 'wrap',
           }}>
             {briefTitle && (
-              <span style={{ fontSize: '0.88rem', fontWeight: 800, color: '#e2e8f0' }}>
+              <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#e2e8f0' }}>
                 {briefTitle}
               </span>
             )}
             <span style={{
-              fontSize: '0.65rem', fontWeight: 800, padding: '0.18rem 0.6rem',
+              fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.65rem',
               borderRadius: '4px', letterSpacing: '1.5px',
               background: stateBadge.bg, color: stateBadge.color,
               border: `1px solid ${stateBadge.color}33`,

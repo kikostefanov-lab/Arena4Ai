@@ -291,33 +291,33 @@ function PreBattleScreen({ color, label }: { color: string; label: string }) {
         animation: 'scanline 5s linear infinite',
       }} />
 
-      <div style={{ fontSize: '2.2rem', filter: `drop-shadow(0 0 14px ${color})`, animation: 'pulse 2s ease-in-out infinite' }}>
+      <div style={{ fontSize: '3.5rem', filter: `drop-shadow(0 0 22px ${color})`, animation: 'pulse 2s ease-in-out infinite', zIndex: 1 }}>
         ⚔️
       </div>
 
       <div style={{ textAlign: 'center', zIndex: 1 }}>
-        <div style={{ fontSize: '0.70rem', fontWeight: 800, color, letterSpacing: '3px', textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+        <div style={{ fontSize: '1.25rem', fontWeight: 900, color, letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.5rem', textShadow: `0 0 20px ${color}80` }}>
           {label}
         </div>
-        <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#8896ab', letterSpacing: '2.5px', animation: 'pulse 2s ease-in-out infinite' }}>
+        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#8896ab', letterSpacing: '3px', animation: 'pulse 2s ease-in-out infinite' }}>
           BATTLE STATION INITIALIZING
         </div>
       </div>
 
-      <div style={{ width: '75%', maxWidth: '260px', zIndex: 1 }}>
-        <div style={{ height: '4px', background: 'rgba(30,45,69,0.8)', borderRadius: '2px', overflow: 'hidden', marginBottom: '0.5rem' }}>
+      <div style={{ width: '78%', maxWidth: '320px', zIndex: 1 }}>
+        <div style={{ height: '6px', background: 'rgba(30,45,69,0.8)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.65rem' }}>
           <div style={{
-            height: '100%', width: `${progress}%`, borderRadius: '2px',
-            background: `linear-gradient(90deg, ${color}66, ${color})`,
-            boxShadow: `0 0 8px ${color}80`,
+            height: '100%', width: `${progress}%`, borderRadius: '3px',
+            background: `linear-gradient(90deg, ${color}55, ${color})`,
+            boxShadow: `0 0 10px ${color}80`,
             transition: 'width 0.9s ease-out',
           }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.68rem', color: '#8896ab', animation: 'msgFade 1.4s ease-in-out infinite' }}>
+          <span style={{ fontSize: '0.85rem', color: '#8896ab', animation: 'msgFade 1.6s ease-in-out infinite' }}>
             {INIT_MESSAGES[msgIdx]}
           </span>
-          <span style={{ fontSize: '0.65rem', color, fontFamily: FONT, fontWeight: 700, flexShrink: 0 }}>
+          <span style={{ fontSize: '0.82rem', color, fontFamily: FONT, fontWeight: 700, flexShrink: 0 }}>
             {Math.round(progress)}%
           </span>
         </div>
@@ -344,23 +344,23 @@ function EventRow({ event, startTs, isNew }: {
     <div
       className={isNew ? 'event-row event-appear' : 'event-row'}
       style={{
-        background: info.bg, borderRadius: '6px',
-        padding: '0.45rem 0.65rem', fontSize: '0.78rem', lineHeight: 1.5,
-        display: 'flex', gap: '0.45rem', alignItems: 'flex-start',
+        background: info.bg, borderRadius: '8px',
+        padding: '0.55rem 0.8rem', fontSize: '0.88rem', lineHeight: 1.5,
+        display: 'flex', gap: '0.55rem', alignItems: 'flex-start',
       }}
     >
       <span style={{
-        color: '#4a5568', fontSize: '0.68rem', minWidth: '2.5rem',
-        textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums', marginTop: '1px',
+        color: '#4a5568', fontSize: '0.75rem', minWidth: '2.8rem',
+        textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums', marginTop: '2px',
       }}>
         {relTime}
       </span>
-      <span style={{ flexShrink: 0, fontSize: '0.88rem', lineHeight: 1.3 }}>{info.icon}</span>
+      <span style={{ flexShrink: 0, fontSize: '1.0rem', lineHeight: 1.3 }}>{info.icon}</span>
       <span style={{
-        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.62rem',
+        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.72rem',
         letterSpacing: '0.5px',
         background: `rgba(${hexToRgb(info.color)},0.12)`,
-        padding: '0.06rem 0.38rem', borderRadius: '4px', marginTop: '2px',
+        padding: '0.1rem 0.45rem', borderRadius: '4px', marginTop: '1px',
         whiteSpace: 'nowrap',
       }}>
         {info.label}
@@ -916,55 +916,62 @@ export default function ReplayPage() {
             >
               {/* Lane header */}
               <div style={{
-                padding: '0.6rem 1rem',
+                padding: '0.85rem 1.2rem',
                 background: '#0d1520',
-                borderBottom: '1px solid #1e2d45',
+                borderBottom: `3px solid ${color}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 flexShrink: 0, gap: '0.5rem',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', minWidth: 0 }}>
                   <span style={{
-                    width: '8px', height: '8px', borderRadius: '50%',
+                    width: '10px', height: '10px', borderRadius: '50%',
                     background: color, flexShrink: 0,
-                    boxShadow: `0 0 6px ${color}80`,
+                    boxShadow: `0 0 8px ${color}`,
                   }} />
                   <span style={{
-                    fontSize: '0.72rem', fontWeight: 700, color,
+                    fontSize: '1.0rem', fontWeight: 800, color,
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    letterSpacing: '0.5px',
                   }}>
                     {label}
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
                   <LaneHistogram events={allTeamEvents} />
-                  <span style={{ fontSize: '0.58rem', color: '#4a5568', fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ fontSize: '0.75rem', color: '#4a5568', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>
                     {teamEvents.length}
                   </span>
                 </div>
               </div>
 
               {/* Lane events */}
+              {(() => {
+                const hasRenderable = teamEvents.some((e) => {
+                  // Need to import classifyEvent — already defined above
+                  const info = classifyEvent(e.type, e.payload);
+                  return info !== null;
+                });
+                return (
               <div
                 ref={(el) => { laneRefs.current[i] = el; }}
                 className="lane-scroll"
                 style={{
                   flex: 1, overflowY: 'auto',
-                  padding: teamEvents.length === 0 ? '0' : '0.5rem 0.75rem',
-                  display: 'flex', flexDirection: 'column', gap: teamEvents.length === 0 ? '0' : '3px',
+                  padding: hasRenderable ? '0.6rem 0.75rem' : '0',
+                  display: 'flex', flexDirection: 'column', gap: hasRenderable ? '3px' : '0',
                 }}
               >
-                {teamEvents.length === 0 && allTeamEvents.length > 0 && (
+                {!hasRenderable && allTeamEvents.length > 0 && (
                   <PreBattleScreen color={color} label={label} />
                 )}
-                {teamEvents.length === 0 && allTeamEvents.length === 0 && (
+                {!hasRenderable && allTeamEvents.length === 0 && (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1 }}>
-                    <p style={{ color: '#2d4060', fontSize: '0.72rem', fontStyle: 'italic' }}>
+                    <p style={{ color: '#2d4060', fontSize: '0.85rem', fontStyle: 'italic' }}>
                       No events recorded.
                     </p>
                   </div>
                 )}
-                {teamEvents.map((ev, evIdx) => {
-                  // Determine if this event is "new" (appeared in the last tick)
+                {teamEvents.map((ev) => {
                   const globalIdx = allEvents.indexOf(ev);
                   const isNew = playing && globalIdx >= prevCursor && globalIdx < cursor;
                   return (
@@ -977,6 +984,8 @@ export default function ReplayPage() {
                   );
                 })}
               </div>
+                );
+              })()}
             </div>
           );
         })}
