@@ -70,7 +70,18 @@ export function attachWebSocket(server: Server): void {
       // Check if already complete
       const result = await repo.getResult(competitionId);
       if (result) {
-        send({ type: 'COMPLETE', result });
+        const scorecards = (result.scorecards as Array<{ teamId: string; finalScore: number; rank: number; judgeResults: Array<{ scores: Array<{ criterionId: string; score: number }> }> }>) ?? [];
+        const normalized = {
+          winnerId: result.winnerId ?? null,
+          teams: scorecards.map((sc) => ({
+            teamId: sc.teamId,
+            totalScore: sc.finalScore,
+            criteriaScores: sc.judgeResults?.[0]?.scores ?? [],
+            rank: sc.rank,
+          })),
+          summary: result.summary,
+        };
+        send({ type: 'COMPLETE', result: normalized });
         ws.close();
         return;
       }
@@ -78,6 +89,7 @@ export function attachWebSocket(server: Server): void {
       // Subscribe to live events from the active runner
       const runner = runnerRegistry.get(competitionId);
       if (!runner) {
+        send({ type: 'ERROR', message: 'Competition not found — the server may have restarted mid-competition.' });
         ws.close();
         return;
       }
@@ -85,7 +97,21 @@ export function attachWebSocket(server: Server): void {
       let seq = lastSeq;
       const onArenaEvent = (event: unknown) => { seq++; send({ ...(event as object), _seq: seq }); };
       const onStateChange = (state: unknown) => { send({ type: 'STATE_CHANGE', state }); };
-      const onResult = (r: unknown) => { send({ type: 'COMPLETE', result: r }); ws.close(); };
+      const onResult = (r: unknown) => {
+        // r is CompetitionResult from the runner: { competition, scorecards, winner }
+        const runnerResult = r as { scorecards?: Array<{ teamId: string; finalScore: number; rank: number; judgeResults: Array<{ scores: Array<{ criterionId: string; score: number }> }> }>; winner?: string | null };
+        const normalized = {
+          winnerId: runnerResult.winner ?? null,
+          teams: (runnerResult.scorecards ?? []).map((sc) => ({
+            teamId: sc.teamId,
+            totalScore: sc.finalScore,
+            criteriaScores: sc.judgeResults?.[0]?.scores ?? [],
+            rank: sc.rank,
+          })),
+        };
+        send({ type: 'COMPLETE', result: normalized });
+        ws.close();
+      };
       const onError = (err: Error) => { send({ type: 'ERROR', message: err.message }); ws.close(); };
 
       runner.on('arenaEvent', onArenaEvent);
