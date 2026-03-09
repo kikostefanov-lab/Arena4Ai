@@ -100,9 +100,9 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   res.status(201).json({ competitionId });
 });
 
-// GET /competitions — list past competitions
+// GET /competitions — list past competitions with winner info
 competitionsRouter.get('/', async (_req: Request, res: Response) => {
-  const list = await repo.list(20);
+  const list = await repo.listSummary(50);
   res.json(list);
 });
 
@@ -118,7 +118,7 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     repo.countEvents(id),
     repo.getResult(id),
   ]);
-  res.json({ id: comp.id, state: comp.state, eventCount, result });
+  res.json({ id: comp.id, state: comp.state, brief: comp.brief, teams: comp.teams, eventCount, result });
 });
 
 // GET /competitions/:id/events — full event history for replay/analysis
@@ -134,6 +134,23 @@ competitionsRouter.get('/:id/events', async (req: Request, res: Response) => {
 
   const evts = await repo.getEvents(id, afterSeq);
   res.json(evts);
+});
+
+// DELETE /competitions/:id — remove a competition and all its data
+competitionsRouter.delete('/:id', requireApiKey, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  // Refuse to delete an active competition — cancel it first
+  const runner = runnerRegistry.get(id);
+  if (runner) {
+    res.status(409).json({ error: 'Competition is active — cancel it before deleting' });
+    return;
+  }
+  const deleted = await repo.delete(id);
+  if (!deleted) {
+    res.status(404).json({ error: 'Competition not found' });
+    return;
+  }
+  res.json({ ok: true });
 });
 
 // POST /competitions/:id/cancel

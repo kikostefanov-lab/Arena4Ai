@@ -9,6 +9,18 @@ export async function GET(
   return Response.json(data, { status: res.status });
 }
 
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  const res = await fetch(orchestratorUrl(`/competitions/${params.id}`), {
+    method: 'DELETE',
+    headers: orchestratorHeaders(),
+  });
+  const data = await res.json();
+  return Response.json(data, { status: res.status });
+}
+
 export async function POST(
   request: Request,
   { params }: { params: { id: string } }

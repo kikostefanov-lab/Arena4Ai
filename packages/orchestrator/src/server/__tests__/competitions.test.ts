@@ -20,6 +20,7 @@ vi.mock('../repo.js', () => ({
     countEvents: vi.fn().mockResolvedValue(0),
     getResult: vi.fn().mockResolvedValue(null),
     list: vi.fn().mockResolvedValue([]),
+    listSummary: vi.fn().mockResolvedValue([]),
   },
 }));
 vi.mock('../runner-registry.js', () => ({ runnerRegistry: new Map() }));

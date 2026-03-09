@@ -99,4 +99,30 @@ export class CompetitionRepository {
       .orderBy(desc(competitions.startedAt))
       .limit(limit);
   }
+
+  async listSummary(limit = 50) {
+    const rows = await this.db
+      .select({
+        id: competitions.id,
+        brief: competitions.brief,
+        teams: competitions.teams,
+        state: competitions.state,
+        startedAt: competitions.startedAt,
+        completedAt: competitions.completedAt,
+        winnerId: results.winnerId,
+      })
+      .from(competitions)
+      .leftJoin(results, eq(results.competitionId, competitions.id))
+      .orderBy(desc(competitions.startedAt))
+      .limit(limit);
+    return rows;
+  }
+
+  async delete(id: string): Promise<boolean> {
+    // cascade: events and results first (FK), then competition row
+    await this.db.delete(events).where(eq(events.competitionId, id));
+    await this.db.delete(results).where(eq(results.competitionId, id));
+    const deleted = await this.db.delete(competitions).where(eq(competitions.id, id)).returning({ id: competitions.id });
+    return deleted.length > 0;
+  }
 }

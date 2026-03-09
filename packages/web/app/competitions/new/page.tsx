@@ -305,7 +305,7 @@ export default function NewCompetitionPage() {
                         type="number"
                         min={0}
                         max={1}
-                        step={0.1}
+                        step={0.01}
                         required
                         value={criterion.weight}
                         onChange={e => updateCriterion(idx, 'weight', Number(e.target.value))}

@@ -15,11 +15,7 @@ interface ResultRow {
 interface TeamInRow {
   id: string;
   model: string;
-}
-
-/** Extract model prefix from team.model string (e.g. 'claude:speedrunner' → 'claude'). */
-function modelPrefix(model: string): string {
-  return model.split(':')[0] ?? model;
+  persona?: string;
 }
 
 /**
@@ -37,10 +33,10 @@ export function computeWinRate(
     const winnerId = resultMap.get(comp.id) ?? null;
 
     for (const team of teams) {
-      const model = modelPrefix(team.model);
-      if (!stats[model]) stats[model] = { wins: 0, total: 0 };
-      stats[model].total += 1;
-      if (team.id === winnerId) stats[model].wins += 1;
+      const key = team.persona ? `${team.model}:${team.persona}` : team.model;
+      if (!stats[key]) stats[key] = { wins: 0, total: 0 };
+      stats[key].total += 1;
+      if (team.id === winnerId) stats[key].wins += 1;
     }
   }
 
