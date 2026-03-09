@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "paths": {
+      "@arena/shared": ["../shared/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

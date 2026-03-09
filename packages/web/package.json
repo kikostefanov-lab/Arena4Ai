@@ -1,0 +1,11 @@
+{
+  "name": "@arena/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'web stub'",
+    "dev": "echo 'web stub'",
+    "test": "echo 'no tests yet'",
+    "typecheck": "echo 'web stub'"
+  }
+}
