@@ -1,0 +1,21 @@
+// @arena/orchestrator barrel export
+export { CompetitionRunner } from './engine/competition-runner.js';
+export type { CompetitionResult, RunOptions } from './engine/competition-runner.js';
+export { transition } from './engine/state-machine.js';
+export { ClockManager } from './engine/clock-manager.js';
+export { parseBrief } from './brief/parser.js';
+export { PRESETS, applyPreset } from './brief/presets.js';
+export type { Persona } from './adapters/claude/claude-personas.js';
+export { PERSONAS, resolvePersona } from './adapters/claude/claude-personas.js';
+export { normalizeLine } from './adapters/claude/claude-normalizer.js';
+export { ClaudeAdapter } from './adapters/claude/claude-adapter.js';
+export type { ClaudeAdapterOptions } from './adapters/claude/claude-adapter.js';
+export { BaseAdapter } from './adapters/base-adapter.js';
+export { SandboxManager } from './sandbox/sandbox-manager.js';
+export { createSandbox } from './sandbox/docker-runtime.js';
+export type { SandboxHandle, SandboxOptions } from './sandbox/docker-runtime.js';
+export { EventLogger } from './events/event-logger.js';
+export { scoreDeliverable } from './judging/rubric-scorer.js';
+export { aggregate } from './judging/score-aggregator.js';
+export { aiJudge } from './judging/ai-judge.js';
+export { printResults, formatResultsJson } from './judging/results-reporter.js';

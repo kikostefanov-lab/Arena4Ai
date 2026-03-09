@@ -4,8 +4,11 @@
     "outDir": "dist",
     "rootDir": "src",
     "paths": {
-      "@arena/shared": ["../shared/src/index.ts"]
+      "@arena/shared": ["../shared/dist/index.d.ts"]
     }
   },
+  "references": [
+    { "path": "../shared" }
+  ],
   "include": ["src"]
 }
