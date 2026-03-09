@@ -13,7 +13,9 @@
     "dev": "tsx watch src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "cli": "tsx src/cli.ts"
+    "cli": "tsx src/cli.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "@arena/shared": "*",

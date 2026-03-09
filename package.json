@@ -2,7 +2,9 @@
   "name": "agent-arena",
   "private": true,
   "packageManager": "npm@11.11.0",
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
@@ -13,5 +15,8 @@
   "devDependencies": {
     "turbo": "^2.0.0",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.1"
   }
 }
