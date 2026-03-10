@@ -653,17 +653,17 @@ export default function GalleryPage() {
                       })()}
 
                       {comp.state === 'COMPLETE' && (
-                        <a
-                          href={`/competitions/${comp.id}/replay`}
-                          onClick={(e) => e.stopPropagation()}
+                        <button
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/competitions/${comp.id}/replay`; }}
                           className="replay-link"
                           style={{
-                            fontSize: '0.58rem', color: '#8896ab', textDecoration: 'none',
-                            letterSpacing: '0.5px', whiteSpace: 'nowrap',
+                            fontSize: '0.58rem', color: '#8896ab', background: 'none', border: 'none',
+                            cursor: 'pointer', padding: 0, letterSpacing: '0.5px', whiteSpace: 'nowrap',
+                            fontFamily: 'inherit',
                           }}
                         >
                           ▶ REPLAY
-                        </a>
+                        </button>
                       )}
 
                       {comp.state !== 'RUNNING' && (
