@@ -1,5 +1,15 @@
-import Anthropic from '@anthropic-ai/sdk';
+import { spawn } from 'node:child_process';
 import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType } from '@arena/shared';
+import { claudeEnv } from '../utils/claude-env.js';
+
+type ArtifactStatus = 'queued' | 'generating' | 'done' | 'error';
+type ProgressMap = Record<string, ArtifactStatus>;
+
+const forgeProgressStore = new Map<string, ProgressMap>();
+
+export function getForgeProgress(competitionId: string): ProgressMap | null {
+  return forgeProgressStore.get(competitionId) ?? null;
+}
 
 export interface ForgeInput {
   brief: Brief;
@@ -177,46 +187,80 @@ function buildForgeUserPrompt(input: ForgeInput): string {
   return sections.join('\n\n---\n\n');
 }
 
-/** Model used for all forge artifact generation (Anthropic API directly). */
-const FORGE_MODEL_ID = 'claude-sonnet-4-6-20250514';
+/** Model label for display (uses whatever model the Claude CLI is configured with). */
+const FORGE_MODEL_LABEL = 'claude-cli';
 
-export async function runForge(input: ForgeInput): Promise<ForgeOutput> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error('ANTHROPIC_API_KEY is required for the Forge. Set it in your environment.');
-  }
-
-  const client = new Anthropic({ apiKey });
-  const modelId = FORGE_MODEL_ID;
-  const userPrompt = buildForgeUserPrompt(input);
-
-  const generateArtifact = async (spec: ArtifactSpec): Promise<ForgeArtifact> => {
-    const response = await client.messages.create({
-      model: modelId,
-      max_tokens: 4096,
-      system: spec.systemPrompt,
-      messages: [{ role: 'user', content: userPrompt }],
+function runClaude(prompt: string, systemPrompt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const fullPrompt = `${systemPrompt}\n\n---\n\n${prompt}`;
+    const proc = spawn('claude', ['-p', '-'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: claudeEnv(),
     });
 
-    const content = response.content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n\n');
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+    proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+
+    const timeout = setTimeout(() => {
+      proc.kill('SIGTERM');
+      reject(new Error('Claude CLI timed out after 2 minutes'));
+    }, 120_000);
+
+    proc.on('close', (code) => {
+      clearTimeout(timeout);
+      if (code !== 0) {
+        reject(new Error(`Claude CLI exited with code ${code}${stderr ? ` — ${stderr.slice(0, 500)}` : ''}`));
+        return;
+      }
+      resolve(stdout.trim());
+    });
+
+    proc.on('error', (err) => {
+      clearTimeout(timeout);
+      reject(new Error(`Claude CLI failed to start: ${err.message}`));
+    });
+
+    proc.stdin.write(fullPrompt);
+    proc.stdin.end();
+  });
+}
+
+export async function runForge(input: ForgeInput, competitionId: string): Promise<ForgeOutput> {
+  const userPrompt = buildForgeUserPrompt(input);
+
+  // Initialize all artifacts as queued
+  const initial: ProgressMap = Object.fromEntries(
+    ARTIFACT_SPECS.map((s) => [s.type, 'queued' as ArtifactStatus])
+  ) as ProgressMap;
+  forgeProgressStore.set(competitionId, initial);
+
+  const generateArtifact = async (spec: ArtifactSpec): Promise<ForgeArtifact> => {
+    // Mark as generating
+    const prog = forgeProgressStore.get(competitionId);
+    if (prog) prog[spec.type] = 'generating';
+
+    try {
+      const content = await runClaude(userPrompt, spec.systemPrompt);
+      if (prog) prog[spec.type] = 'done';
+      return { type: spec.type, title: spec.title, content, generatedAt: new Date().toISOString() };
+    } catch (err) {
+      if (prog) prog[spec.type] = 'error';
+      throw err;
+    }
+  };
+
+  try {
+    // Generate all 6 artifacts in parallel
+    const artifacts = await Promise.all(ARTIFACT_SPECS.map(generateArtifact));
 
     return {
-      type: spec.type,
-      title: spec.title,
-      content,
+      forgeModel: FORGE_MODEL_LABEL,
+      artifacts,
       generatedAt: new Date().toISOString(),
     };
-  };
-
-  // Generate all 6 artifacts in parallel
-  const artifacts = await Promise.all(ARTIFACT_SPECS.map(generateArtifact));
-
-  return {
-    forgeModel: modelId,
-    artifacts,
-    generatedAt: new Date().toISOString(),
-  };
+  } finally {
+    setTimeout(() => forgeProgressStore.delete(competitionId), 5 * 60 * 1000);
+  }
 }

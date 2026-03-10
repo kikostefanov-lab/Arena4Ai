@@ -722,6 +722,7 @@ function ScoreDrawer({
   const hasForge = result.forge != null;
   const [forging, setForging] = useState(false);
   const [forgeError, setForgeError] = useState<string | null>(null);
+  const [forgeProgress, setForgeProgress] = useState<Record<string, string> | null>(null);
   const forgePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => () => { if (forgePollRef.current) clearInterval(forgePollRef.current); }, []);
 
@@ -1412,6 +1413,34 @@ function ScoreDrawer({
                     <div style={{ fontSize: '0.72rem', color: '#8896ab', lineHeight: 1.6, maxWidth: '400px', margin: '0 auto 1.2rem' }}>
                       Review the presentations, scores, and synthesis above. When you&apos;re ready, forge the winning solution into build-ready artifacts.
                     </div>
+                    {forging && (
+                      <div style={{ marginBottom: '1.5rem', textAlign: 'left', display: 'inline-block' }}>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '2px', color: '#8896ab', marginBottom: '0.6rem' }}>
+                          FORGING ARTIFACTS
+                        </div>
+                        {[
+                          { type: 'roadmap', label: 'Roadmap' },
+                          { type: 'task_graph', label: 'Task Graph' },
+                          { type: 'repo_blueprint', label: 'Repo Blueprint' },
+                          { type: 'api_contracts', label: 'API Contracts' },
+                          { type: 'risk_register', label: 'Risk Register' },
+                          { type: 'decision_log', label: 'Decision Log' },
+                        ].map(({ type, label }) => {
+                          const status = forgeProgress?.[type] ?? 'queued';
+                          return (
+                            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
+                              <span style={{ fontSize: '0.75rem', color: status === 'done' ? '#22c55e' : status === 'generating' ? '#eab308' : status === 'error' ? '#ef4444' : '#4a5568', flexShrink: 0, width: '1rem', textAlign: 'center' }}>
+                                {status === 'done' ? '✓' : status === 'generating' ? '⟳' : status === 'error' ? '✗' : '○'}
+                              </span>
+                              <span style={{ fontSize: '0.7rem', color: status === 'queued' ? '#4a5568' : '#e2e8f0', flex: 1 }}>{label}</span>
+                              <span style={{ fontSize: '0.62rem', color: status === 'done' ? '#22c55e' : status === 'generating' ? '#eab308' : status === 'error' ? '#ef4444' : '#2d4060' }}>
+                                {status === 'done' ? 'done' : status === 'generating' ? 'generating…' : status === 'error' ? 'error' : 'queued'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                     <button
                       disabled={forging}
                       onClick={async () => {
@@ -1434,23 +1463,34 @@ function ScoreDrawer({
                           forgePollRef.current = setInterval(async () => {
                             attempts++;
                             try {
+                              // Poll progress (best-effort, don't fail if 404)
+                              const progRes = await fetch(`${apiBase}/competitions/${competitionId}/forge/progress`);
+                              if (progRes.ok) {
+                                const { progress } = await progRes.json();
+                                setForgeProgress(progress);
+                              }
+
+                              // Poll for completion
                               const pollRes = await fetch(`${apiBase}/competitions/${competitionId}/forge`);
                               if (pollRes.ok) {
                                 const data = await pollRes.json();
                                 if (data.status === 'complete' && data.forge) {
                                   clearInterval(forgePollRef.current!); forgePollRef.current = null;
+                                  setForgeProgress(null);
                                   onForgeComplete?.(data.forge);
                                   setActiveTab('forge');
                                   setForging(false);
                                 }
                               } else if (pollRes.status === 404) {
                                 clearInterval(forgePollRef.current!); forgePollRef.current = null;
+                                setForgeProgress(null);
                                 setForgeError('Forge failed server-side. Check the API server logs for details.');
                                 setForging(false);
                               }
                             } catch { /* network error, keep polling */ }
                             if (attempts >= 60) {
                               clearInterval(forgePollRef.current!); forgePollRef.current = null;
+                              setForgeProgress(null);
                               setForgeError('Forge timed out after 3 minutes.');
                               setForging(false);
                             }

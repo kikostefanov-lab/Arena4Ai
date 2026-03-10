@@ -8,7 +8,7 @@ import { repo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { applyPreset } from '../../brief/presets.js';
-import { runForge } from '../../forge/forge-orchestrator.js';
+import { runForge, getForgeProgress } from '../../forge/forge-orchestrator.js';
 import type { ForgeInput } from '../../forge/forge-orchestrator.js';
 
 export const competitionsRouter = Router();
@@ -124,7 +124,7 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     repo.countEvents(id),
     repo.getResult(id),
   ]);
-  res.json({ id: comp.id, state: comp.state, brief: comp.brief, teams: comp.teams, eventCount, result });
+  res.json({ id: comp.id, state: comp.state, brief: comp.brief, teams: comp.teams, startedAt: comp.startedAt, eventCount, result });
 });
 
 // GET /competitions/:id/events — full event history for replay/analysis
@@ -201,7 +201,7 @@ competitionsRouter.post('/:id/forge', requireApiKey, async (req: Request, res: R
   };
 
   // Run forge asynchronously — return immediately
-  runForge(forgeInput)
+  runForge(forgeInput, id)
     .then(async (forgeOutput) => {
       await repo.saveForge(id, forgeOutput);
       await repo.updateState(id, CompetitionState.FORGE_COMPLETE);
@@ -238,6 +238,17 @@ competitionsRouter.get('/:id/forge', async (req: Request, res: Response) => {
   }
 
   res.json({ status: 'complete', forge: result.forge as ForgeOutput });
+});
+
+// GET /competitions/:id/forge/progress — per-artifact progress during forging
+competitionsRouter.get('/:id/forge/progress', (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const progress = getForgeProgress(id);
+  if (!progress) {
+    res.status(404).json({ error: 'No forge in progress for this competition' });
+    return;
+  }
+  res.json({ progress });
 });
 
 // DELETE /competitions/:id — remove a competition and all its data
