@@ -195,7 +195,7 @@ export default async function AnalyticsPage() {
                 }}>
                   <div style={{
                     position: 'absolute', top: '0.8rem', right: '0.9rem',
-                    fontSize: '1.4rem', opacity: 0.15,
+                    fontSize: '1.4rem', opacity: 0.7,
                   }}>
                     {icon}
                   </div>
