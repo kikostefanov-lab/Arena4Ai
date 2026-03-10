@@ -606,11 +606,10 @@ export default function NewCompetitionPage() {
           <div style={{
             marginBottom: '1rem',
             background: '#111827',
-            border: '1px solid #1e2d45',
+            border: examplePanelOpen ? '1px solid #2d4060' : '1px solid #1e2d45',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
-            ...(examplePanelOpen ? { borderColor: '#2d4060' } : {}),
           }}>
             {/* Toggle header */}
             <button
@@ -726,11 +725,10 @@ export default function NewCompetitionPage() {
           <div style={{
             marginBottom: '1rem',
             background: '#111827',
-            border: '1px solid #1e2d45',
+            border: expandedStep === 1 ? '1px solid #2d4060' : '1px solid #1e2d45',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
-            ...(expandedStep === 1 ? { borderColor: '#2d4060' } : {}),
           }}>
             {/* Step header */}
             <div
@@ -789,7 +787,7 @@ export default function NewCompetitionPage() {
                           className={`format-card ${active ? 'active' : ''}`}
                           onClick={() => applyPreset(f)}
                           style={{
-                            borderColor: active ? meta.color : '#1e2d45',
+                            border: `1.5px solid ${active ? meta.color : '#1e2d45'}`,
                             background: active ? `linear-gradient(135deg, ${meta.color}10, ${meta.color}05)` : '#111827',
                             boxShadow: active ? `0 0 20px ${meta.glowColor}, 0 4px 12px rgba(0,0,0,0.3)` : '0 2px 8px rgba(0,0,0,0.2)',
                           }}
@@ -829,7 +827,7 @@ export default function NewCompetitionPage() {
                     onChange={(e) => setTitle(e.target.value)}
                     onBlur={() => touch('title')}
                     placeholder="e.g. Cheapest NYC Flight · FizzBuzz Sprint · GPU Comparison"
-                    style={{ borderColor: touched.has('title') && errors.title ? '#ef4444' : undefined }}
+                    style={{ border: touched.has('title') && errors.title ? '1px solid #ef4444' : undefined }}
                   />
                   {touched.has('title') && errors.title && (
                     <p style={{ color: '#ef4444', fontSize: '0.6rem', marginTop: '0.25rem', margin: '0.2rem 0 0' }}>
@@ -923,7 +921,7 @@ export default function NewCompetitionPage() {
                     onBlur={() => touch('problem')}
                     rows={4}
                     placeholder={"Describe the challenge — can be anything:\n• Code: Build a REST API for task management\n• Research: Find the cheapest flight from Chicago to NYC next Friday\n• Compare: Which GPU offers the best price/performance under $400?\n• Writing: Draft a product launch announcement for..."}
-                    style={{ resize: 'vertical', lineHeight: 1.6, borderColor: touched.has('problem') && errors.problem ? '#ef4444' : undefined }}
+                    style={{ resize: 'vertical', lineHeight: 1.6, border: touched.has('problem') && errors.problem ? '1px solid #ef4444' : undefined }}
                   />
                   {touched.has('problem') && errors.problem && (
                     <p style={{ color: '#ef4444', fontSize: '0.6rem', marginTop: '0.25rem', margin: '0.2rem 0 0' }}>
@@ -1032,11 +1030,10 @@ export default function NewCompetitionPage() {
           <div style={{
             marginBottom: '1rem',
             background: '#111827',
-            border: '1px solid #1e2d45',
+            border: expandedStep === 2 ? '1px solid #2d4060' : '1px solid #1e2d45',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
-            ...(expandedStep === 2 ? { borderColor: '#2d4060' } : {}),
           }}>
             {/* Step header */}
             <div
@@ -1224,11 +1221,10 @@ export default function NewCompetitionPage() {
           <div style={{
             marginBottom: '2rem',
             background: '#111827',
-            border: '1px solid #1e2d45',
+            border: expandedStep === 3 ? '1px solid #2d4060' : '1px solid #1e2d45',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
-            ...(expandedStep === 3 ? { borderColor: '#2d4060' } : {}),
           }}>
             {/* Step header */}
             <div
@@ -1290,7 +1286,7 @@ export default function NewCompetitionPage() {
                             className={`model-card ${active ? 'active' : ''}`}
                             onClick={() => setTeamAModel(m)}
                             style={{
-                              borderColor: active ? meta.color : '#1e2d45',
+                              border: `1px solid ${active ? meta.color : '#1e2d45'}`,
                               boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
                               background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#111827',
                             }}
@@ -1359,7 +1355,7 @@ export default function NewCompetitionPage() {
                             className={`model-card ${active ? 'active' : ''}`}
                             onClick={() => setTeamBModel(m)}
                             style={{
-                              borderColor: active ? meta.color : '#1e2d45',
+                              border: `1px solid ${active ? meta.color : '#1e2d45'}`,
                               boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
                               background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#111827',
                             }}
