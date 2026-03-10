@@ -1321,6 +1321,37 @@ function ScoreDrawer({
                       </span>
                     </div>
 
+                    {/* Forged by badge + Download All */}
+                    {result.forge && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                        <span style={{
+                          fontSize: '0.6rem', fontWeight: 700, letterSpacing: '1px',
+                          color: '#eab308', background: 'rgba(234,179,8,0.1)',
+                          border: '1px solid rgba(234,179,8,0.25)', borderRadius: '4px',
+                          padding: '0.15rem 0.5rem',
+                        }}>
+                          ⚒ Forged by {result.forge.forgeModel}
+                        </span>
+                        <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>
+                          {new Date(result.forge.generatedAt).toLocaleDateString()}
+                        </span>
+                        <a
+                          href={`/api/competitions/${competitionId}/forge/download`}
+                          download
+                          style={{
+                            marginLeft: 'auto',
+                            fontSize: '0.65rem', fontWeight: 700, color: '#8896ab',
+                            background: 'rgba(136,150,171,0.08)', border: '1px solid rgba(136,150,171,0.2)',
+                            borderRadius: '4px', padding: '0.3rem 0.7rem',
+                            textDecoration: 'none', letterSpacing: '0.5px',
+                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                          }}
+                        >
+                          ⬇ Download All (.zip)
+                        </a>
+                      </div>
+                    )}
+
                     {/* Artifact cards */}
                     {result.forge!.artifacts.map((artifact) => (
                       <details key={artifact.type} style={{
@@ -1379,29 +1410,21 @@ function ScoreDrawer({
                       </details>
                     ))}
 
-                    {/* Download all button */}
+                    {/* Download all button — single zip via API */}
                     <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                      <button
-                        onClick={() => {
-                          result.forge!.artifacts.forEach((artifact) => {
-                            const blob = new Blob([artifact.content], { type: 'text/markdown' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${artifact.type}.md`;
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          });
-                        }}
+                      <a
+                        href={`/api/competitions/${competitionId}/forge/download`}
+                        download
                         style={{
                           fontSize: '0.72rem', fontWeight: 700, color: '#eab308',
                           background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)',
-                          borderRadius: '6px', padding: '0.5rem 1.2rem', cursor: 'pointer',
-                          fontFamily: 'inherit',
+                          borderRadius: '6px', padding: '0.5rem 1.2rem',
+                          textDecoration: 'none', fontFamily: 'inherit',
+                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
                         }}
                       >
-                        ⬇ Download All Artifacts
-                      </button>
+                        ⬇ Download All (.zip)
+                      </a>
                     </div>
                   </>
                 ) : (

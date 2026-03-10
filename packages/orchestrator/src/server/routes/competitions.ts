@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
+import archiver from 'archiver';
 import { briefSchema, CompetitionFormat, CompetitionState } from '@arena/shared';
 import type { Team, TeamPresentation, ForgeOutput } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
@@ -249,6 +250,34 @@ competitionsRouter.get('/:id/forge/progress', (req: Request, res: Response) => {
     return;
   }
   res.json({ progress });
+});
+
+// GET /competitions/:id/forge/download — zip of all 6 forge artifacts
+competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const result = await repo.getResult(id);
+  if (!result?.forge) {
+    res.status(404).json({ error: 'No forge results for this competition' });
+    return;
+  }
+
+  const forge = result.forge as ForgeOutput;
+  const comp = await repo.getCompetition(id);
+  const title = (comp?.brief as { title?: string } | null)?.title ?? id;
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${slug}-forge.zip"`);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.on('error', (err) => { console.error(`[arena] forge zip error for ${id}:`, err.message); res.destroy(err); });
+  archive.pipe(res);
+
+  for (const artifact of forge.artifacts) {
+    archive.append(artifact.content, { name: `${artifact.type}.md` });
+  }
+
+  await archive.finalize();
 });
 
 // DELETE /competitions/:id — remove a competition and all its data
