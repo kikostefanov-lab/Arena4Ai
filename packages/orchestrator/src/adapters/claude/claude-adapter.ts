@@ -107,6 +107,7 @@ export class ClaudeAdapter extends BaseAdapter {
 
       child.on('error', (err) => {
         this.process = null;
+        this.emitErrorEvent(`Failed to start Claude: ${err.message}`);
         reject(err);
       });
     });

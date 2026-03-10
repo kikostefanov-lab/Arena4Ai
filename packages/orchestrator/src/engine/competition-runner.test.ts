@@ -70,7 +70,16 @@ vi.mock('../adapters/claude/claude-personas.js', () => ({
 
 // Mock synthesizeDeliverables
 vi.mock('../synthesis/merge-engine.js', () => ({
-  synthesizeDeliverables: vi.fn().mockResolvedValue('# Synthesis\n\nBest of both.'),
+  synthesizeDeliverables: vi.fn().mockResolvedValue({
+    synthesis: '# Synthesis\n\nBest of both.',
+    overallRationale: 'Combines the best of both approaches.',
+    perCriterion: [],
+  }),
+}));
+
+// Mock presentation-generator
+vi.mock('../presentation/presentation-generator.js', () => ({
+  generateAllPresentations: vi.fn().mockResolvedValue([]),
 }));
 
 // ── Fake adapter ─────────────────────────────────────────────────────────────
@@ -84,6 +93,7 @@ class FakeAdapter extends EventEmitter {
   startExecution: ReturnType<typeof vi.fn>;
   collectDeliverables: ReturnType<typeof vi.fn>;
   shutdown = vi.fn().mockResolvedValue(undefined);
+  cleanupWorkdir = vi.fn().mockResolvedValue(undefined);
   on = vi.fn((event: string, listener: (...args: unknown[]) => void) => {
     return super.on(event, listener);
   });
@@ -168,6 +178,7 @@ describe('CompetitionRunner', () => {
       CompetitionState.RUNNING,
       CompetitionState.TIME_UP,
       CompetitionState.COLLECTING,
+      CompetitionState.PRESENTING,
       CompetitionState.JUDGING,
       CompetitionState.SCORED,
       CompetitionState.SYNTHESIZING,
@@ -204,7 +215,11 @@ describe('CompetitionRunner', () => {
     });
     const result = await synthRunner.run();
     expect(synthesizeDeliverables).toHaveBeenCalledOnce();
-    expect(result.synthesis).toBe('# Synthesis\n\nBest of both.');
+    expect(result.synthesis).toEqual({
+      synthesis: '# Synthesis\n\nBest of both.',
+      overallRationale: 'Combines the best of both approaches.',
+      perCriterion: [],
+    });
   });
 
   it('emits a result event with the final CompetitionResult', async () => {

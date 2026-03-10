@@ -86,9 +86,9 @@ describe.skipIf(!hasDb)('CompetitionRepository', () => {
     expect(list.some((c) => c.id === competitionId)).toBe(true);
   });
 
-  it('getEvents with afterSeq returns only newer events', async () => {
+  it('getEvents with offset skips that many events', async () => {
     const all = await repo.getEvents(competitionId);
-    const afterFirst = await repo.getEvents(competitionId, all[0].seq);
+    const afterFirst = await repo.getEvents(competitionId, 1);
     expect(afterFirst).toHaveLength(all.length - 1);
   });
 });

@@ -1,9 +1,42 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { readdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import type { ArenaEvent, Brief, Deliverable, ModelAdapter } from '@arena/shared';
+import { readdir, readFile, stat, rm } from 'node:fs/promises';
+import { join, relative } from 'node:path';
+import { randomUUID } from 'node:crypto';
+import { EventType, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
 import type { SandboxManager } from '../sandbox/sandbox-manager.js';
+
+const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
+const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
+
+/** Recursively walk `dir`, returning all text files under size limits. */
+async function walkDir(
+  dir: string,
+  base: string,
+  budget: { remaining: number },
+): Promise<Array<{ path: string; content: string }>> {
+  const results: Array<{ path: string; content: string }> = [];
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return results;
+  }
+  for (const entry of entries) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...await walkDir(full, base, budget));
+    } else if (entry.isFile()) {
+      const info = await stat(full).catch(() => null);
+      if (!info || info.size > MAX_FILE_BYTES || info.size > budget.remaining) continue;
+      const content = await readFile(full, 'utf-8').catch(() => null);
+      if (content === null || content.includes('\0')) continue; // skip binary
+      budget.remaining -= info.size;
+      results.push({ path: relative(base, full), content });
+    }
+  }
+  return results;
+}
 
 /**
  * Abstract base class for all model adapters.
@@ -39,18 +72,33 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   injectBrief(brief: Brief, persona: string): Promise<void> {
     const constraints =
       brief.constraints.length > 0
-        ? `\nConstraints:\n${brief.constraints.map((c) => `- ${c}`).join('\n')}`
+        ? `Constraints:\n${brief.constraints.map((c) => `- ${c}`).join('\n')}`
         : '';
 
     const deliverables = brief.deliverables.map((d) => `- ${d}`).join('\n');
 
+    const rubric = brief.rubric.criteria
+      .map((c) => `- ${c.id} (weight ${Math.round(c.weight * 100)}%): ${c.description}`)
+      .join('\n');
+
     this.promptText = [
       `[PERSONA]\n${persona}`,
+      `[COMPETITION RULES]`,
+      'You are an autonomous AI agent in a timed competition. There is NO human to interact with.',
+      'Do NOT ask clarifying questions — no one will answer. Make reasonable assumptions and start working immediately.',
+      'Your ONLY goal is to produce deliverable files in the current working directory before time runs out.',
       `[BRIEF: ${brief.title}]`,
       brief.problem,
       constraints,
-      `[DELIVERABLES]\n${deliverables}`,
-      `[TIME LIMIT] ${Math.round(brief.timeLimitMs / 60_000)} minutes`,
+      [
+        '[DELIVERABLES]',
+        '⚠️  CRITICAL: A judge will collect files from your current working directory after the timer ends.',
+        'You MUST save all deliverables as files in the current working directory.',
+        'Do NOT just think or print your answer — write it to a file. If you submit no files, your score is 0.',
+        deliverables,
+      ].join('\n'),
+      `[SCORING RUBRIC]\nYour work will be judged on the following criteria:\n${rubric}`,
+      `[TIME LIMIT] ${Math.round(brief.timeLimitMs / 60_000)} minutes — work fast and write your output files before time runs out.`,
     ]
       .filter(Boolean)
       .join('\n\n');
@@ -59,20 +107,8 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   }
 
   async collectDeliverables(): Promise<Deliverable> {
-    let files: Array<{ path: string; content: string }> = [];
-    try {
-      const entries = await readdir(this.workdir, { withFileTypes: true });
-      files = await Promise.all(
-        entries
-          .filter((e) => e.isFile())
-          .map(async (e) => ({
-            path: e.name,
-            content: await readFile(join(this.workdir, e.name), 'utf-8'),
-          })),
-      );
-    } catch {
-      // workdir may not exist if sandbox was skipped
-    }
+    const budget = { remaining: MAX_TOTAL_BYTES };
+    const files = await walkDir(this.workdir, this.workdir, budget);
 
     return {
       teamId: this.teamId,
@@ -101,5 +137,32 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   /** Convenience: emit a typed ArenaEvent to all listeners. */
   protected emitArenaEvent(event: ArenaEvent): void {
     this.emit('arenaEvent', event);
+  }
+
+  /**
+   * Emit an ERROR arena event so the UI shows the failure inline in the lane.
+   * Also emits 'error' on the EventEmitter so the runner can transition to FAILED.
+   */
+  protected emitErrorEvent(message: string): void {
+    this.emitArenaEvent({
+      eventId: randomUUID(),
+      competitionId: this.competitionId,
+      teamId: this.teamId,
+      timestamp: new Date().toISOString(),
+      type: EventType.ERROR,
+      payload: { error: message },
+      metadata: {},
+    });
+    this.emit('error', new Error(message));
+  }
+
+  /**
+   * Clean up the temp workdir after the competition ends.
+   * No-op if sandbox is active (container teardown handles it).
+   * Safe to call even if workdir doesn't exist.
+   */
+  async cleanupWorkdir(): Promise<void> {
+    if (this.sandbox) return; // container teardown handles cleanup
+    await rm(this.workdir, { recursive: true, force: true }).catch(() => {});
   }
 }

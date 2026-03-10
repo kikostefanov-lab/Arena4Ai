@@ -1,4 +1,6 @@
 import { pgTable, text, jsonb, timestamp, serial, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import type { TeamPresentation } from '@arena/shared';
+import type { ForgeOutput } from '@arena/shared';
 
 export const competitions = pgTable('competitions', {
   id:          text('id').primaryKey(),
@@ -29,10 +31,25 @@ export interface TeamDeliverable {
 }
 
 export const results = pgTable('results', {
-  competitionId: text('competition_id').primaryKey().references(() => competitions.id),
-  scorecards:    jsonb('scorecards').notNull(),
-  winnerId:      text('winner_id'),
-  summary:       text('summary'),
-  synthesis:     text('synthesis'),
-  deliverables:  jsonb('deliverables').$type<TeamDeliverable[]>(),
+  competitionId:  text('competition_id').primaryKey().references(() => competitions.id),
+  scorecards:     jsonb('scorecards').notNull(),
+  winnerId:       text('winner_id'),
+  summary:        text('summary'),
+  synthesis:      text('synthesis'),
+  presentations:  jsonb('presentations').$type<TeamPresentation[]>(),
+  forge:          jsonb('forge').$type<ForgeOutput>(),
+  deliverables:   jsonb('deliverables').$type<TeamDeliverable[]>(),
+});
+
+export const tournaments = pgTable('tournaments', {
+  id:          text('id').primaryKey(),
+  name:        text('name').notNull(),
+  brief:       jsonb('brief').notNull(),
+  teams:       jsonb('teams').notNull(),
+  type:        text('type').notNull().default('ROUND_ROBIN'),
+  state:       text('state').notNull().default('PENDING'),
+  matchIds:    jsonb('match_ids').notNull().default([]),
+  rankings:    jsonb('rankings'),
+  createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
 });

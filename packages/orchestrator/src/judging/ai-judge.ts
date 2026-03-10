@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import type { Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { computeOverallScore } from './score-aggregator.js';
+import { extractJson } from '../utils/extract-json.js';
 
 export const JUDGE_IDS = {
   automated: 'automated',
@@ -98,12 +99,9 @@ export async function aiJudge(
       setTimeout(() => { child.kill(); reject(new Error('AI judge timed out')); }, 120_000);
     });
 
-    const jsonMatch = stdout.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]) as { scores: CriterionScore[] };
-      if (Array.isArray(parsed.scores)) {
-        scores = parsed.scores;
-      }
+    const parsed = JSON.parse(extractJson(stdout)) as { scores: CriterionScore[] };
+    if (Array.isArray(parsed.scores)) {
+      scores = parsed.scores;
     }
   } catch {
     // Swallow — fallback scores already set above.

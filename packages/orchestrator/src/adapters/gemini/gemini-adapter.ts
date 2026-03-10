@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
+import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
 export interface GeminiAdapterOptions {
@@ -78,18 +80,27 @@ export class GeminiAdapter extends BaseAdapter {
 
       const errRl = createInterface({ input: child.stderr! });
       errRl.on('line', (line) => {
-        if (!line.trim()) return;
-        this.emitArenaEvent(normalizeLine(`Error: ${line}`, ctx));
+        const clean = line.trim();
+        if (!clean) return;
+        // Only surface stderr lines that are genuine errors; drop startup noise silently.
+        if (ERROR_LINE_RE.test(clean)) {
+          this.emitArenaEvent(makeEvent(EventType.ERROR, { error: clean }, ctx));
+        }
       });
 
       child.on('close', (code) => {
+        rl.close();
+        errRl.close();
         this.process = null;
         if (code === 0 || code === null) resolve();
         else reject(new Error(`Gemini process exited with code ${code}`));
       });
 
       child.on('error', (err) => {
+        rl.close();
+        errRl.close();
         this.process = null;
+        this.emitErrorEvent(`Failed to start Gemini: ${err.message}`);
         reject(err);
       });
     });

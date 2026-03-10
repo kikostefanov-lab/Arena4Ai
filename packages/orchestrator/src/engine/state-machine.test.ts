@@ -10,7 +10,8 @@ describe('transition()', () => {
       [CompetitionState.LAUNCHING, CompetitionState.RUNNING],
       [CompetitionState.RUNNING, CompetitionState.TIME_UP],
       [CompetitionState.TIME_UP, CompetitionState.COLLECTING],
-      [CompetitionState.COLLECTING, CompetitionState.JUDGING],
+      [CompetitionState.COLLECTING, CompetitionState.PRESENTING],
+      [CompetitionState.PRESENTING, CompetitionState.JUDGING],
       [CompetitionState.JUDGING, CompetitionState.SCORED],
       [CompetitionState.SCORED, CompetitionState.SYNTHESIZING],
       [CompetitionState.SYNTHESIZING, CompetitionState.COMPLETE],
@@ -26,7 +27,11 @@ describe('transition()', () => {
     );
   });
 
-  it('throws when trying to leave COMPLETE', () => {
+  it('allows COMPLETE → FORGING (human-triggered forge)', () => {
+    expect(transition(CompetitionState.COMPLETE, CompetitionState.FORGING)).toBe(CompetitionState.FORGING);
+  });
+
+  it('throws when trying to go COMPLETE → DRAFT', () => {
     expect(() => transition(CompetitionState.COMPLETE, CompetitionState.DRAFT)).toThrow(
       /invalid transition/i,
     );

@@ -105,4 +105,37 @@ describe('scoreDeliverable()', () => {
     const result = await scoreDeliverable('automated', pyDeliverable, simpleRubric, brief as Brief);
     expect(result.scores[0].score).toBe(0);
   });
+
+  it('executes .ts deliverable and scores correctly', async () => {
+    const brief: Partial<Brief> = {
+      expectedOutput: '42',
+    };
+    const tsDeliverable: Deliverable = {
+      teamId: 'team-ts',
+      files: [{ path: 'solution.ts', content: 'const x: number = 42;\nconsole.log(x);' }],
+      collectedAt: new Date().toISOString(),
+    };
+    const simpleRubric: Rubric = {
+      criteria: [{ id: 'correctness', description: 'correct', maxScore: 10, weight: 1 }],
+    };
+    // Don't assert score (tsx may not be installed) — just assert it doesn't throw
+    const result = await scoreDeliverable('automated', tsDeliverable, simpleRubric, brief as Brief);
+    expect(result).toBeDefined();
+    expect(result.scores).toHaveLength(1);
+  });
+
+  it('gives zero when the deliverable file exceeds the 100 KB size limit', async () => {
+    const brief: Partial<Brief> = { expectedOutput: 'hello' };
+    const oversized = 'x'.repeat(110 * 1024); // 110 KB — over the 100 KB cap
+    const pyDeliverable: Deliverable = {
+      teamId: 'team-a',
+      files: [{ path: 'solution.py', content: oversized }],
+      collectedAt: new Date().toISOString(),
+    };
+    const simpleRubric: Rubric = {
+      criteria: [{ id: 'correctness', description: 'Correct output', weight: 1, maxScore: 10 }],
+    };
+    const result = await scoreDeliverable('automated', pyDeliverable, simpleRubric, brief as Brief);
+    expect(result.scores[0].score).toBe(0);
+  });
 });

@@ -8,7 +8,7 @@ type RawScorecard = {
   teamId: string;
   finalScore: number;
   rank: number;
-  judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number }> }>;
+  judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
 };
 
 type TeamDeliverable = {
@@ -16,24 +16,40 @@ type TeamDeliverable = {
   files: { path: string; content: string }[];
 };
 
+type RawSynthesis = {
+  synthesis: string;
+  perCriterion: Array<{ criterionId: string; teamId: string; rationale: string }>;
+} | null;
+
 function normalizeResult(
   scorecards: RawScorecard[],
   winnerId: string | null,
-  summary?: string | null,
-  synthesis?: string | null,
-  deliverables?: TeamDeliverable[] | null,
+  opts?: {
+    summary?: string | null;
+    synthesis?: RawSynthesis;
+    presentations?: unknown[] | null;
+    forge?: unknown | null;
+    deliverables?: TeamDeliverable[] | null;
+  },
 ) {
   return {
     winnerId,
     teams: scorecards.map((sc) => ({
       teamId: sc.teamId,
       totalScore: sc.finalScore,
-      criteriaScores: sc.judgeResults?.[0]?.scores ?? [],
+      criteriaScores: sc.judgeResults?.[0]?.scores?.map(s => ({
+        criterionId: s.criterionId,
+        score: s.score,
+        maxScore: s.maxScore ?? 10,
+        commentary: s.commentary ?? '',
+      })) ?? [],
       rank: sc.rank,
     })),
-    ...(summary ? { summary } : {}),
-    ...(synthesis ? { synthesis } : {}),
-    ...(deliverables ? { deliverables } : {}),
+    ...(opts?.summary ? { summary: opts.summary } : {}),
+    ...(opts?.synthesis ? { synthesis: opts.synthesis } : {}),
+    ...(opts?.presentations ? { presentations: opts.presentations } : {}),
+    ...(opts?.forge ? { forge: opts.forge } : {}),
+    ...(opts?.deliverables ? { deliverables: opts.deliverables } : {}),
   };
 }
 
@@ -74,10 +90,13 @@ export function attachWebSocket(server: Server): void {
       }
     };
 
-    // Replay past events from Postgres
+    // Replay past events from Postgres.
+    // lastSeq is a per-competition event count (number of events the client has already seen),
+    // not a global DB serial — this is stable across concurrent competitions.
     try {
       const pastEvents = await repo.getEvents(competitionId, lastSeq > 0 ? lastSeq : undefined);
-      for (const row of pastEvents) {
+      for (let i = 0; i < pastEvents.length; i++) {
+        const row = pastEvents[i];
         send({
           eventId: row.id,
           competitionId: row.competitionId,
@@ -86,12 +105,10 @@ export function attachWebSocket(server: Server): void {
           type: row.type,
           payload: row.payload,
           metadata: row.metadata,
-          _seq: row.seq,
+          _seq: lastSeq + i + 1,
         });
       }
-      if (pastEvents.length > 0) {
-        lastSeq = pastEvents[pastEvents.length - 1].seq;
-      }
+      lastSeq += pastEvents.length;
     } catch (err) {
       console.error('[ws] replay error:', err);
     }
@@ -101,7 +118,13 @@ export function attachWebSocket(server: Server): void {
       const result = await repo.getResult(competitionId);
       if (result) {
         const scorecards = (result.scorecards as RawScorecard[]) ?? [];
-        const normalized = normalizeResult(scorecards, result.winnerId ?? null, result.summary, result.synthesis, result.deliverables as TeamDeliverable[] | null);
+        const normalized = normalizeResult(scorecards, result.winnerId ?? null, {
+          summary: result.summary,
+          synthesis: result.synthesis as RawSynthesis,
+          presentations: result.presentations as unknown[] | null,
+          forge: result.forge,
+          deliverables: result.deliverables as TeamDeliverable[] | null,
+        });
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
         return;
@@ -119,9 +142,12 @@ export function attachWebSocket(server: Server): void {
       const onArenaEvent = (event: unknown) => { seq++; send({ ...(event as object), _seq: seq }); };
       const onStateChange = (state: unknown) => { send({ type: 'STATE_CHANGE', state }); };
       const onResult = (r: unknown) => {
-        // r is CompetitionResult from the runner: { competition, scorecards, winner, synthesis, deliverables }
-        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; synthesis?: string | null; deliverables?: TeamDeliverable[] };
-        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, undefined, runnerResult.synthesis, runnerResult.deliverables);
+        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; presentations?: unknown[]; synthesis?: RawSynthesis; deliverables?: TeamDeliverable[] };
+        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, {
+          synthesis: runnerResult.synthesis,
+          presentations: runnerResult.presentations,
+          deliverables: runnerResult.deliverables,
+        });
         send({ type: 'COMPLETE', result: normalized });
         ws.close();
       };

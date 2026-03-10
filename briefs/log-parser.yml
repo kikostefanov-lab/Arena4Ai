@@ -1,0 +1,62 @@
+id: log-parser
+title: Nginx Log Analyzer
+format: HACKATHON
+problem: |
+  Write a Python script that parses nginx access log lines from stdin and
+  prints a summary report to stdout.
+
+  Input: nginx combined log format lines, e.g.:
+    192.168.1.1 - - [01/Jan/2026:00:00:01 +0000] "GET /index.html HTTP/1.1" 200 1234
+
+  Output (exactly this format):
+  Section 1 — Top 5 IPs by request count:
+    IP <ip> <count> requests
+
+  Section 2 — Status code breakdown:
+    <code> <count>
+  (sorted ascending by status code)
+
+  Section 3 — Requests per minute (only minutes with ≥1 request):
+    <YYYY-MM-DD HH:MM> <count>
+  (sorted ascending by timestamp)
+
+  Example output:
+    Top 5 IPs:
+    IP 192.168.1.1 42 requests
+    IP 10.0.0.2 31 requests
+    ...
+
+    Status codes:
+    200 150
+    404 12
+    500 3
+
+    Requests per minute:
+    2026-01-01 00:00 45
+    2026-01-01 00:01 38
+
+constraints:
+  - Python only
+  - Read from stdin, print to stdout
+  - No external libraries
+  - Handle malformed lines gracefully (skip them)
+
+deliverables:
+  - solution.py
+
+timeLimitMs: 1800000
+
+rubric:
+  criteria:
+    - id: correctness
+      description: Correctly parses log format and computes all three sections
+      maxScore: 10
+      weight: 0.5
+    - id: code-quality
+      description: Clean, well-structured code with good error handling
+      maxScore: 10
+      weight: 0.3
+    - id: completeness
+      description: All three report sections present and formatted correctly
+      maxScore: 10
+      weight: 0.2

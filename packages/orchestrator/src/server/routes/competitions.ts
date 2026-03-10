@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { briefSchema, CompetitionFormat } from '@arena/shared';
-import type { Team } from '@arena/shared';
+import { briefSchema, CompetitionFormat, CompetitionState } from '@arena/shared';
+import type { Team, TeamPresentation, ForgeOutput } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
 import { requireApiKey } from '../middleware/auth.js';
 import { applyPreset } from '../../brief/presets.js';
+import { runForge } from '../../forge/forge-orchestrator.js';
+import type { ForgeInput } from '../../forge/forge-orchestrator.js';
 
 export const competitionsRouter = Router();
 
@@ -16,7 +18,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   const body = req.body as {
     brief?: unknown;
     teams?: unknown;
-    options?: { skipSandbox?: boolean; claudeBin?: string; logDir?: string };
+    options?: { skipSandbox?: boolean; claudeBin?: string; logDir?: string; commentary?: boolean };
   };
 
   const briefResult = briefSchema.safeParse(body.brief);
@@ -45,9 +47,11 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   })) as [Team, Team];
 
   const options: RunOptions = {
-    skipSandbox: body.options?.skipSandbox ?? false,
+    // Default to skipping Docker sandbox — callers can opt in via options.skipSandbox: false
+    skipSandbox: body.options?.skipSandbox ?? true,
     claudeBin: body.options?.claudeBin,
     logDir: body.options?.logDir,
+    commentary: body.options?.commentary ?? false,
   };
 
   const rawBrief = briefResult.data;
@@ -82,7 +86,8 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     repo.saveResult(competitionId, {
       scorecards: result.scorecards,
       winner: result.winner,
-      synthesis: result.synthesis,   // synthesized hybrid solution
+      presentations: result.presentations,
+      synthesis: result.synthesis,
       deliverables: result.deliverables,
     }).catch(console.error);
   });
@@ -125,7 +130,8 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
 // GET /competitions/:id/events — full event history for replay/analysis
 competitionsRouter.get('/:id/events', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const afterSeq = req.query.afterSeq ? Number(req.query.afterSeq) : undefined;
+  // offset = number of events already seen by the caller (per-competition count, not a global DB serial)
+  const offset = req.query.afterSeq ? Number(req.query.afterSeq) : undefined;
 
   const comp = await repo.getCompetition(id);
   if (!comp) {
@@ -133,8 +139,105 @@ competitionsRouter.get('/:id/events', async (req: Request, res: Response) => {
     return;
   }
 
-  const evts = await repo.getEvents(id, afterSeq);
+  const evts = await repo.getEvents(id, offset);
   res.json(evts);
+});
+
+// In-memory guard to prevent concurrent forge runs for the same competition
+const forgingInProgress = new Set<string>();
+
+// POST /competitions/:id/forge — trigger forge generation
+competitionsRouter.post('/:id/forge', requireApiKey, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+
+  if (forgingInProgress.has(id)) {
+    res.status(409).json({ error: 'Forge is already in progress for this competition' });
+    return;
+  }
+
+  const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
+  if (!comp) {
+    res.status(404).json({ error: 'Competition not found' });
+    return;
+  }
+
+  // If already forged, return existing (check before state gate)
+  if (result?.forge) {
+    res.json({ forge: result.forge, alreadyForged: true });
+    return;
+  }
+
+  // Must be in COMPLETE state to forge
+  if (comp.state !== CompetitionState.COMPLETE) {
+    res.status(409).json({ error: `Cannot forge — competition is in ${comp.state} state (must be COMPLETE)` });
+    return;
+  }
+
+  if (!result) {
+    res.status(409).json({ error: 'No results found for this competition' });
+    return;
+  }
+
+  // Determine winning team
+  const teams = (comp.teams as Team[]) ?? [];
+  const winnerId = result.winnerId;
+  const winnerTeam = teams.find((t) => t.id === winnerId) ?? teams[0];
+  if (!winnerTeam) {
+    res.status(409).json({ error: 'No teams found in competition data' });
+    return;
+  }
+
+  // Mark as forging (in-memory + DB)
+  forgingInProgress.add(id);
+  await repo.updateState(id, CompetitionState.FORGING);
+
+  // Build forge input
+  const forgeInput: ForgeInput = {
+    brief: comp.brief as ForgeInput['brief'],
+    presentations: (result.presentations as TeamPresentation[]) ?? [],
+    synthesis: result.synthesis as ForgeInput['synthesis'],
+    winner: { teamId: winnerTeam.id, model: winnerTeam.model },
+    deliverables: (result.deliverables as ForgeInput['deliverables']) ?? [],
+  };
+
+  // Run forge asynchronously — return immediately
+  runForge(forgeInput)
+    .then(async (forgeOutput) => {
+      await repo.saveForge(id, forgeOutput);
+      await repo.updateState(id, CompetitionState.FORGE_COMPLETE);
+      console.log(`[arena] forge complete for ${id} — ${forgeOutput.artifacts.length} artifacts`);
+    })
+    .catch(async (err: Error) => {
+      console.error(`[arena] forge failed for ${id}:`, err.message);
+      await repo.updateState(id, CompetitionState.COMPLETE).catch(console.error);
+    })
+    .finally(() => {
+      forgingInProgress.delete(id);
+    });
+
+  res.status(202).json({ ok: true, message: 'Forge started' });
+});
+
+// GET /competitions/:id/forge — get forge results
+competitionsRouter.get('/:id/forge', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+
+  const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
+  if (!comp) {
+    res.status(404).json({ error: 'Competition not found' });
+    return;
+  }
+
+  if (!result?.forge) {
+    if (comp.state === CompetitionState.FORGING) {
+      res.json({ status: 'forging', forge: null });
+      return;
+    }
+    res.status(404).json({ error: 'No forge results found' });
+    return;
+  }
+
+  res.json({ status: 'complete', forge: result.forge as ForgeOutput });
 });
 
 // DELETE /competitions/:id — remove a competition and all its data

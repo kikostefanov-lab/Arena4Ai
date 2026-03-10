@@ -1,60 +1,115 @@
 import { EventType, type ArenaEvent } from '@arena/shared';
-import {
-  stripAnsi,
-  makeEvent,
-  FILE_PATH_RE,
-  ERROR_LINE_RE,
-  type NormalizeContext,
-} from '../normalizer-utils.js';
+import { stripAnsi, makeEvent, type NormalizeContext } from '../normalizer-utils.js';
 
 /**
- * Normalise a single line of Codex CLI stdout into a universal ArenaEvent.
+ * Stateful normaliser for the Codex CLI output stream.
  *
- * Codex CLI outputs plain text rather than JSON-lines. We infer event types
- * from content patterns, with a JSON-parse fallback for structured output.
+ * Codex outputs everything to stderr in a structured plain-text format:
+ *
+ *   OpenAI Codex v...       ← banner / header (skip)
+ *   --------                ← separator (skip)
+ *   workdir: /tmp/...       ← config dump (skip)
+ *   ...
+ *   --------                ← end of config (skip)
+ *   user                    ← prompt echo (skip)
+ *   [PERSONA] ...           ← prompt echo (skip)
+ *   codex                   ← keyword → following lines are Codex reasoning
+ *   Implementing this now…  ← REASONING
+ *   exec                    ← keyword → next line is shell command
+ *   /bin/zsh -lc 'ls -la'…  ← TOOL_CALL (bash)
+ *   [output lines]          ← REASONING (exec output)
+ *   file update             ← keyword → next line is file path
+ *   A /tmp/…/solution.py    ← FILE_CREATE
+ *   [diff lines]            ← ignored
+ *   tokens used             ← end marker
+ *   9,065                   ← ignored
  */
-export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
-  const clean = stripAnsi(line.trim());
+type Mode = 'header' | 'suppressing' | 'reasoning' | 'exec_cmd' | 'exec_output' | 'file_update' | 'skip';
 
-  if (!clean) {
-    return makeEvent(EventType.REASONING, { text: '' }, ctx);
+const SEP_RE = /^-{4,}$/;
+// If Codex doesn't emit the expected separators within this many lines, give up
+// waiting and transition to suppressing (prompt-echo suppression) anyway.
+const HEADER_LINE_LIMIT = 80;
+
+export class CodexNormalizer {
+  private mode: Mode = 'header';
+  private separatorCount = 0;
+  private headerLineCount = 0;
+  private ctx: NormalizeContext;
+
+  constructor(ctx: NormalizeContext) {
+    this.ctx = ctx;
   }
 
-  // Try JSON first — some Codex versions may output structured data.
-  try {
-    const msg = JSON.parse(clean) as Record<string, unknown>;
+  /** Process one line; returns an ArenaEvent or null if the line should be suppressed. */
+  addLine(rawLine: string): ArenaEvent | null {
+    const line = stripAnsi(rawLine.trim());
+    if (!line) return null;
 
-    if (msg.type === 'error' || msg.error) {
-      return makeEvent(EventType.ERROR, { error: msg.error ?? msg }, ctx);
+    // ── Banner / header block ──────────────────────────────────────────────
+    // Suppress everything until the second separator line (4+ dashes).
+    // Fall back after HEADER_LINE_LIMIT lines in case format differs.
+    if (this.mode === 'header') {
+      ++this.headerLineCount;
+      if (SEP_RE.test(line) && ++this.separatorCount >= 2) {
+        this.mode = 'suppressing';
+      } else if (this.headerLineCount >= HEADER_LINE_LIMIT) {
+        this.mode = 'suppressing';
+      }
+      return null;
     }
 
-    if (msg.type === 'tool_use' || msg.tool) {
-      return makeEvent(
-        EventType.TOOL_CALL,
-        { tool: msg.tool ?? msg.name, input: msg.input ?? {} },
-        ctx,
-      );
+    // ── Post-header prompt echo suppression ───────────────────────────────
+    // Suppress the prompt echo block until the first "codex" keyword.
+    if (this.mode === 'suppressing') {
+      if (line.toLowerCase() === 'codex') this.mode = 'reasoning';
+      return null;
     }
 
-    const text = String(msg.text ?? msg.content ?? clean);
-    return makeEvent(
-      FILE_PATH_RE.test(text) ? EventType.FILE_CREATE : EventType.REASONING,
-      { text },
-      ctx,
-    );
-  } catch {
-    // Not JSON — treat as plain text
-  }
+    // ── Keyword dispatch (compute toLowerCase once) ───────────────────────
+    const lower = line.toLowerCase();
 
-  if (ERROR_LINE_RE.test(clean)) {
-    return makeEvent(EventType.ERROR, { error: clean }, ctx);
-  }
+    if (lower === 'codex') { this.mode = 'reasoning'; return null; }
+    if (lower === 'exec') { this.mode = 'exec_cmd'; return null; }
+    if (lower === 'file update') { this.mode = 'file_update'; return null; }
+    if (lower.startsWith('tokens used')) { this.mode = 'skip'; return null; }
 
-  if (FILE_PATH_RE.test(clean)) {
-    return makeEvent(EventType.FILE_CREATE, { text: clean }, ctx);
-  }
+    // ── Mode-specific parsing ─────────────────────────────────────────────
+    switch (this.mode) {
+      case 'reasoning':
+        // Suppress diff/patch noise that leaks into reasoning
+        if (line.startsWith('apply_patch') || line.startsWith('Success.')) return null;
+        return makeEvent(EventType.REASONING, { text: line }, this.ctx);
 
-  return makeEvent(EventType.REASONING, { text: clean }, ctx);
+      case 'exec_cmd': {
+        // e.g. "/bin/zsh -lc 'ls -la' in /tmp/arena-..."
+        // Strip the " in /path" suffix for the display
+        const cmd = line.replace(/ in \/.*$/, '').trim();
+        this.mode = 'exec_output';
+        return makeEvent(EventType.TOOL_CALL, { tool: 'bash', input: { command: cmd } }, this.ctx);
+      }
+
+      case 'exec_output':
+        // Exec output lines go as REASONING (visible in feed)
+        return makeEvent(EventType.REASONING, { text: line }, this.ctx);
+
+      case 'file_update': {
+        // "A /path/to/file.py" or "M /path/to/file.py"
+        const fileMatch = line.match(/^[AM]\s+(.+)$/);
+        const path = fileMatch ? fileMatch[1] : line;
+        // Strip absolute temp dir prefix for display
+        const displayPath = path.replace(/^.*\/arena-team-[ab]-[^/]+\//, '');
+        this.mode = 'skip'; // skip the diff lines
+        return makeEvent(EventType.FILE_CREATE, { text: displayPath }, this.ctx);
+      }
+
+      case 'skip':
+        // Diff lines after file_update — all suppressed.
+        // Keyword transitions are handled above before reaching this switch.
+        return null;
+
+      default:
+        return null;
+    }
+  }
 }
-
-export type { NormalizeContext };

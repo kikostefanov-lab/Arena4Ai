@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS tournaments (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  brief JSONB NOT NULL,
+  teams JSONB NOT NULL,
+  type TEXT NOT NULL DEFAULT 'ROUND_ROBIN',
+  state TEXT NOT NULL DEFAULT 'PENDING',
+  match_ids JSONB NOT NULL DEFAULT '[]',
+  rankings JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ
+);

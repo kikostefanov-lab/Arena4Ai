@@ -1,0 +1,48 @@
+id: concurrent-crawler-001
+title: Concurrent Web Crawler
+format: HACKATHON
+
+problem: |
+  Build a concurrent web crawler in Python that:
+  1. Accepts a seed URL and max depth as command-line arguments
+  2. Uses asyncio + aiohttp for concurrent fetching
+  3. Respects robots.txt before visiting any page
+  4. Deduplicates URLs (don't visit the same URL twice)
+  5. Outputs a JSON sitemap to stdout with each page's: title, status code,
+     list of links found, and crawl time in ms
+
+  Handle redirects, timeouts (5s per request), and encoding errors gracefully.
+  The crawler must process at least 20 URLs in under 30 seconds when run
+  against a live site.
+
+constraints:
+  - Use asyncio + aiohttp only (no Scrapy, Playwright, etc.)
+  - Respect robots.txt — skip disallowed paths
+  - Deduplicate by normalized URL
+  - Output valid JSON to stdout, logs to stderr
+  - Handle connection errors, timeouts, and encoding issues without crashing
+
+deliverables:
+  - crawler.py
+  - README.md
+
+timeLimitMs: 2700000  # 45 minutes
+
+rubric:
+  criteria:
+    - id: correctness
+      description: Crawler fetches pages, deduplicates, and outputs valid JSON sitemap
+      maxScore: 10
+      weight: 0.4
+    - id: performance
+      description: Concurrent design — processes 20+ URLs in under 30 seconds
+      maxScore: 10
+      weight: 0.3
+    - id: error-handling
+      description: Gracefully handles timeouts, redirects, encoding errors, robots.txt
+      maxScore: 10
+      weight: 0.2
+    - id: code-quality
+      description: Clean async Python, typed, documented
+      maxScore: 10
+      weight: 0.1

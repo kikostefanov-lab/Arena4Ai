@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
 import { extname } from 'node:path';
+import { writeFile, unlink } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
 import { normalizeOutput } from '../adapters/normalizer-utils.js';
 import { computeOverallScore } from './score-aggregator.js';
@@ -7,18 +9,29 @@ import { computeOverallScore } from './score-aggregator.js';
 /** Maps file extension to interpreter command + args (content piped via stdin). */
 const STDIN_RUNNERS: Record<string, [string, ...string[]]> = {
   '.py': ['python3', '-'],
-  '.js': ['node', '-'],
+  '.js': ['node', '--max-old-space-size=64', '-'],
   '.rb': ['ruby', '-'],
-  '.sh': ['bash', '-s'],
+  '.sh': ['bash', '--restricted', '-s'],
 };
+
+/** Reject files larger than this before attempting execution. */
+const MAX_EXEC_BYTES = 100 * 1024; // 100 KB
+/** Cap collected stdout to prevent memory exhaustion from runaway output. */
+const MAX_STDOUT_BYTES = 512 * 1024; // 512 KB
 
 function executeContent(content: string, ext: string): Promise<{ stdout: string; ok: boolean }> {
   const runner = STDIN_RUNNERS[ext];
   if (!runner) return Promise.resolve({ stdout: '', ok: false });
 
+  // Guard: refuse to execute oversized content
+  if (Buffer.byteLength(content, 'utf8') > MAX_EXEC_BYTES) {
+    return Promise.resolve({ stdout: '', ok: false });
+  }
+
   return new Promise((resolve) => {
-    const child = spawn(runner[0], runner.slice(1));
+    const child = spawn(runner[0], runner.slice(1), { stdio: ['pipe', 'pipe', 'ignore'] });
     const chunks: Buffer[] = [];
+    let collectedBytes = 0;
     let settled = false;
 
     const settle = (result: { stdout: string; ok: boolean }) => {
@@ -29,15 +42,73 @@ function executeContent(content: string, ext: string): Promise<{ stdout: string;
     };
 
     const timer = setTimeout(() => {
-      child.kill();
+      child.kill('SIGKILL');
       settle({ stdout: '', ok: false });
     }, 10_000);
 
-    child.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+    child.stdout.on('data', (chunk: Buffer) => {
+      collectedBytes += chunk.length;
+      if (collectedBytes <= MAX_STDOUT_BYTES) {
+        chunks.push(chunk);
+      } else {
+        child.kill('SIGKILL');
+        settle({ stdout: '', ok: false });
+      }
+    });
     child.stdin.end(content, 'utf8');
     child.on('close', (code) => settle({ stdout: Buffer.concat(chunks).toString('utf8'), ok: code === 0 }));
     child.on('error', () => settle({ stdout: '', ok: false }));
   });
+}
+
+/**
+ * Execute TypeScript content by writing it to a temp file and running tsx.
+ * tsx does not support stdin execution, so a temp file is required.
+ */
+async function executeTsContent(content: string): Promise<{ stdout: string; ok: boolean }> {
+  if (Buffer.byteLength(content, 'utf8') > MAX_EXEC_BYTES) {
+    return { stdout: '', ok: false };
+  }
+
+  const tmpFile = `/tmp/arena-ts-${randomUUID()}.ts`;
+
+  try {
+    await writeFile(tmpFile, content, 'utf8');
+
+    return await new Promise((resolve) => {
+      const child = spawn('tsx', [tmpFile], { stdio: ['ignore', 'pipe', 'ignore'] });
+      const chunks: Buffer[] = [];
+      let collectedBytes = 0;
+      let settled = false;
+
+      const settle = (result: { stdout: string; ok: boolean }) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(result);
+      };
+
+      const timer = setTimeout(() => {
+        child.kill('SIGKILL');
+        settle({ stdout: '', ok: false });
+      }, 10_000);
+
+      child.stdout.on('data', (chunk: Buffer) => {
+        collectedBytes += chunk.length;
+        if (collectedBytes <= MAX_STDOUT_BYTES) {
+          chunks.push(chunk);
+        } else {
+          child.kill('SIGKILL');
+          settle({ stdout: '', ok: false });
+        }
+      });
+
+      child.on('close', (code) => settle({ stdout: Buffer.concat(chunks).toString('utf8'), ok: code === 0 }));
+      child.on('error', () => settle({ stdout: '', ok: false }));
+    });
+  } finally {
+    await unlink(tmpFile).catch(() => {});
+  }
 }
 
 /**
@@ -49,13 +120,15 @@ async function scoreByExecution(
   expectedOutput: string,
   maxScore: number,
 ): Promise<{ score: number; commentary: string }> {
-  const runnable = files.find((f) => STDIN_RUNNERS[extname(f.path)]);
+  const runnable = files.find((f) => STDIN_RUNNERS[extname(f.path)] || extname(f.path) === '.ts');
   if (!runnable) {
-    return { score: 0, commentary: 'No runnable file found (supported: .py .js .rb .sh).' };
+    return { score: 0, commentary: 'No runnable file found (supported: .py .js .rb .sh .ts).' };
   }
 
   const ext = extname(runnable.path);
-  const { stdout, ok } = await executeContent(runnable.content, ext);
+  const { stdout, ok } = ext === '.ts'
+    ? await executeTsContent(runnable.content)
+    : await executeContent(runnable.content, ext);
 
   if (!ok) {
     return { score: 0, commentary: `Execution of ${runnable.path} failed or timed out.` };
@@ -93,8 +166,13 @@ export async function scoreDeliverable(
   const totalChars = deliverable.files.reduce((s, f) => s + f.content.length, 0);
   const fileCount = deliverable.files.length;
 
+  const activeCriteria = rubric.criteria.filter(
+    (c) => c.description.trim() && c.weight >= 0.05,
+  );
+  const filteredRubric: Rubric = { criteria: activeCriteria };
+
   const scores: CriterionScore[] = await Promise.all(
-    rubric.criteria.map(async (criterion) => {
+    activeCriteria.map(async (criterion) => {
       let raw = 0;
       let commentary: string;
 
@@ -131,6 +209,6 @@ export async function scoreDeliverable(
     judgeId,
     teamId: deliverable.teamId,
     scores,
-    overallScore: computeOverallScore(scores, rubric),
+    overallScore: computeOverallScore(scores, filteredRubric),
   };
 }

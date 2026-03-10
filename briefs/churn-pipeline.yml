@@ -1,0 +1,58 @@
+id: churn-pipeline-001
+title: Churn Prediction Pipeline
+format: HACKATHON
+
+problem: |
+  Build a complete ML pipeline in a single Python file that:
+
+  1. Generates synthetic SaaS churn data for 1,000 customers with these
+     features: tenure (months), MoM usage change (%), support tickets
+     (last 90 days), plan tier (1/2/3), payment failures (last 6 months),
+     and a churn label (binary).
+
+  2. Trains 3 models:
+     (a) Logistic regression — implement gradient descent from scratch using
+         numpy only. NO sklearn for this model.
+     (b) Random forest using sklearn.
+     (c) XGBoost or LightGBM.
+
+  3. For each model, outputs: confusion matrix, ROC AUC score, and a
+     one-line interpretation.
+
+  4. Identifies the top 3 churn predictors using feature importance.
+
+  5. Outputs a risk-sorted customer list (top 20 at-risk customers with
+     their risk scores).
+
+  The from-scratch logistic regression must achieve ROC AUC > 0.70 on the
+  test set.
+
+constraints:
+  - Logistic regression must use hand-implemented gradient descent — no sklearn LogisticRegression
+  - All 3 models must be trained and evaluated in a single runnable script
+  - Synthetic data generation must produce realistic distributions (not all uniform random)
+  - Script must run end-to-end with: python churn_pipeline.py
+
+deliverables:
+  - churn_pipeline.py
+
+timeLimitMs: 3600000  # 60 minutes
+
+rubric:
+  criteria:
+    - id: ml-correctness
+      description: All 3 models train and evaluate correctly; metrics are accurate
+      maxScore: 10
+      weight: 0.35
+    - id: from-scratch-implementation
+      description: Gradient descent logistic regression is correct and achieves ROC AUC > 0.70
+      maxScore: 10
+      weight: 0.3
+    - id: pipeline-quality
+      description: Clean, runnable single-file pipeline with clear output
+      maxScore: 10
+      weight: 0.2
+    - id: insights
+      description: Feature importance and customer risk list are actionable and correctly computed
+      maxScore: 10
+      weight: 0.15

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
+import './new-competition.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -79,38 +81,310 @@ const FORMAT_META: Record<Format, { emoji: string; label: string; subtitle: stri
 };
 
 const MODEL_META: Record<Model, { emoji: string; label: string; color: string; glowColor: string }> = {
-  claude: { emoji: '🔵', label: 'Claude', color: '#3b82f6', glowColor: 'rgba(59,130,246,0.4)'  },
+  claude: { emoji: '🟠', label: 'Claude', color: '#f97316', glowColor: 'rgba(249,115,22,0.4)'  },
   codex:  { emoji: '🟢', label: 'Codex',  color: '#22c55e', glowColor: 'rgba(34,197,94,0.4)'   },
   gemini: { emoji: '🟣', label: 'Gemini', color: '#a855f7', glowColor: 'rgba(168,85,247,0.4)'  },
 };
 
-const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'guardian', 'pioneer'];
+const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'researcher', 'adversarial', 'defender', 'pioneer'];
 
 const FONT = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
+
+// ─── ExampleChips ─────────────────────────────────────────────────────────────
+
+function ExampleChips({
+  examples, value, onChange,
+}: {
+  examples: string[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const existing = new Set(value.split('\n').map((s) => s.trim()).filter(Boolean));
+  const available = examples.filter((e) => !existing.has(e));
+  if (available.length === 0) return null;
+
+  const add = (ex: string) => {
+    const trimmed = value.trim();
+    onChange(trimmed ? `${trimmed}\n${ex}` : ex);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.4rem' }}>
+      <span style={{ fontSize: '0.5rem', color: '#4a5568', alignSelf: 'center', flexShrink: 0 }}>e.g.</span>
+      {available.map((ex) => (
+        <button
+          key={ex}
+          type="button"
+          onClick={() => add(ex)}
+          style={{
+            fontSize: '0.5rem', padding: '0.15rem 0.45rem',
+            background: 'rgba(30,45,69,0.6)', color: '#8896ab',
+            border: '1px solid #1e2d45', borderRadius: '4px',
+            cursor: 'pointer', fontFamily: FONT,
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(249,115,22,0.1)';
+            (e.currentTarget as HTMLButtonElement).style.color = '#f97316';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(249,115,22,0.4)';
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(30,45,69,0.6)';
+            (e.currentTarget as HTMLButtonElement).style.color = '#8896ab';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = '#1e2d45';
+          }}
+        >
+          + {ex}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── Minimal YAML parser for brief files ─────────────────────────────────────
+
+interface ParsedBriefYaml {
+  title?: string;
+  format?: string;
+  timeLimitMs?: number;
+  problem?: string;
+  constraints?: string[];
+  deliverables?: string[];
+  expectedOutput?: string;
+  rubric?: {
+    criteria: Array<{
+      id: string;
+      description: string;
+      maxScore: number;
+      weight: number;
+    }>;
+  };
+}
+
+/**
+ * Minimal YAML parser for the specific brief format used in briefs/*.yml.
+ * Handles: scalar strings, block scalars (|), sequence lists, and the
+ * rubric.criteria nested structure. Not a general YAML parser.
+ */
+function parseSimpleBriefYaml(text: string): ParsedBriefYaml {
+  const result: ParsedBriefYaml = {};
+  const lines = text.split('\n');
+
+  let i = 0;
+
+  const extractQuotedOrBare = (raw: string): string => {
+    const trimmed = raw.trim();
+    // Remove inline comments (bare values only)
+    const m = trimmed.match(/^"((?:[^"\\]|\\.)*)"/) ?? trimmed.match(/^'((?:[^'\\]|\\.)*)'/) ;
+    if (m) return m[1].replace(/\\"/g, '"').replace(/\\'/g, "'");
+    // Bare value — strip inline comment
+    return trimmed.replace(/\s*#.*$/, '').trim();
+  };
+
+  const readBlockScalar = (baseIndent: number): string => {
+    const parts: string[] = [];
+    while (i < lines.length) {
+      const line = lines[i];
+      const stripped = line.replace(/\t/g, '  ');
+      if (stripped.trim() === '') {
+        parts.push('');
+        i++;
+        continue;
+      }
+      const indent = stripped.search(/\S/);
+      if (indent <= baseIndent && stripped.trim() !== '') break;
+      parts.push(stripped.slice(baseIndent + 2)); // remove common indent
+      i++;
+    }
+    // Trim trailing blank lines
+    while (parts.length > 0 && parts[parts.length - 1].trim() === '') parts.pop();
+    return parts.join('\n');
+  };
+
+  const readSequence = (baseIndent: number): string[] => {
+    const items: string[] = [];
+    while (i < lines.length) {
+      const line = lines[i];
+      const stripped = line.replace(/\t/g, '  ');
+      if (stripped.trim() === '') { i++; continue; }
+      const indent = stripped.search(/\S/);
+      if (indent <= baseIndent && !stripped.trimStart().startsWith('-')) break;
+      if (indent <= baseIndent) break;
+      const seqMatch = stripped.trimStart().match(/^-\s*(.*)/);
+      if (!seqMatch) break;
+      items.push(extractQuotedOrBare(seqMatch[1]));
+      i++;
+    }
+    return items;
+  };
+
+  const readCriteria = (baseIndent: number): ParsedBriefYaml['rubric'] => {
+    const criteria: NonNullable<ParsedBriefYaml['rubric']>['criteria'] = [];
+    let current: Partial<(typeof criteria)[0]> | null = null;
+
+    while (i < lines.length) {
+      const line = lines[i];
+      const stripped = line.replace(/\t/g, '  ');
+      if (stripped.trim() === '') { i++; continue; }
+      const indent = stripped.search(/\S/);
+      if (indent <= baseIndent) break;
+
+      const trimmed = stripped.trimStart();
+      if (trimmed.startsWith('- id:')) {
+        if (current && current.id) criteria.push(current as (typeof criteria)[0]);
+        current = {};
+        current.id = extractQuotedOrBare(trimmed.slice(5));
+        i++;
+      } else if (trimmed.startsWith('id:') && current) {
+        current.id = extractQuotedOrBare(trimmed.slice(3));
+        i++;
+      } else if (trimmed.startsWith('description:') && current) {
+        current.description = extractQuotedOrBare(trimmed.slice(12));
+        i++;
+      } else if (trimmed.startsWith('maxScore:') && current) {
+        current.maxScore = Number(extractQuotedOrBare(trimmed.slice(9)));
+        i++;
+      } else if (trimmed.startsWith('weight:') && current) {
+        current.weight = Number(extractQuotedOrBare(trimmed.slice(7)));
+        i++;
+      } else {
+        i++;
+      }
+    }
+    if (current && current.id) criteria.push(current as (typeof criteria)[0]);
+    return { criteria };
+  };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const stripped = line.replace(/\t/g, '  ');
+    if (stripped.trim() === '' || stripped.trimStart().startsWith('#')) { i++; continue; }
+    const indent = stripped.search(/\S/);
+    if (indent > 0) { i++; continue; } // skip indented lines at top level
+
+    const trimmed = stripped.trim();
+
+    if (trimmed.startsWith('title:')) {
+      result.title = extractQuotedOrBare(trimmed.slice(6));
+      i++;
+    } else if (trimmed.startsWith('format:')) {
+      result.format = extractQuotedOrBare(trimmed.slice(7));
+      i++;
+    } else if (trimmed.startsWith('timeLimitMs:')) {
+      result.timeLimitMs = Number(extractQuotedOrBare(trimmed.slice(12)));
+      i++;
+    } else if (trimmed.startsWith('problem:')) {
+      const val = extractQuotedOrBare(trimmed.slice(8));
+      i++;
+      if (val === '|' || val === '>') {
+        result.problem = readBlockScalar(indent);
+      } else {
+        result.problem = val;
+      }
+    } else if (trimmed.startsWith('expectedOutput:')) {
+      const val = extractQuotedOrBare(trimmed.slice(15));
+      i++;
+      if (val === '|' || val === '>') {
+        result.expectedOutput = readBlockScalar(indent);
+      } else {
+        result.expectedOutput = val;
+      }
+    } else if (trimmed === 'constraints:') {
+      i++;
+      result.constraints = readSequence(indent);
+    } else if (trimmed === 'deliverables:') {
+      i++;
+      result.deliverables = readSequence(indent);
+    } else if (trimmed === 'rubric:') {
+      i++;
+      // Look for criteria: inside rubric block
+      while (i < lines.length) {
+        const inner = lines[i].replace(/\t/g, '  ');
+        if (inner.trim() === '') { i++; continue; }
+        const innerIndent = inner.search(/\S/);
+        if (innerIndent === 0) break; // back to top level
+        if (inner.trimStart() === 'criteria:') {
+          i++;
+          result.rubric = readCriteria(innerIndent);
+          break;
+        } else {
+          i++;
+        }
+      }
+    } else {
+      i++;
+    }
+  }
+
+  return result;
+}
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function NewCompetitionPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Step expansion state
   const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
 
+  // Example briefs panel
+  const [examplePanelOpen, setExamplePanelOpen] = useState(false);
+
+  // YAML import
+  const yamlFileInputRef = useRef<HTMLInputElement>(null);
+  const [importToast, setImportToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  // AI brief generator
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [ideaText, setIdeaText] = useState('');
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState('');
+
   // Form state
   const [title, setTitle] = useState('');
   const [format, setFormat] = useState<Format>('SPRINT');
   const [problem, setProblem] = useState('');
-  const [constraints, setConstraints] = useState('');
-  const [deliverables, setDeliverables] = useState('');
-  const [timeLimitMins, setTimeLimitMins] = useState(5);
-  const [criteria, setCriteria] = useState<RubricCriterion[]>(defaultCriteria);
+  const [constraints, setConstraints] = useState(FORMAT_PRESETS['SPRINT'].constraints);
+  const [deliverables, setDeliverables] = useState(FORMAT_PRESETS['SPRINT'].deliverables);
+  const [timeLimitMins, setTimeLimitMins] = useState(FORMAT_PRESETS['SPRINT'].timeLimitMins);
+  const [criteria, setCriteria] = useState<RubricCriterion[]>(FORMAT_PRESETS['SPRINT'].criteria);
   const [expectedOutput, setExpectedOutput] = useState('');
   const [teamAModel, setTeamAModel] = useState<Model>('claude');
   const [teamAPersona, setTeamAPersona] = useState('speedrunner');
   const [teamBModel, setTeamBModel] = useState<Model>('claude');
   const [teamBPersona, setTeamBPersona] = useState('architect');
+
+  // Pre-fill from a previous competition if ?from=<id>
+  useEffect(() => {
+    const fromId = searchParams.get('from');
+    if (!fromId) return;
+    fetch(`/api/competitions/${fromId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { brief?: { title?: string; problem?: string; format?: string; timeLimitMs?: number; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] } }; teams?: { model?: string }[] } | null) => {
+        if (!data?.brief) return;
+        const b = data.brief;
+        if (b.title) setTitle(b.title);
+        if (b.problem) setProblem(b.problem);
+        if (b.format && ['SPRINT','HACKATHON','RELAY_RACE','RED_VS_BLUE'].includes(b.format)) setFormat(b.format as Format);
+        if (b.timeLimitMs) setTimeLimitMins(Math.round(b.timeLimitMs / 60000));
+        if (b.constraints?.length) setConstraints(b.constraints.join('\n'));
+        if (b.deliverables?.length) setDeliverables(b.deliverables.join('\n'));
+        if (b.rubric?.criteria?.length) setCriteria(b.rubric.criteria);
+        if (data.teams?.length === 2) {
+          const [a, b2] = data.teams;
+          const [aProvider, aPersona] = (a.model ?? '').split(':');
+          const [bProvider, bPersona] = (b2.model ?? '').split(':');
+          if (aProvider) setTeamAModel(aProvider as Model);
+          if (aPersona) setTeamAPersona(aPersona);
+          if (bProvider) setTeamBModel(bProvider as Model);
+          if (bPersona) setTeamBPersona(bPersona);
+        }
+      })
+      .catch(() => {});
+  }, [searchParams]);
 
   const applyPreset = (f: Format) => {
     setFormat(f);
@@ -119,6 +393,83 @@ export default function NewCompetitionPage() {
     setConstraints(p.constraints);
     setDeliverables(p.deliverables);
     setCriteria(p.criteria);
+  };
+
+  const loadExample = (brief: ExampleBrief) => {
+    setFormat(brief.format);
+    setTimeLimitMins(brief.timeLimitMins);
+    setProblem(brief.problem);
+    setConstraints(brief.constraints);
+    setDeliverables(brief.deliverables);
+    setExpectedOutput(brief.expectedOutput ?? '');
+    setCriteria(brief.criteria);
+    if (!title.trim()) setTitle(brief.title);
+    setExamplePanelOpen(false);
+  };
+
+  const generateBrief = async () => {
+    if (ideaText.trim().length < 10) return;
+    setGenerating(true);
+    setGenerateError('');
+    try {
+      const res = await fetch('/api/generate-brief', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idea: ideaText, format }),
+      });
+      if (!res.ok) throw new Error('Generation failed');
+      const brief = await res.json();
+      if (brief.title) setTitle(brief.title);
+      if (brief.problem) setProblem(brief.problem);
+      if (brief.constraints) setConstraints(brief.constraints);
+      if (brief.deliverables) setDeliverables(brief.deliverables);
+      if (brief.expectedOutput !== undefined) setExpectedOutput(brief.expectedOutput);
+      if (brief.criteria) setCriteria(brief.criteria);
+      setShowGenerator(false);
+      setIdeaText('');
+    } catch {
+      setGenerateError('Failed to generate brief. Make sure the orchestrator is running.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setImportToast({ type, message });
+    setTimeout(() => setImportToast(null), 4000);
+  };
+
+  const handleYamlImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so same file can be re-imported
+    e.target.value = '';
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        const parsed = parseSimpleBriefYaml(text);
+        if (!parsed.title && !parsed.problem) {
+          showToast('error', 'Could not parse YAML — no title or problem found.');
+          return;
+        }
+        if (parsed.title) setTitle(parsed.title);
+        if (parsed.format && ['SPRINT', 'HACKATHON', 'RELAY_RACE', 'RED_VS_BLUE'].includes(parsed.format)) {
+          setFormat(parsed.format as Format);
+        }
+        if (parsed.timeLimitMs) setTimeLimitMins(Math.round(parsed.timeLimitMs / 60000));
+        if (parsed.problem) setProblem(parsed.problem);
+        if (parsed.constraints?.length) setConstraints(parsed.constraints.join('\n'));
+        if (parsed.deliverables?.length) setDeliverables(parsed.deliverables.join('\n'));
+        if (parsed.expectedOutput !== undefined) setExpectedOutput(parsed.expectedOutput);
+        if (parsed.rubric?.criteria?.length) setCriteria(parsed.rubric.criteria);
+        showToast('success', `Brief "${parsed.title ?? 'untitled'}" imported successfully.`);
+      } catch {
+        showToast('error', 'Failed to parse YAML file. Check the format and try again.');
+      }
+    };
+    reader.onerror = () => showToast('error', 'Failed to read file.');
+    reader.readAsText(file);
   };
 
   const addCriterion = () =>
@@ -145,7 +496,9 @@ export default function NewCompetitionPage() {
           deliverables: deliverables.split('\n').map((s) => s.trim()).filter(Boolean),
           timeLimitMs: timeLimitMins * 60 * 1000,
           rubric: {
-            criteria: criteria.map((c) => ({ ...c, maxScore: Number(c.maxScore), weight: Number(c.weight) })),
+            criteria: criteria
+              .filter((c) => c.id.trim() && c.description.trim())
+              .map((c) => ({ ...c, maxScore: Number(c.maxScore), weight: Number(c.weight) })),
           },
           ...(expectedOutput.trim() ? { expectedOutput: expectedOutput.trim() } : {}),
         },
@@ -174,6 +527,19 @@ export default function NewCompetitionPage() {
     setExpandedStep(step);
   };
 
+  // Touched state for inline validation
+  const [touched, setTouched] = useState<Set<string>>(new Set());
+  const touch = (field: string) => setTouched(prev => new Set([...prev, field]));
+
+  // Validation derived state
+  const errors = {
+    title: !title.trim() ? 'Title is required' : null,
+    problem: !problem.trim() ? 'Problem statement is required' : null,
+    criteria: criteria.filter(c => c.id.trim() && c.description.trim()).length === 0
+      ? 'At least one complete criterion is required' : null,
+  };
+  const hasErrors = Object.values(errors).some(Boolean);
+
   // Check which steps have data filled in
   const step1Done = title.trim().length > 0 && problem.trim().length > 0;
   const step2Done = criteria.length > 0 && criteria.every(c => c.id && c.description);
@@ -185,145 +551,6 @@ export default function NewCompetitionPage() {
       color: '#e2e8f0',
       fontFamily: FONT,
     }}>
-      <style>{`
-        @keyframes pulseGlow {
-          0%, 100% { box-shadow: 0 0 20px rgba(249,115,22,0.3), 0 0 40px rgba(249,115,22,0.1); }
-          50% { box-shadow: 0 0 30px rgba(249,115,22,0.5), 0 0 60px rgba(249,115,22,0.2); }
-        }
-        @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
-        }
-        @keyframes slideDown {
-          from { opacity: 0; max-height: 0; transform: translateY(-8px); }
-          to { opacity: 1; max-height: 2000px; transform: translateY(0); }
-        }
-        @keyframes fadeInUp {
-          from { opacity: 0; transform: translateY(6px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .arena-input {
-          width: 100%;
-          box-sizing: border-box;
-          background: #0d1520;
-          border: 1px solid #1e2d45;
-          border-radius: 6px;
-          padding: 0.55rem 0.85rem;
-          color: #e2e8f0;
-          font-family: ${FONT};
-          font-size: 0.72rem;
-          outline: none;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease;
-        }
-        .arena-input:focus {
-          border-color: #f97316;
-          box-shadow: 0 0 0 3px rgba(249,115,22,0.15), 0 0 12px rgba(249,115,22,0.1);
-        }
-        .arena-input::placeholder {
-          color: #2d4060;
-        }
-        .format-card {
-          cursor: pointer;
-          border-radius: 10px;
-          padding: 1rem 1.1rem;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          border: 1.5px solid #1e2d45;
-          background: #111827;
-          position: relative;
-          overflow: hidden;
-        }
-        .format-card:hover {
-          border-color: #2d4060;
-          transform: translateY(-1px);
-        }
-        .format-card.active {
-          transform: translateY(-2px);
-        }
-        .model-card {
-          cursor: pointer;
-          border-radius: 10px;
-          padding: 1rem;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          border: 1.5px solid #1e2d45;
-          background: #111827;
-          text-align: center;
-          position: relative;
-        }
-        .model-card:hover {
-          border-color: #2d4060;
-          transform: translateY(-1px);
-        }
-        .model-card.active {
-          transform: translateY(-2px);
-        }
-        .step-header {
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          gap: 0.85rem;
-          padding: 0.85rem 0;
-          transition: opacity 0.15s;
-          user-select: none;
-        }
-        .step-header:hover {
-          opacity: 0.85;
-        }
-        .criterion-card {
-          background: #111827;
-          border: 1px solid #1e2d45;
-          border-radius: 8px;
-          padding: 1rem;
-          transition: border-color 0.2s, box-shadow 0.2s;
-          position: relative;
-        }
-        .criterion-card:hover {
-          border-color: #2d4060;
-        }
-        .launch-btn {
-          width: 100%;
-          padding: 1rem;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          font-size: 0.82rem;
-          font-weight: 800;
-          letter-spacing: 3px;
-          text-transform: uppercase;
-          font-family: ${FONT};
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-          position: relative;
-          overflow: hidden;
-        }
-        .launch-btn:not(:disabled):hover {
-          transform: translateY(-1px);
-          animation: pulseGlow 2s ease-in-out infinite;
-        }
-        .launch-btn:disabled {
-          cursor: not-allowed;
-        }
-        .persona-chip {
-          font-size: 0.6rem;
-          padding: 0.25rem 0.6rem;
-          border-radius: 20px;
-          border: 1px solid #1e2d45;
-          background: transparent;
-          color: #8896ab;
-          cursor: pointer;
-          font-family: ${FONT};
-          transition: all 0.2s;
-          white-space: nowrap;
-        }
-        .persona-chip:hover {
-          border-color: #2d4060;
-          color: #e2e8f0;
-        }
-        .persona-chip.active {
-          background: rgba(249,115,22,0.12);
-          border-color: #f97316;
-          color: #f97316;
-        }
-      `}</style>
-
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 1.5rem 4rem' }}>
 
         {/* Header */}
@@ -344,6 +571,154 @@ export default function NewCompetitionPage() {
         </div>
 
         <form onSubmit={handleSubmit}>
+
+          {/* ── Hidden YAML file input ── */}
+          <input
+            ref={yamlFileInputRef}
+            type="file"
+            accept=".yml,.yaml"
+            style={{ display: 'none' }}
+            onChange={handleYamlImport}
+          />
+
+          {/* ── Import toast notification ── */}
+          {importToast && (
+            <div style={{
+              marginBottom: '1rem',
+              padding: '0.6rem 1rem',
+              borderRadius: '8px',
+              fontSize: '0.68rem',
+              fontWeight: 600,
+              animation: 'fadeInUp 0.2s ease-out',
+              background: importToast.type === 'success'
+                ? 'rgba(34,197,94,0.1)'
+                : 'rgba(239,68,68,0.1)',
+              border: `1px solid ${importToast.type === 'success' ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
+              color: importToast.type === 'success' ? '#22c55e' : '#ef4444',
+            }}>
+              {importToast.type === 'success' ? '✓' : '✗'} {importToast.message}
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────────────
+              EXAMPLE BRIEFS PANEL
+          ──────────────────────────────────────────────────────────────────── */}
+          <div style={{
+            marginBottom: '1rem',
+            background: '#111827',
+            border: '1px solid #1e2d45',
+            borderRadius: '12px',
+            overflow: 'hidden',
+            transition: 'border-color 0.2s',
+            ...(examplePanelOpen ? { borderColor: '#2d4060' } : {}),
+          }}>
+            {/* Toggle header */}
+            <button
+              type="button"
+              onClick={() => setExamplePanelOpen((o) => !o)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+                padding: '0.85rem 1.25rem', background: 'none', border: 'none',
+                cursor: 'pointer', fontFamily: FONT, textAlign: 'left',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.8'; }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
+            >
+              <span style={{
+                fontSize: '0.6rem', fontWeight: 700, color: '#f97316',
+                background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)',
+                borderRadius: '4px', padding: '0.15rem 0.45rem', letterSpacing: '0.5px',
+                flexShrink: 0,
+              }}>
+                QUICK START
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0' }}>
+                  Quick start from example
+                </span>
+                <span style={{ fontSize: '0.6rem', color: '#4a5568', marginLeft: '0.5rem' }}>
+                  load a pre-built brief as your starting point
+                </span>
+              </div>
+              <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
+                {examplePanelOpen ? '▲' : '▾'}
+              </span>
+            </button>
+
+            {/* Import YAML button — sits in the panel header row, right-aligned */}
+            <div style={{ padding: '0 1.25rem 0.75rem', display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => yamlFileInputRef.current?.click()}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.35rem',
+                  fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.5px',
+                  padding: '0.3rem 0.75rem', borderRadius: '6px', cursor: 'pointer',
+                  fontFamily: FONT, transition: 'all 0.2s',
+                  background: 'rgba(30,45,69,0.6)', color: '#8896ab',
+                  border: '1px solid #1e2d45',
+                }}
+                onMouseEnter={(e) => {
+                  const btn = e.currentTarget as HTMLButtonElement;
+                  btn.style.background = 'rgba(249,115,22,0.1)';
+                  btn.style.color = '#f97316';
+                  btn.style.borderColor = 'rgba(249,115,22,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  const btn = e.currentTarget as HTMLButtonElement;
+                  btn.style.background = 'rgba(30,45,69,0.6)';
+                  btn.style.color = '#8896ab';
+                  btn.style.borderColor = '#1e2d45';
+                }}
+              >
+                <span>📂</span>
+                <span>Import YAML</span>
+              </button>
+            </div>
+
+            {/* Cards grid */}
+            {examplePanelOpen && (
+              <div style={{
+                padding: '0 1.25rem 1.25rem',
+                animation: 'slideDown 0.3s ease-out',
+              }}>
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                  gap: '0.5rem',
+                }}>
+                  {EXAMPLE_BRIEFS.map((brief: ExampleBrief) => (
+                    <button
+                      key={brief.id}
+                      type="button"
+                      className="example-card"
+                      onClick={() => loadExample(brief)}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
+                        <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>{brief.emoji}</span>
+                        <span style={{
+                          fontSize: '0.45rem', fontWeight: 800, letterSpacing: '0.05em',
+                          padding: '0.15rem 0.35rem', borderRadius: '3px',
+                          background: brief.difficulty === 'SAVAGE' ? 'rgba(239,68,68,0.15)' : brief.difficulty === 'EXTREME' ? 'rgba(249,115,22,0.15)' : 'rgba(234,179,8,0.15)',
+                          color: brief.difficulty === 'SAVAGE' ? '#ef4444' : brief.difficulty === 'EXTREME' ? '#f97316' : '#eab308',
+                        }}>{brief.difficulty}</span>
+                      </div>
+                      <div style={{
+                        fontSize: '0.65rem', fontWeight: 700, color: '#e2e8f0',
+                        marginBottom: '0.2rem', lineHeight: 1.2,
+                      }}>
+                        {brief.title}
+                      </div>
+                      <div style={{ fontSize: '0.52rem', color: '#4a5568' }}>
+                        {brief.category}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* ────────────────────────────────────────────────────────────────────
               STEP 1: BRIEF
@@ -452,26 +827,109 @@ export default function NewCompetitionPage() {
                     className="arena-input"
                     type="text" required value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="e.g. Fibonacci API Challenge"
+                    onBlur={() => touch('title')}
+                    placeholder="e.g. Cheapest NYC Flight · FizzBuzz Sprint · GPU Comparison"
+                    style={{ borderColor: touched.has('title') && errors.title ? '#ef4444' : undefined }}
                   />
+                  {touched.has('title') && errors.title && (
+                    <p style={{ color: '#ef4444', fontSize: '0.6rem', marginTop: '0.25rem', margin: '0.2rem 0 0' }}>
+                      {errors.title}
+                    </p>
+                  )}
                 </div>
 
                 {/* Problem */}
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{
-                    display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                  }}>
-                    Problem statement
-                  </label>
+                  {/* AI Generator panel */}
+                  <div style={{ marginBottom: '0.65rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showGenerator ? '0.65rem' : 0 }}>
+                      <label style={{
+                        display: 'block', fontSize: '0.55rem', fontWeight: 700,
+                        color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px',
+                      }}>
+                        Problem statement
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => { setShowGenerator((v) => !v); setGenerateError(''); }}
+                        style={{
+                          fontSize: '0.58rem', fontWeight: 700, padding: '0.25rem 0.65rem',
+                          background: showGenerator ? 'rgba(249,115,22,0.2)' : 'rgba(249,115,22,0.08)',
+                          color: '#f97316',
+                          border: '1px solid rgba(249,115,22,0.5)',
+                          borderRadius: '6px', cursor: 'pointer', fontFamily: FONT,
+                          letterSpacing: '0.5px', transition: 'all 0.2s',
+                        }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(249,115,22,0.2)'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = showGenerator ? 'rgba(249,115,22,0.2)' : 'rgba(249,115,22,0.08)'; }}
+                      >
+                        {showGenerator ? '✕ Close' : '✨ Generate from idea'}
+                      </button>
+                    </div>
+
+                    {showGenerator && (
+                      <div style={{
+                        background: '#0d1520',
+                        border: '1px solid rgba(249,115,22,0.35)',
+                        borderRadius: '8px',
+                        padding: '0.85rem 1rem',
+                        animation: 'slideDown 0.25s ease-out',
+                      }}>
+                        <p style={{ fontSize: '0.6rem', color: '#8896ab', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
+                          Describe your idea in plain English and AI will expand it into a full brief.
+                        </p>
+                        <textarea
+                          className="arena-input"
+                          rows={3}
+                          value={ideaText}
+                          onChange={(e) => setIdeaText(e.target.value)}
+                          placeholder={'e.g. A script that finds the cheapest flight from NYC to London next month\ne.g. A REST API that converts Markdown to HTML with caching\ne.g. Compare sorting algorithms and benchmark them'}
+                          style={{ resize: 'vertical', lineHeight: 1.6, marginBottom: '0.65rem' }}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                          <button
+                            type="button"
+                            onClick={generateBrief}
+                            disabled={generating || ideaText.trim().length < 10}
+                            style={{
+                              fontSize: '0.62rem', fontWeight: 800, padding: '0.4rem 1rem',
+                              background: generating || ideaText.trim().length < 10
+                                ? 'rgba(249,115,22,0.2)'
+                                : 'rgba(249,115,22,0.85)',
+                              color: generating || ideaText.trim().length < 10 ? 'rgba(249,115,22,0.5)' : '#fff',
+                              border: '1px solid rgba(249,115,22,0.6)',
+                              borderRadius: '6px', cursor: generating || ideaText.trim().length < 10 ? 'not-allowed' : 'pointer',
+                              fontFamily: FONT, letterSpacing: '1px', transition: 'all 0.2s',
+                            }}
+                          >
+                            {generating ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(249,115,22,0.4)', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                                Generating...
+                              </span>
+                            ) : 'Generate ✨'}
+                          </button>
+                          {generateError && (
+                            <span style={{ fontSize: '0.58rem', color: '#ef4444' }}>{generateError}</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <textarea
                     className="arena-input"
                     required value={problem}
                     onChange={(e) => setProblem(e.target.value)}
+                    onBlur={() => touch('problem')}
                     rows={4}
-                    placeholder="Describe the problem agents must solve..."
-                    style={{ resize: 'vertical', lineHeight: 1.6 }}
+                    placeholder={"Describe the challenge — can be anything:\n• Code: Build a REST API for task management\n• Research: Find the cheapest flight from Chicago to NYC next Friday\n• Compare: Which GPU offers the best price/performance under $400?\n• Writing: Draft a product launch announcement for..."}
+                    style={{ resize: 'vertical', lineHeight: 1.6, borderColor: touched.has('problem') && errors.problem ? '#ef4444' : undefined }}
                   />
+                  {touched.has('problem') && errors.problem && (
+                    <p style={{ color: '#ef4444', fontSize: '0.6rem', marginTop: '0.25rem', margin: '0.2rem 0 0' }}>
+                      {errors.problem}
+                    </p>
+                  )}
                 </div>
 
                 {/* Constraints + Deliverables */}
@@ -486,8 +944,21 @@ export default function NewCompetitionPage() {
                     <textarea
                       className="arena-input"
                       value={constraints} onChange={(e) => setConstraints(e.target.value)}
-                      rows={3} placeholder={'No external APIs\nTypeScript only'}
+                      rows={3} placeholder={'Use only public sources\nStay within the time limit'}
                       style={{ resize: 'vertical', lineHeight: 1.6 }}
+                    />
+                    <ExampleChips
+                      examples={[
+                        'Use only public sources',
+                        'Cite all sources in your report',
+                        'Must include current prices',
+                        'TypeScript only',
+                        'No external libraries',
+                        'Under 50 lines of code',
+                        'Output must be Markdown',
+                      ]}
+                      value={constraints}
+                      onChange={setConstraints}
                     />
                   </div>
                   <div>
@@ -500,8 +971,21 @@ export default function NewCompetitionPage() {
                     <textarea
                       className="arena-input"
                       value={deliverables} onChange={(e) => setDeliverables(e.target.value)}
-                      rows={3} placeholder={'Working implementation\nREADME'}
+                      rows={3} placeholder={'report.md with findings\nRanked options with prices'}
                       style={{ resize: 'vertical', lineHeight: 1.6 }}
+                    />
+                    <ExampleChips
+                      examples={[
+                        'report.md with findings',
+                        'Ranked options with prices',
+                        'Booking or purchase link',
+                        'Comparison table',
+                        'solution.py',
+                        'README.md',
+                        'Test results',
+                      ]}
+                      value={deliverables}
+                      onChange={setDeliverables}
                     />
                   </div>
                 </div>
@@ -631,6 +1115,7 @@ export default function NewCompetitionPage() {
                             className="arena-input"
                             type="text" required value={c.id}
                             onChange={(e) => updateCriterion(idx, 'id', e.target.value)}
+                            onBlur={() => touch('criterion-' + idx)}
                             placeholder="criterion-id"
                           />
                         </div>
@@ -666,12 +1151,18 @@ export default function NewCompetitionPage() {
                           className="arena-input"
                           type="text" required value={c.description}
                           onChange={(e) => updateCriterion(idx, 'description', e.target.value)}
+                          onBlur={() => touch('criterion-' + idx)}
                           placeholder="What this criterion evaluates"
                         />
                       </div>
                     </div>
                   ))}
                 </div>
+                {touched.has('criteria') && errors.criteria && (
+                  <p style={{ color: '#ef4444', fontSize: '0.6rem', marginTop: '0.25rem', margin: '0.2rem 0 0.5rem' }}>
+                    {errors.criteria}
+                  </p>
+                )}
 
                 <button
                   type="button" onClick={addCriterion}
@@ -950,7 +1441,7 @@ export default function NewCompetitionPage() {
           <button
             className="launch-btn"
             type="submit"
-            disabled={submitting}
+            disabled={submitting || hasErrors}
             style={{
               background: submitting
                 ? '#1a2234'
@@ -959,6 +1450,7 @@ export default function NewCompetitionPage() {
               boxShadow: submitting
                 ? 'none'
                 : '0 0 20px rgba(249,115,22,0.3), 0 4px 12px rgba(0,0,0,0.3)',
+              opacity: hasErrors ? 0.5 : 1,
             }}
           >
             {submitting ? (

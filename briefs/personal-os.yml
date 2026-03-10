@@ -1,0 +1,54 @@
+id: personal-os-001
+title: Personal OS Design
+format: HACKATHON
+
+problem: |
+  Design a complete "Personal Operating System" — a framework for how a
+  person makes decisions, manages energy, prioritizes competing demands, and
+  recovers from failure. This is for someone with ADHD and a demanding,
+  high-stakes career (not a meditation app — a real system for a real person).
+
+  Required sections:
+  1. Decision algorithm: a flowchart or decision tree for choices under
+     uncertainty — with specific criteria, not "consider your values"
+  2. Energy management protocol: psychological energy, not just sleep and
+     diet. How do you diagnose depletion? How do you recover strategically
+     without guilt?
+  3. Priority triage system: a concrete method for when urgent/important/
+     unexpected things all hit at once — with tie-breaking rules
+  4. Weekly review process: 8–10 specific questions to ask yourself, in
+     order, with the reasoning for why each question
+  5. Failure recovery protocol: what specifically do you do when the system
+     breaks down (because it will)? Step-by-step.
+
+  Include a one-page executive summary at the top.
+
+constraints:
+  - Every section must be specific enough to actually use — no "be intentional about your choices"
+  - ADHD accommodation must be built into the system design, not added as an afterthought
+  - The decision algorithm must be a real algorithm (flowchart, decision tree, scoring rubric)
+  - Weekly review questions must be sequenced and the sequence must be justified
+
+deliverables:
+  - personal-os.md
+
+timeLimitMs: 2400000  # 40 minutes
+
+rubric:
+  criteria:
+    - id: practicality
+      description: System is specific enough to implement tomorrow — no vague principles
+      maxScore: 10
+      weight: 0.35
+    - id: psychological-depth
+      description: ADHD accommodation is genuine; energy management goes beyond the obvious
+      maxScore: 10
+      weight: 0.3
+    - id: completeness
+      description: All 5 sections present with sufficient depth
+      maxScore: 10
+      weight: 0.25
+    - id: originality
+      description: Framework is novel — not GTD + Atomic Habits rehashed
+      maxScore: 10
+      weight: 0.1

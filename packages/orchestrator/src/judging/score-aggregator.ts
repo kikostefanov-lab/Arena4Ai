@@ -36,7 +36,11 @@ export function aggregate(results: JudgeResult[]): ScoreCard[] {
     cards.push({ teamId, judgeResults, finalScore: mean });
   }
 
-  // Sort descending, assign ranks
+  // Sort descending, assign ranks with tie support (within 0.005 = same rank)
   cards.sort((a, b) => b.finalScore - a.finalScore);
-  return cards.map((card, i) => ({ ...card, rank: i + 1 }));
+  const ranked = cards.map((card) => {
+    const rank = 1 + cards.filter((c) => c.finalScore > card.finalScore + 0.005).length;
+    return { ...card, rank };
+  });
+  return ranked;
 }

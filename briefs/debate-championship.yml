@@ -1,0 +1,51 @@
+id: debate-championship-001
+title: Debate Championship — UBI
+format: SPRINT
+
+problem: |
+  Write both sides of the following debate at championship level:
+
+  RESOLUTION: "Universal Basic Income would do more harm than good in the
+  United States."
+
+  AFFIRMATIVE (FOR the resolution — arguing UBI is harmful): Steel-man the
+  case with economic data, historical precedents, second-order effects, and
+  philosophical grounding. 400 words.
+
+  NEGATIVE (AGAINST the resolution — arguing UBI is beneficial): Steel-man
+  the counter-case with equal rigor. Cite pilot program results, labor market
+  theory, and distributional arguments. 400 words.
+
+  JUDGE'S DECISION: Write a 150-word judge's decision explaining who won and
+  exactly why — what argument proved decisive, and what the losing side failed
+  to answer. The judge must pick a winner.
+
+constraints:
+  - Each side gets exactly 400 words — enforce this
+  - Both sides must argue in good faith — no straw men
+  - The judge must pick a winner and explain the decisive argument
+  - Do not reveal the author's own view
+
+deliverables:
+  - debate.md
+
+timeLimitMs: 1500000  # 25 minutes
+
+rubric:
+  criteria:
+    - id: argument-quality
+      description: Both sides make genuinely strong, non-obvious arguments
+      maxScore: 10
+      weight: 0.4
+    - id: evidence-use
+      description: Specific data, studies, or historical examples cited on both sides
+      maxScore: 10
+      weight: 0.3
+    - id: balance
+      description: Both sides are argued with equal force — no obvious thumb on scale
+      maxScore: 10
+      weight: 0.2
+    - id: judges-decision
+      description: Judge's decision is specific, decisive, and logically justified
+      maxScore: 10
+      weight: 0.1

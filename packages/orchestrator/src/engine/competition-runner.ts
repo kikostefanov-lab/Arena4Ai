@@ -13,6 +13,7 @@ import {
   type Deliverable,
   type ScoreCard,
   type Team,
+  type TeamPresentation,
 } from '@arena/shared';
 
 import { transition } from './state-machine.js';
@@ -29,6 +30,9 @@ import { aiJudge, JUDGE_IDS } from '../judging/ai-judge.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { printResults } from '../judging/results-reporter.js';
 import { synthesizeDeliverables } from '../synthesis/merge-engine.js';
+import type { SynthesisResult } from '../synthesis/merge-engine.js';
+import { generateAllPresentations } from '../presentation/presentation-generator.js';
+import { CommentaryAgent } from '../commentary/commentary-agent.js';
 
 export interface RunOptions {
   /** Directory where JSONL event logs are written. Defaults to OS tmp dir. */
@@ -52,6 +56,8 @@ export interface RunOptions {
   skipSynthesis?: boolean;
   /** Number of AI judges per deliverable. Default 1. Max 2. */
   aiJudgeCount?: 1 | 2;
+  /** Enable live AI commentary during the competition. Default false. */
+  commentary?: boolean;
 }
 
 export interface TeamDeliverable {
@@ -63,7 +69,8 @@ export interface CompetitionResult {
   competition: Competition;
   scorecards: ScoreCard[];
   winner: string | null;
-  synthesis: string | null;  // synthesized hybrid solution
+  presentations: TeamPresentation[];      // human-readable per-team findings
+  synthesis: SynthesisResult | null;      // synthesized hybrid solution
   deliverables: TeamDeliverable[];
 }
 
@@ -71,7 +78,7 @@ export interface CompetitionResult {
  * Orchestrates the full competition lifecycle:
  *
  *   DRAFT → CONFIGURED → LAUNCHING → RUNNING → TIME_UP
- *         → COLLECTING → JUDGING → SCORED → SYNTHESIZING → COMPLETE
+ *         → COLLECTING → PRESENTING → JUDGING → SCORED → SYNTHESIZING → COMPLETE
  *
  * Events emitted (extends EventEmitter):
  *   'stateChange'  (state: CompetitionState)
@@ -107,6 +114,7 @@ export class CompetitionRunner extends EventEmitter {
       skipSandbox: options.skipSandbox ?? false,
       skipSynthesis: options.skipSynthesis ?? false,
       aiJudgeCount: options.aiJudgeCount ?? 1,
+      commentary: options.commentary ?? false,
     };
   }
 
@@ -122,10 +130,19 @@ export class CompetitionRunner extends EventEmitter {
 
   /** Cancel the running competition — shuts down all adapters and stops the clock. */
   async cancel(): Promise<void> {
+    if (this._cancelled) return;
     this._cancelled = true;
     this._cancelResolve?.(); // unblock the run() Promise.race
     this._clock?.stop();
     await Promise.all(this._activeAdapters.map(a => a.shutdown()));
+    if (
+      this.competition.state !== CompetitionState.COMPLETE &&
+      this.competition.state !== CompetitionState.FAILED
+    ) {
+      this.competition.state = CompetitionState.CANCELLED;
+      this.competition.completedAt = new Date().toISOString();
+      this.emit('stateChange', CompetitionState.CANCELLED);
+    }
   }
 
   /** Pause the running competition — freezes the clock (adapters keep running). */
@@ -155,9 +172,12 @@ export class CompetitionRunner extends EventEmitter {
       this.emit('arenaEvent', event);
     };
 
+    let commentaryAgent: CommentaryAgent | undefined;
+
     try {
       // ── CONFIGURED ──────────────────────────────────────────────────────
       this.advance(CompetitionState.CONFIGURED);
+
 
       // ── LAUNCHING ────────────────────────────────────────────────────────
       this.advance(CompetitionState.LAUNCHING);
@@ -212,6 +232,11 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.RUNNING);
       this.competition.startedAt = new Date().toISOString();
 
+      if (this.options.commentary) {
+        commentaryAgent = new CommentaryAgent(this, { claudeBin: this.options.claudeBin });
+        commentaryAgent.start();
+      }
+
       const clock = new ClockManager(brief.timeLimitMs);
       this._clock = clock;
 
@@ -242,11 +267,41 @@ export class CompetitionRunner extends EventEmitter {
         adapters.map((a) => a.collectDeliverables()),
       );
 
+      // ── PRESENTING ─────────────────────────────────────────────────────
+      this.advance(CompetitionState.PRESENTING);
+      console.log('[arena] generating human-readable presentations...');
+
+      const teamModels = new Map(teams.map((t) => [t.id, t.model]));
+      let presentations: TeamPresentation[] = [];
+      try {
+        presentations = await generateAllPresentations(
+          brief,
+          deliverables,
+          teamModels,
+          { claudeBin: this.options.claudeBin },
+        );
+      } catch (err) {
+        console.error('[arena] presentation generation failed:', (err as Error).message);
+      }
+
+      // Emit presentation events for live UI
+      for (const pres of presentations) {
+        forwardEvent({
+          eventId: randomUUID(),
+          competitionId: this.competition.id,
+          teamId: pres.teamId,
+          timestamp: new Date().toISOString(),
+          type: EventType.PRESENTATION_READY,
+          payload: pres as unknown as Record<string, unknown>,
+          metadata: {},
+        });
+      }
+
       // ── JUDGING ──────────────────────────────────────────────────────────
       this.advance(CompetitionState.JUDGING);
 
-      // Run automated scorer (sync) + AI cross-judge (async) in parallel across all deliverables
-      console.log('[arena] judging with automated scorer + AI cross-judge...');
+      // Run AI cross-judge (primary) + automated scorer (fallback) in parallel
+      console.log('[arena] judging with AI cross-judge (automated scorer as fallback)...');
       const aiJudgePromises = deliverables.map((d) => aiJudge(d, brief.rubric, {
         judgeId: JUDGE_IDS.aiClaude,
         claudeBin: this.options.claudeBin,
@@ -261,10 +316,34 @@ export class CompetitionRunner extends EventEmitter {
         );
       }
 
-      const judgeResults = await Promise.all([
-        ...deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief)),
+      // Run both in parallel — automated results are only used if AI judge fails
+      const [automatedResults, ...aiResults] = await Promise.all([
+        Promise.all(deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief))),
         ...aiJudgePromises,
       ]);
+
+      // Use AI judge results; fall back to automated per-team if AI returned zero scores
+      const judgeResults: typeof aiResults = [];
+      const aiByTeam = new Map<string, typeof aiResults>();
+      for (const r of aiResults) {
+        const existing = aiByTeam.get(r.teamId) ?? [];
+        existing.push(r);
+        aiByTeam.set(r.teamId, existing);
+      }
+
+      for (const automated of automatedResults) {
+        const aiForTeam = aiByTeam.get(automated.teamId) ?? [];
+        // AI judge failed if all its scores are 0 (the fallback default)
+        const aiWorked = aiForTeam.some((r) =>
+          r.scores.some((s) => s.score > 0 || !s.commentary.includes('fallback')),
+        );
+        if (aiWorked) {
+          judgeResults.push(...aiForTeam);
+        } else {
+          console.log(`[arena] AI judge failed for ${automated.teamId} — using automated scorer`);
+          judgeResults.push(automated);
+        }
+      }
 
       const scorecards = aggregate(judgeResults);
 
@@ -273,12 +352,12 @@ export class CompetitionRunner extends EventEmitter {
 
       // ── SYNTHESIZING ─────────────────────────────────────────────────────
       this.advance(CompetitionState.SYNTHESIZING);
-      let synthesis: string | null = null;
+      let synthesis: SynthesisResult | null = null;
       if (!this.options.skipSynthesis) {
         console.log('[arena] synthesizing deliverables...');
         synthesis = await synthesizeDeliverables(brief, deliverables, {
           claudeBin: this.options.claudeBin,
-        });
+        }, presentations);
       }
 
       // ── COMPLETE ──────────────────────────────────────────────────────────
@@ -298,14 +377,29 @@ export class CompetitionRunner extends EventEmitter {
         competition: { ...this.competition },
         scorecards,
         winner: scorecards.find((c) => c.rank === 1)?.teamId ?? null,
+        presentations,
         synthesis,
         deliverables: teamDeliverables,
       };
 
       this.emit('result', result);
       return result;
+    } catch (err) {
+      // Transition to FAILED unless cancelled
+      if (!this._cancelled) {
+        this.competition.state = CompetitionState.FAILED;
+        this.competition.completedAt = new Date().toISOString();
+        this.emit('stateChange', CompetitionState.FAILED);
+        this.emit('error', err instanceof Error ? err : new Error(String(err)));
+      }
+      // Clean up adapters
+      await Promise.all(this._activeAdapters.map(a => a.shutdown().catch(() => {})));
+      throw err;
     } finally {
+      commentaryAgent?.stop();
       await logger.close();
+      // Clean up temp workdirs (skip-sandbox mode only; sandbox containers handle their own cleanup)
+      await Promise.all(this._activeAdapters.map(a => a.cleanupWorkdir().catch(() => {})));
     }
   }
 }

@@ -1,0 +1,48 @@
+id: startup-autopsy-001
+title: Startup Autopsy
+format: HACKATHON
+
+problem: |
+  You've been brought in to write a post-mortem for a failed B2B SaaS startup.
+  Use only the data below.
+
+  DATA:
+  - Product: Restaurant inventory management SaaS
+  - Total raised: $2.1M ($800k seed, $1.3M Series A at month 4)
+  - Monthly revenue: $0, $0, $2k, $5k, $8k, $12k, $15k, $12k, $8k, $3k, $0
+  - Monthly burn: $50k, $80k, $80k, $100k, $120k, $150k, $180k, $200k, $180k, $150k, $100k
+  - Team: 3 founders + 8 employees at peak headcount
+  - Churn rate: 8% month-over-month beginning month 6
+  - CAC: $2,400 per customer
+  - LTV at observed churn rate: $1,800
+
+  Produce a comprehensive autopsy: identify the 3 fatal mistakes, reconstruct
+  the timeline of failure with specific months, calculate burn rate and runway
+  at each funding stage, and propose the 3 specific pivots that could have
+  saved it. Show your financial reasoning.
+
+constraints:
+  - Work only from the data provided — do not invent additional facts
+  - Show all financial calculations explicitly
+  - Timeline must reference specific month numbers
+  - Recommendations must be financially grounded, not generic advice
+
+deliverables:
+  - autopsy.md
+
+timeLimitMs: 2700000  # 45 minutes
+
+rubric:
+  criteria:
+    - id: financial-accuracy
+      description: Burn rate, runway, LTV/CAC calculations are correct
+      maxScore: 10
+      weight: 0.35
+    - id: insight-depth
+      description: Fatal mistakes are specific, non-obvious, and supported by data
+      maxScore: 10
+      weight: 0.35
+    - id: actionability
+      description: Proposed pivots are concrete, feasible, and financially justified
+      maxScore: 10
+      weight: 0.3

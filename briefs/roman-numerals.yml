@@ -1,0 +1,59 @@
+id: roman-numerals
+title: Roman Numeral Converter
+format: SPRINT
+problem: |
+  Write a Python script that reads a single integer from stdin and prints its
+  Roman numeral representation to stdout.
+
+  Rules:
+  - Input is an integer between 1 and 3999 inclusive
+  - Use standard subtractive notation (IV, IX, XL, XC, CD, CM)
+  - Output must be uppercase
+
+  Examples:
+    1 → I
+    4 → IV
+    9 → IX
+    14 → XIV
+    40 → XL
+    90 → XC
+    399 → CCCXCIX
+    1994 → MCMXCIV
+    3999 → MMMCMXCIX
+
+constraints:
+  - Python only
+  - Read from stdin, print to stdout
+  - No external libraries
+  - Single file solution
+
+deliverables:
+  - solution.py
+
+timeLimitMs: 900000
+
+rubric:
+  criteria:
+    - id: correctness
+      description: Handles all test cases including edge cases
+      maxScore: 10
+      weight: 0.6
+    - id: code-quality
+      description: Clean, readable implementation
+      maxScore: 10
+      weight: 0.25
+    - id: speed
+      description: Delivered promptly within time budget
+      maxScore: 10
+      weight: 0.15
+
+expectedOutput: |
+  I
+  IV
+  IX
+  XIV
+  XL
+  XC
+  CCCXCIX
+  MCMXCIV
+  MMMCMXCIX

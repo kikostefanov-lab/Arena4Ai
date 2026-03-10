@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
+import { hexToRgb } from '../../../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -328,10 +329,6 @@ function PreBattleScreen({ color, label }: { color: string; label: string }) {
 
 // ─── EventRow ────────────────────────────────────────────────────────────────
 
-function hexToRgb(hex: string): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}` : '255,255,255';
-}
 
 function EventRow({ event, startTs, isNew }: {
   event: ArenaEvent; startTs: string; isNew: boolean;
@@ -668,7 +665,7 @@ export default function ReplayPage() {
       display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden',
       background: '#0a0e17', fontFamily: FONT, color: '#e2e8f0',
     }}>
-      <style>{`
+      <style suppressHydrationWarning>{`
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(4px); }
           to { opacity: 1; transform: translateY(0); }

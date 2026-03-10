@@ -1,0 +1,56 @@
+id: expense-splitter
+title: Expense Splitter
+format: SPRINT
+problem: |
+  Write a Python script that reads a group expense log from stdin and prints
+  the minimal set of transfers needed to settle all debts.
+
+  Input format (via stdin):
+  - Line 1: comma-separated list of participant names
+  - Lines 2+: "PAYER paid AMOUNT for RECIPIENT1,RECIPIENT2,..." (amount split equally)
+
+  Output format:
+  - One transfer per line: "NAME1 pays NAME2 AMOUNT"
+  - Amounts rounded to 2 decimal places
+  - Sorted alphabetically by payer name, then recipient name
+  - Only print transfers where amount > 0
+
+  Example input:
+    Alice,Bob,Charlie
+    Alice paid 30 for Alice,Bob,Charlie
+    Bob paid 20 for Alice,Bob,Charlie
+    Charlie paid 10 for Bob,Charlie
+
+  Example output:
+    Bob pays Alice 3.33
+    Charlie pays Alice 6.67
+
+constraints:
+  - Python only
+  - Read from stdin, print to stdout
+  - No external libraries
+  - Single file solution
+
+deliverables:
+  - solution.py
+
+timeLimitMs: 900000
+
+rubric:
+  criteria:
+    - id: correctness
+      description: Produces correct minimal transfers for the test case
+      maxScore: 10
+      weight: 0.6
+    - id: code-quality
+      description: Clean, readable implementation with good variable names
+      maxScore: 10
+      weight: 0.25
+    - id: speed
+      description: Delivered promptly within time budget
+      maxScore: 10
+      weight: 0.15
+
+expectedOutput: |
+  Bob pays Alice 3.33
+  Charlie pays Alice 6.67

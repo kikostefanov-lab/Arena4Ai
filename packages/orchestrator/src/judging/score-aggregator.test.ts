@@ -55,4 +55,27 @@ describe('aggregate()', () => {
     expect(card.rank).toBe(1);
     expect(card.finalScore).toBeCloseTo(0.75, 5);
   });
+
+  it('assigns the same rank to teams within 0.005 of each other (tie)', () => {
+    const results: JudgeResult[] = [
+      makeResult('automated', 'team-a', 0.700),
+      makeResult('automated', 'team-b', 0.703),
+    ];
+    const cards = aggregate(results);
+    const rankA = cards.find((c) => c.teamId === 'team-a')!.rank;
+    const rankB = cards.find((c) => c.teamId === 'team-b')!.rank;
+    expect(rankA).toBe(rankB);
+  });
+
+  it('assigns different ranks to teams more than 0.005 apart', () => {
+    const results: JudgeResult[] = [
+      makeResult('automated', 'team-a', 0.700),
+      makeResult('automated', 'team-b', 0.710),
+    ];
+    const cards = aggregate(results);
+    const rankA = cards.find((c) => c.teamId === 'team-a')!.rank;
+    const rankB = cards.find((c) => c.teamId === 'team-b')!.rank;
+    expect(rankB).toBe(1);
+    expect(rankA).toBe(2);
+  });
 });

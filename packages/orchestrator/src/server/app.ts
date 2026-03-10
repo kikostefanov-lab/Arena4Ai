@@ -1,8 +1,12 @@
 import http from 'node:http';
 import express from 'express';
 import type { Application } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { competitionsRouter } from './routes/competitions.js';
 import { analyticsRouter } from './routes/analytics.js';
+import { leaderboardRouter } from './routes/leaderboard.js';
+import { generateBriefRouter } from './routes/generate-brief.js';
+import { tournamentsRouter } from './routes/tournaments.js';
 import { attachWebSocket } from './websocket.js';
 
 const CORS = {
@@ -30,9 +34,21 @@ export function createApp(): Application {
     res.status(204).end();
   });
 
+  // Rate limiting: max 10 new competitions per minute per IP
+  const createLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 10,
+    message: { error: 'Too many competitions created. Try again in a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.use('/competitions', competitionsRouter);
+  app.use('/competitions', createLimiter, competitionsRouter);
   app.use('/analytics', analyticsRouter);
+  app.use('/leaderboard', leaderboardRouter);
+  app.use('/generate-brief', generateBriefRouter);
+  app.use('/tournaments', tournamentsRouter);
 
   return app;
 }

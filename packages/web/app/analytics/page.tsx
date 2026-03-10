@@ -36,13 +36,13 @@ function parseAgentKey(key: string): { model: string; persona: string | null } {
 }
 
 const MODEL_COLORS: Record<string, string> = {
-  claude: '#3b82f6',
+  claude: '#f97316',
   codex: '#22c55e',
   gemini: '#a855f7',
 };
 
 const MODEL_ICONS: Record<string, string> = {
-  claude: '🔵',
+  claude: '🟠',
   codex: '🟢',
   gemini: '🟣',
 };

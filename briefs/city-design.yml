@@ -1,0 +1,57 @@
+id: city-design-001
+title: City Design for Human Flourishing
+format: HACKATHON
+
+problem: |
+  Design a new city of 500,000 people from scratch. Optimize for human
+  wellbeing (not GDP), social cohesion across economic strata, environmental
+  sustainability, and resilience to climate change.
+
+  Required deliverables:
+  1. Spatial layout philosophy: describe the organizing principle and justify
+     every major urban design decision. What does this city look like from
+     above? Why?
+  2. Governance structure: how are decisions made? Who has power? How are
+     conflicts between neighborhoods resolved? How do you prevent capture by
+     special interests?
+  3. Economic model: how does the city generate wealth? How are essential
+     services funded? What prevents a race-to-the-bottom on taxes?
+  4. Anti-gentrification design: specific mechanisms (not platitudes) that
+     maintain affordability while also maintaining quality
+  5. Top 3 tradeoffs: what did you sacrifice to achieve your goals? Be
+     honest about the costs.
+
+  Also write scorer.py: a Python script that takes a dictionary of city
+  attributes and outputs a score (0–100) for each of the 4 optimization
+  criteria, plus an overall score.
+
+constraints:
+  - Spatial layout must describe an actual organizing principle — not just "mixed use zoning"
+  - Governance structure must address power concentration specifically
+  - Anti-gentrification mechanisms must be structural, not policy-dependent (policies can be reversed)
+  - scorer.py must be runnable and output a structured score report
+
+deliverables:
+  - city-design.md
+  - scorer.py
+
+timeLimitMs: 3600000  # 60 minutes
+
+rubric:
+  criteria:
+    - id: systems-thinking
+      description: Design decisions are connected — changing one thing affects others, and this is shown
+      maxScore: 10
+      weight: 0.35
+    - id: feasibility
+      description: Governance and economic model could actually work — not utopian hand-waving
+      maxScore: 10
+      weight: 0.3
+    - id: depth
+      description: All 5 sections are substantive; tradeoffs are honest
+      maxScore: 10
+      weight: 0.25
+    - id: scorer-quality
+      description: scorer.py runs and produces meaningful differentiated scores
+      maxScore: 10
+      weight: 0.1

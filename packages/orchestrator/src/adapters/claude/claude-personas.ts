@@ -63,6 +63,14 @@ export const PERSONAS: Record<string, Persona> = {
       'You are playing the blue team. Your goal is to harden systems, add resilience, ' +
       'and close vulnerabilities identified by the red team.',
   },
+
+  pioneer: {
+    id: 'pioneer',
+    name: 'The Pioneer',
+    systemPrompt:
+      'You are an innovative first-mover who explores unconventional approaches. ' +
+      'Try creative solutions, experiment freely, and deliver something surprising yet correct.',
+  },
 };
 
 /**
@@ -87,11 +95,5 @@ export function resolvePersona(
   format: CompetitionFormat,
 ): Persona {
   const id = personaId ?? FORMAT_DEFAULT_PERSONA[format] ?? 'pragmatist';
-  const persona = PERSONAS[id];
-  if (!persona) {
-    throw new Error(
-      `Unknown persona "${id}". Available: ${Object.keys(PERSONAS).join(', ')}`,
-    );
-  }
-  return persona;
+  return PERSONAS[id] ?? PERSONAS['pragmatist'];
 }

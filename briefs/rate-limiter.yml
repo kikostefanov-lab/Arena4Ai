@@ -1,0 +1,71 @@
+id: rate-limiter
+title: Sliding Window Rate Limiter
+format: HACKATHON
+problem: |
+  Implement a sliding window rate limiter in Python. The script reads requests
+  from stdin and outputs whether each is ALLOWED or DENIED.
+
+  Input format:
+  - Line 1: "LIMIT N WINDOW W" — max N requests per W seconds
+  - Lines 2+: "REQUEST user_id timestamp" — timestamp is a float (Unix seconds)
+
+  Output format:
+  - For each REQUEST line: "ALLOWED" or "DENIED"
+  - One line per request, in order
+
+  Example input:
+    LIMIT 3 WINDOW 10
+    REQUEST alice 1.0
+    REQUEST alice 5.0
+    REQUEST alice 9.0
+    REQUEST alice 10.5
+    REQUEST alice 11.5
+    REQUEST bob 1.0
+
+  Example output:
+    ALLOWED
+    ALLOWED
+    ALLOWED
+    DENIED
+    ALLOWED
+    ALLOWED
+
+  Explanation:
+  - alice at 10.5: window [0.5, 10.5] contains requests at 1.0, 5.0, 9.0 → 3 requests → DENIED
+  - alice at 11.5: window [1.5, 11.5] contains requests at 5.0, 9.0 → 2 requests → ALLOWED
+  - bob has their own independent counter
+
+constraints:
+  - Python only
+  - Read from stdin, print to stdout
+  - No external libraries
+  - Single file solution
+  - Per-user rate limiting (each user_id tracked independently)
+
+deliverables:
+  - solution.py
+
+timeLimitMs: 900000
+
+rubric:
+  criteria:
+    - id: correctness
+      description: Handles sliding window logic correctly including edge cases
+      maxScore: 10
+      weight: 0.55
+    - id: code-quality
+      description: Clean implementation, good separation of concerns
+      maxScore: 10
+      weight: 0.3
+    - id: speed
+      description: Delivered promptly within time budget
+      maxScore: 10
+      weight: 0.15
+
+expectedOutput: |
+  ALLOWED
+  ALLOWED
+  ALLOWED
+  DENIED
+  ALLOWED
+  ALLOWED

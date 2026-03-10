@@ -2,6 +2,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CompetitionState, CompetitionFormat } from '@arena/shared';
 import request from 'supertest';
 
+// Mock DB client before any module that transitively imports it
+vi.mock('../../db/client.js', () => ({ db: {} }));
+vi.mock('../../db/repository.js', () => ({
+  CompetitionRepository: vi.fn(),
+  TournamentRepository: vi.fn().mockImplementation(() => ({
+    createTournament: vi.fn().mockResolvedValue(undefined),
+    getTournament: vi.fn().mockResolvedValue(null),
+    updateTournamentState: vi.fn().mockResolvedValue(undefined),
+    updateTournamentProgress: vi.fn().mockResolvedValue(undefined),
+    listTournaments: vi.fn().mockResolvedValue([]),
+  })),
+}));
+
 // Mock the shared repo singleton — must be before any module imports.
 const knownIds = new Set<string>();
 vi.mock('../repo.js', () => ({

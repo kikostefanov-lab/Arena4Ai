@@ -2,6 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { getModelColor, getStateStyle, FORMAT_BADGES } from '../lib/design-tokens';
+import { formatTimeLimit } from '../lib/format';
+
+interface TournamentSummary {
+  id: string;
+  name: string;
+  state: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED';
+  teams: string[];
+  matchIds: string[];
+  brief?: { title?: string };
+}
 
 interface Team {
   id: string;
@@ -14,35 +25,10 @@ interface CompetitionSummary {
   state: string;
   startedAt: string | null;
   completedAt: string | null;
-  brief: { title: string; format?: string };
+  brief: { title: string; format?: string; timeLimitMs?: number; problem?: string };
   teams: Team[];
   winnerId: string | null;
 }
-
-const MODEL_COLORS: Record<string, string> = {
-  claude: '#3b82f6',
-  codex: '#22c55e',
-  gemini: '#a855f7',
-};
-
-const FORMAT_BADGES: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-  SPRINT:      { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4', label: 'SPRINT',    icon: '⚡' },
-  HACKATHON:   { bg: 'rgba(168,85,247,0.12)',  color: '#a855f7', label: 'HACKATHON', icon: '🔨' },
-  RED_VS_BLUE: { bg: 'rgba(239,68,68,0.12)',   color: '#ef4444', label: 'RED×BLUE', icon: '⚔️' },
-  RELAY_RACE:  { bg: 'rgba(34,197,94,0.12)',   color: '#22c55e', label: 'RELAY',     icon: '🔄' },
-};
-
-const STATE_STYLES: Record<string, { bg: string; color: string }> = {
-  COMPLETE:    { bg: 'rgba(59,130,246,0.12)',  color: '#3b82f6' },
-  RUNNING:     { bg: 'rgba(249,115,22,0.15)',  color: '#f97316' },
-  JUDGING:     { bg: 'rgba(234,179,8,0.12)',   color: '#eab308' },
-  SCORED:      { bg: 'rgba(34,197,94,0.12)',   color: '#22c55e' },
-  DRAFT:       { bg: 'rgba(136,150,171,0.08)', color: '#8896ab' },
-  LAUNCHING:   { bg: 'rgba(6,182,212,0.12)',   color: '#06b6d4' },
-  TIME_UP:     { bg: 'rgba(234,179,8,0.12)',   color: '#eab308' },
-  COLLECTING:  { bg: 'rgba(168,85,247,0.12)',  color: '#a855f7' },
-  CONFIGURED:  { bg: 'rgba(136,150,171,0.08)', color: '#8896ab' },
-};
 
 function timeAgo(dateStr: string | null): string {
   if (!dateStr) return '';
@@ -60,13 +46,8 @@ function teamLabel(t: Team) {
   return t.persona ? `${t.model}:${t.persona}` : t.model;
 }
 
-function getModelBase(t: Team): string {
-  return t.model.toLowerCase().split(':')[0];
-}
-
-function getModelColor(t: Team): string {
-  const base = getModelBase(t);
-  return MODEL_COLORS[base] ?? '#8896ab';
+function teamColor(t: Team): string {
+  return getModelColor(t.model);
 }
 
 export default function GalleryPage() {
@@ -75,12 +56,57 @@ export default function GalleryPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [stateFilter, setStateFilter] = useState<string>('ALL');
+  const [modelFilter, setModelFilter] = useState<string>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
+  const [tournamentsLoading, setTournamentsLoading] = useState(true);
+  const [apiOnline, setApiOnline] = useState<boolean | null>(null);
 
+  // Health check on mount and every 30 seconds
+  useEffect(() => {
+    const checkHealth = () => {
+      fetch('/api/health')
+        .then((r) => r.json())
+        .then((data: { ok: boolean }) => setApiOnline(data.ok))
+        .catch(() => setApiOnline(false));
+    };
+    checkHealth();
+    const interval = setInterval(checkHealth, 30_000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Fetch competitions on mount
   useEffect(() => {
     fetch('/api/competitions')
       .then((r) => r.json())
       .then((data: CompetitionSummary[]) => { setCompetitions(data); setLoading(false); })
       .catch(() => { setError('Failed to load competitions — is the API server running?'); setLoading(false); });
+  }, []);
+
+  // Auto-refresh competitions list every 10 seconds while tab is visible
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState !== 'visible') return;
+      fetch('/api/competitions')
+        .then((r) => r.json())
+        .then((data: CompetitionSummary[]) => setCompetitions(data))
+        .catch(() => { /* silently ignore refresh errors */ });
+    };
+    const interval = setInterval(refresh, 10_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/tournaments')
+      .then((r) => r.json())
+      .then((data: TournamentSummary[]) => { setTournaments(Array.isArray(data) ? data : []); })
+      .catch(() => { /* silently ignore if tournaments endpoint not yet running */ })
+      .finally(() => setTournamentsLoading(false));
   }, []);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
@@ -99,6 +125,24 @@ export default function GalleryPage() {
   const completedCount = competitions.filter((c) => c.state === 'COMPLETE' || c.state === 'SCORED').length;
   const runningCount = competitions.filter((c) => c.state === 'RUNNING').length;
   const uniqueModels = new Set(competitions.flatMap((c) => c.teams?.map((t) => t.model) ?? []));
+
+  const filteredCompetitions = competitions.filter((c) => {
+    const stateMatch = stateFilter === 'ALL'
+      || (stateFilter === 'LIVE' && c.state === 'RUNNING')
+      || (stateFilter === 'COMPLETE' && (c.state === 'COMPLETE' || c.state === 'SCORED'))
+      || (stateFilter === 'FAILED' && c.state === 'FAILED')
+      || (stateFilter === 'CANCELLED' && c.state === 'CANCELLED');
+    const modelMatch = modelFilter === 'ALL'
+      || c.teams?.some((t) => t.model.toLowerCase().startsWith(modelFilter));
+    if (!stateMatch || !modelMatch) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const title = (c.brief?.title ?? '').toLowerCase();
+      const problem = (c.brief?.problem ?? '').toLowerCase();
+      if (!title.includes(q) && !problem.includes(q)) return false;
+    }
+    return true;
+  });
 
   return (
     <div style={{
@@ -214,6 +258,17 @@ export default function GalleryPage() {
               )}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.5rem' }}>
+              {apiOnline !== null && (
+                <span style={{
+                  fontSize: '0.6rem', fontFamily: 'monospace', fontWeight: 600,
+                  color: apiOnline ? '#22c55e' : '#ef4444',
+                  display: 'flex', alignItems: 'center', gap: '0.3rem',
+                  whiteSpace: 'nowrap',
+                }}>
+                  <span style={{ fontSize: '0.7rem' }}>●</span>
+                  {apiOnline ? 'API Online' : 'API Offline'}
+                </span>
+              )}
               <a
                 href="/analytics"
                 className="nav-link"
@@ -225,6 +280,28 @@ export default function GalleryPage() {
               >
                 📊 ANALYTICS
               </a>
+              <Link
+                href="/leaderboard"
+                className="nav-link"
+                style={{
+                  fontSize: '0.62rem', color: '#8896ab', padding: '0.45rem 0.85rem',
+                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  letterSpacing: '1px', fontWeight: 600,
+                }}
+              >
+                🏆 LEADERBOARD
+              </Link>
+              <Link
+                href="/tournaments/new"
+                className="nav-link"
+                style={{
+                  fontSize: '0.62rem', color: '#8896ab', padding: '0.45rem 0.85rem',
+                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  letterSpacing: '1px', fontWeight: 600,
+                }}
+              >
+                🏆 TOURNAMENTS →
+              </Link>
               <Link
                 href="/competitions/new"
                 className="new-comp-btn"
@@ -240,6 +317,114 @@ export default function GalleryPage() {
             </div>
           </div>
         </div>
+
+        {/* Filter Bar */}
+        {competitions.length > 0 && !loading && !error && (
+          <div style={{ marginBottom: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            {/* Search Input */}
+            <div style={{ position: 'relative', width: '100%', marginBottom: '0.25rem' }}>
+              <span style={{
+                position: 'absolute',
+                left: '0.65rem',
+                top: '50%',
+                transform: 'translateY(-50%)',
+                fontSize: '0.8rem',
+                pointerEvents: 'none',
+                lineHeight: 1,
+              }}>🔍</span>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search competitions..."
+                style={{
+                  width: '100%',
+                  background: '#0a1628',
+                  border: '1px solid #1e2d45',
+                  borderRadius: '6px',
+                  color: '#e2e8f0',
+                  fontSize: '0.72rem',
+                  fontFamily: 'monospace',
+                  padding: '0.5rem 2rem 0.5rem 2rem',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  style={{
+                    position: 'absolute',
+                    right: '0.6rem',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#8896ab',
+                    cursor: 'pointer',
+                    fontSize: '0.75rem',
+                    lineHeight: 1,
+                    padding: '0.1rem',
+                  }}
+                  aria-label="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {searchQuery.trim() && (
+              <p style={{ fontSize: '0.62rem', color: '#4a5568', margin: '0 0 0.15rem', fontFamily: 'monospace' }}>
+                Showing {filteredCompetitions.length} of {competitions.length} competition{competitions.length !== 1 ? 's' : ''}
+              </p>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.55rem', color: '#4a5568', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>State</span>
+              {(['ALL', 'LIVE', 'COMPLETE', 'FAILED', 'CANCELLED'] as const).map((s) => {
+                const active = stateFilter === s;
+                const style = s === 'ALL' ? { bg: '#1e2d45', color: '#8896ab' } : s === 'LIVE' ? { bg: 'rgba(249,115,22,0.2)', color: '#f97316' } : getStateStyle(s);
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setStateFilter(s)}
+                    style={{
+                      fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
+                      borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
+                      border: `1px solid ${active ? 'transparent' : '#1e2d45'}`,
+                      background: active ? style.bg : 'transparent',
+                      color: active ? style.color : '#4a5568',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.55rem', color: '#4a5568', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>Model</span>
+              {(['ALL', 'claude', 'codex', 'gemini'] as const).map((m) => {
+                const active = modelFilter === m;
+                const color = m === 'ALL' ? '#8896ab' : getModelColor(m);
+                return (
+                  <button
+                    key={m}
+                    onClick={() => setModelFilter(m)}
+                    style={{
+                      fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
+                      borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
+                      border: `1px solid ${active ? 'transparent' : '#1e2d45'}`,
+                      background: active ? (m === 'ALL' ? '#1e2d45' : `${color}22`) : 'transparent',
+                      color: active ? color : '#4a5568',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Loading */}
         {loading && (
@@ -258,6 +443,20 @@ export default function GalleryPage() {
           }}>
             <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚠️</div>
             <p style={{ color: '#ef4444', fontSize: '0.75rem' }}>{error}</p>
+          </div>
+        )}
+
+        {/* Filtered empty state */}
+        {!loading && !error && filteredCompetitions.length === 0 && competitions.length > 0 && (
+          <div style={{
+            textAlign: 'center',
+            padding: '3rem 2rem',
+            background: '#111827',
+            border: '1px dashed #1e2d45',
+            borderRadius: '8px',
+            marginBottom: '0.65rem',
+          }}>
+            <p style={{ fontSize: '0.75rem', color: '#8896ab' }}>No competitions match your filters.</p>
           </div>
         )}
 
@@ -295,13 +494,15 @@ export default function GalleryPage() {
 
         {/* Competition Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-          {competitions.map((comp, index) => {
+          {filteredCompetitions.map((comp, index) => {
             const teamA = comp.teams?.[0];
             const teamB = comp.teams?.[1];
             const winnerTeam = comp.teams?.find((t) => t.id === comp.winnerId);
             const fmt = comp.brief?.format ? FORMAT_BADGES[comp.brief.format] : null;
             const isRunning = comp.state === 'RUNNING';
             const isComplete = comp.state === 'COMPLETE' || comp.state === 'SCORED';
+            const isFailed = comp.state === 'FAILED';
+            const isCancelled = comp.state === 'CANCELLED';
             const isHovered = hoveredId === comp.id;
 
             return (
@@ -343,7 +544,7 @@ export default function GalleryPage() {
                       {/* Title row */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>
-                          {isRunning ? '⚔️' : isComplete ? '🏆' : '📋'}
+                          {isRunning ? '⚔️' : isComplete ? '🏆' : isFailed ? '💥' : isCancelled ? '🚫' : '📋'}
                         </span>
                         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
                           {comp.brief?.title ?? comp.id}
@@ -385,9 +586,9 @@ export default function GalleryPage() {
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                             padding: '0.1rem 0.5rem', borderRadius: '3px',
-                            background: `${getModelColor(teamA)}12`,
-                            border: `1px solid ${getModelColor(teamA)}33`,
-                            color: getModelColor(teamA), fontWeight: 600, fontSize: '0.62rem',
+                            background: `${teamColor(teamA)}12`,
+                            border: `1px solid ${teamColor(teamA)}33`,
+                            color: teamColor(teamA), fontWeight: 600, fontSize: '0.62rem',
                           }}>
                             {teamLabel(teamA)}
                           </span>
@@ -399,9 +600,9 @@ export default function GalleryPage() {
                           <span style={{
                             display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                             padding: '0.1rem 0.5rem', borderRadius: '3px',
-                            background: `${getModelColor(teamB)}12`,
-                            border: `1px solid ${getModelColor(teamB)}33`,
-                            color: getModelColor(teamB), fontWeight: 600, fontSize: '0.62rem',
+                            background: `${teamColor(teamB)}12`,
+                            border: `1px solid ${teamColor(teamB)}33`,
+                            color: teamColor(teamB), fontWeight: 600, fontSize: '0.62rem',
                           }}>
                             {teamLabel(teamB)}
                           </span>
@@ -414,6 +615,14 @@ export default function GalleryPage() {
                               display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                             }}>
                               🏆 {teamLabel(winnerTeam)} wins
+                            </span>
+                          </>
+                        )}
+                        {comp.brief?.timeLimitMs != null && (
+                          <>
+                            <span style={{ color: '#2d3748' }}>·</span>
+                            <span style={{ color: '#4a5568', fontSize: '0.6rem' }}>
+                              ⏱ {formatTimeLimit(comp.brief.timeLimitMs)}
                             </span>
                           </>
                         )}
@@ -430,7 +639,7 @@ export default function GalleryPage() {
 
                       {/* State badge */}
                       {(() => {
-                        const s = STATE_STYLES[comp.state] ?? { bg: 'rgba(136,150,171,0.08)', color: '#8896ab' };
+                        const s = getStateStyle(comp.state);
                         return (
                           <span style={{
                             fontSize: '0.52rem', fontWeight: 700, padding: '0.14rem 0.55rem',
@@ -478,6 +687,95 @@ export default function GalleryPage() {
             );
           })}
         </div>
+
+        {/* Tournaments Section */}
+        <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid #1e2d45' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
+            <div>
+              <div style={{ fontSize: '0.58rem', color: '#f97316', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.3rem' }}>
+                ◆ Tournaments
+              </div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#e2e8f0' }}>
+                Round-Robin Tournaments
+              </h2>
+            </div>
+            <Link
+              href="/tournaments/new"
+              className="new-comp-btn"
+              style={{
+                fontSize: '0.6rem', fontWeight: 700, padding: '0.4rem 0.9rem',
+                background: '#f97316', color: '#0a0e17', borderRadius: '4px',
+                textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
+                display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+              }}
+            >
+              🏆 New Tournament
+            </Link>
+          </div>
+
+          {tournamentsLoading && (
+            <p style={{ fontSize: '0.72rem', color: '#8896ab' }}>Loading tournaments…</p>
+          )}
+
+          {!tournamentsLoading && tournaments.length === 0 && (
+            <div style={{
+              padding: '2.5rem', textAlign: 'center',
+              background: '#111827', border: '1px dashed #1e2d45', borderRadius: '8px',
+            }}>
+              <p style={{ fontSize: '0.72rem', color: '#4a5568', margin: 0 }}>
+                No tournaments yet — start a round-robin to compare multiple agents head-to-head.
+              </p>
+            </div>
+          )}
+
+          {!tournamentsLoading && tournaments.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              {tournaments.map((t, index) => {
+                const s = getStateStyle(t.state);
+                const isRunning = t.state === 'RUNNING' || t.state === 'PENDING';
+                return (
+                  <Link key={t.id} href={`/tournaments/${t.id}`} style={{ textDecoration: 'none' }}>
+                    <div
+                      className="arena-card"
+                      style={{
+                        background: '#111827',
+                        border: `1px solid ${isRunning ? 'rgba(249,115,22,0.4)' : '#1e2d45'}`,
+                        borderRadius: '8px',
+                        padding: '0.85rem 1.1rem',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+                        animation: `fadeIn 0.3s ease ${index * 0.04}s both`,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', marginBottom: '0.3rem' }}>
+                          {t.name || t.brief?.title || t.id}
+                        </div>
+                        <div style={{ fontSize: '0.62rem', color: '#8896ab', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          <span>{t.teams.length} teams</span>
+                          <span style={{ color: '#1e2d45' }}>·</span>
+                          <span>{t.matchIds.length} match{t.matchIds.length !== 1 ? 'es' : ''}</span>
+                          <span style={{ color: '#1e2d45' }}>·</span>
+                          <span>{t.teams.slice(0, 3).join(', ')}{t.teams.length > 3 ? ` +${t.teams.length - 3}` : ''}</span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
+                        <span style={{
+                          fontSize: '0.52rem', fontWeight: 700, padding: '0.14rem 0.55rem',
+                          borderRadius: '3px', letterSpacing: '1.5px',
+                          background: s.bg, color: s.color,
+                        }}>
+                          {t.state}
+                        </span>
+                        <span style={{ fontSize: '0.6rem', color: '#8896ab' }}>View →</span>
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );

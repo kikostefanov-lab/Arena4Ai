@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { BaseAdapter } from '../base-adapter.js';
-import { normalizeLine } from './codex-normalizer.js';
+import { CodexNormalizer } from './codex-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
@@ -45,6 +45,7 @@ export class CodexAdapter extends BaseAdapter {
     }
 
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
+    const normalizer = new CodexNormalizer(ctx);
 
     this.executionDone = new Promise<void>((resolve, reject) => {
       // codex exec <prompt>
@@ -72,26 +73,27 @@ export class CodexAdapter extends BaseAdapter {
 
       this.process = child;
 
-      const rl = createInterface({ input: child.stdout! });
-      rl.on('line', (line) => {
-        if (!line.trim()) return;
-        this.emitArenaEvent(normalizeLine(line, ctx));
-      });
+      // Codex writes all output (reasoning, tool calls, file writes) to stderr.
+      // stdout is unused — attach it to suppress "pipe buffer full" backpressure.
+      child.stdout!.resume();
 
       const errRl = createInterface({ input: child.stderr! });
       errRl.on('line', (line) => {
-        if (!line.trim()) return;
-        this.emitArenaEvent(normalizeLine(`Error: ${line}`, ctx));
+        const event = normalizer.addLine(line);
+        if (event) this.emitArenaEvent(event);
       });
 
       child.on('close', (code) => {
+        errRl.close();
         this.process = null;
         if (code === 0 || code === null) resolve();
         else reject(new Error(`Codex process exited with code ${code}`));
       });
 
       child.on('error', (err) => {
+        errRl.close();
         this.process = null;
+        this.emitErrorEvent(`Failed to start Codex: ${err.message}`);
         reject(err);
       });
     });

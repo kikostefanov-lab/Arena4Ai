@@ -4,22 +4,76 @@ import { EventType } from '@arena/shared';
 
 const BASE = { competitionId: 'comp-1', teamId: 'team-a' };
 
+/** Helper: wrap a content block in the real stream-json assistant envelope. */
+function assistantMsg(content: unknown[]) {
+  return JSON.stringify({
+    type: 'assistant',
+    message: { content },
+  });
+}
+
 describe('normalizeLine()', () => {
-  it('maps a tool_use line to TOOL_CALL', () => {
-    const raw = JSON.stringify({ type: 'tool_use', name: 'bash', input: { command: 'ls' } });
+  // ── stream-json format (real Claude Code output) ──────────────────────
+
+  it('maps an assistant tool_use block to TOOL_CALL', () => {
+    const raw = assistantMsg([{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }]);
     const event = normalizeLine(raw, BASE);
     expect(event.type).toBe(EventType.TOOL_CALL);
-    expect((event.payload as { tool: string }).tool).toBe('bash');
+    expect((event.payload as { tool: string }).tool).toBe('Bash');
   });
 
-  it('maps a text line containing a file path to FILE_CREATE', () => {
-    const raw = JSON.stringify({ type: 'text', text: 'Created file /workspace/solution.ts' });
+  it('maps an assistant Write tool_use to FILE_CREATE', () => {
+    const raw = assistantMsg([{ type: 'tool_use', name: 'Write', input: { file_path: '/tmp/foo.ts', content: '...' } }]);
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.FILE_CREATE);
+    expect((event.payload as { text: string }).text).toBe('/tmp/foo.ts');
+  });
+
+  it('maps an assistant Edit tool_use to FILE_CREATE', () => {
+    const raw = assistantMsg([{ type: 'tool_use', name: 'Edit', input: { file_path: '/tmp/bar.py' } }]);
     const event = normalizeLine(raw, BASE);
     expect(event.type).toBe(EventType.FILE_CREATE);
   });
 
-  it('maps a text line without a file path to REASONING', () => {
-    const raw = JSON.stringify({ type: 'text', text: 'I will now analyse the problem.' });
+  it('maps an assistant text block to REASONING', () => {
+    const raw = assistantMsg([{ type: 'text', text: 'I will now analyse the problem.' }]);
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.REASONING);
+  });
+
+  it('maps an assistant text block with file path to FILE_CREATE', () => {
+    const raw = assistantMsg([{ type: 'text', text: 'Created file /workspace/solution.ts' }]);
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.FILE_CREATE);
+  });
+
+  it('maps an assistant thinking block to REASONING', () => {
+    const raw = assistantMsg([{ type: 'thinking', thinking: 'Let me consider the options...' }]);
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.REASONING);
+    expect((event.payload as { text: string }).text).toBe('Let me consider the options...');
+  });
+
+  it('uses the last content block from an assistant message', () => {
+    const raw = assistantMsg([
+      { type: 'text', text: 'earlier text' },
+      { type: 'tool_use', name: 'Grep', input: { pattern: 'foo' } },
+    ]);
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.TOOL_CALL);
+    expect((event.payload as { tool: string }).tool).toBe('Grep');
+  });
+
+  // ── Legacy format (backward compatibility) ────────────────────────────
+
+  it('maps a legacy tool_use line to TOOL_CALL', () => {
+    const raw = JSON.stringify({ type: 'tool_use', name: 'bash', input: { command: 'ls' } });
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.TOOL_CALL);
+  });
+
+  it('maps a legacy text line to REASONING', () => {
+    const raw = JSON.stringify({ type: 'text', text: 'Hello' });
     const event = normalizeLine(raw, BASE);
     expect(event.type).toBe(EventType.REASONING);
   });
@@ -30,14 +84,30 @@ describe('normalizeLine()', () => {
     expect(event.type).toBe(EventType.ERROR);
   });
 
+  // ── Suppressed types ──────────────────────────────────────────────────
+
+  it('maps system events to REASONING (suppressed noise)', () => {
+    const raw = JSON.stringify({ type: 'system', subtype: 'init', session_id: 'abc' });
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.REASONING);
+  });
+
+  it('maps user events to REASONING', () => {
+    const raw = JSON.stringify({ type: 'user', message: { role: 'user', content: [] } });
+    const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.REASONING);
+  });
+
+  // ── General ───────────────────────────────────────────────────────────
+
   it('returns an event with a valid ISO timestamp', () => {
-    const raw = JSON.stringify({ type: 'text', text: 'Thinking…' });
+    const raw = assistantMsg([{ type: 'text', text: 'Thinking…' }]);
     const event = normalizeLine(raw, BASE);
     expect(new Date(event.timestamp).toISOString()).toBe(event.timestamp);
   });
 
   it('returns an event with the supplied competitionId and teamId', () => {
-    const raw = JSON.stringify({ type: 'text', text: 'Hello' });
+    const raw = assistantMsg([{ type: 'text', text: 'Hello' }]);
     const event = normalizeLine(raw, BASE);
     expect(event.competitionId).toBe('comp-1');
     expect(event.teamId).toBe('team-a');
