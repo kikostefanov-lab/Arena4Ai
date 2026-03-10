@@ -428,6 +428,43 @@ export default function ReplayPage() {
     setCursor(pos);
   };
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't fire when typing in an input
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      switch (e.key) {
+        case ' ':
+          e.preventDefault();
+          setPlaying((p) => !p);
+          break;
+        case 'ArrowLeft':
+          e.preventDefault();
+          setPlaying(false);
+          setCursor((c) => Math.max(0, c - 1));
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          setPlaying(false);
+          setCursor((c) => Math.min(allEvents.length, c + 1));
+          break;
+        case '0':
+        case 'Home':
+          e.preventDefault();
+          setPlaying(false);
+          setCursor(0);
+          break;
+        case 'End':
+          e.preventDefault();
+          setPlaying(false);
+          setCursor(allEvents.length);
+          break;
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [allEvents.length]);
+
   // ─── Render states ───
 
   if (loading) return (
@@ -694,6 +731,11 @@ export default function ReplayPage() {
           events={allEvents}
           onSeek={handleSeek}
         />
+
+        {/* Keyboard shortcut hint */}
+        <div style={{ fontSize: '0.62rem', color: '#2d4060', marginTop: '0.5rem', textAlign: 'center', letterSpacing: '0.3px' }}>
+          Space play/pause · ←→ step · 0 reset · End jump to end
+        </div>
       </div>
 
       {/* ── Lane View ──────────────────────────────────────────────────────── */}
