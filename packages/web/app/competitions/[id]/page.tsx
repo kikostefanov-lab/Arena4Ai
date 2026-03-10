@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS as TOKEN_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
+import { EventRow, classifyEvent } from '../../../lib/EventRow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -39,196 +40,6 @@ interface ForgeOutput { forgeModel: string; artifacts: ForgeArtifact[]; generate
 interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: SynthesisResult | null; deliverables?: TeamDeliverable[]; presentations?: TeamPresentation[]; forge?: ForgeOutput | null; }
 
 type CompetitionState = 'PENDING' | 'RUNNING' | 'COLLECTING' | 'PRESENTING' | 'JUDGING' | 'SYNTHESIZING' | 'COMPLETE' | 'FORGING' | 'FORGE_COMPLETE' | 'ERROR' | 'FAILED' | 'CANCELLED';
-
-// ─── Event classification ─────────────────────────────────────────────────────
-
-interface EventInfo {
-  label: string;
-  icon: string;
-  color: string;
-  bg: string;
-  text: string;
-}
-
-function getToolIcon(toolName: string): string {
-  const n = toolName.toLowerCase();
-  if (/bash|shell|run|exec|command/.test(n)) return '⚡';
-  if (/write|create|save/.test(n)) return '✍️';
-  if (/read|cat|view|open/.test(n)) return '👁️';
-  if (/search|grep|find|glob/.test(n)) return '🔍';
-  if (/python|py|node|js/.test(n)) return '🐍';
-  if (/edit|replace|patch|str/.test(n)) return '✏️';
-  if (/web|http|fetch|curl|url/.test(n)) return '🌐';
-  if (/list|ls|dir/.test(n)) return '📂';
-  if (/git/.test(n)) return '🔀';
-  return '🔧';
-}
-
-function toolCommentary(toolName: string, valStr: string): string {
-  const n = toolName.toLowerCase();
-  if (/bash|shell|run|exec/.test(n)) return `$ ${valStr}`;
-  if (/write|create/.test(n)) return `Writing to ${valStr}`;
-  if (/read|cat|view/.test(n)) return `Reading ${valStr}`;
-  if (/search|grep|find/.test(n)) return `Searching: ${valStr}`;
-  if (/edit|replace|patch|str/.test(n)) return `Patching ${valStr}`;
-  if (/glob/.test(n)) return `Glob: ${valStr}`;
-  return valStr ? `${toolName}: ${valStr}` : toolName;
-}
-
-function classifyEvent(type: string, payload: unknown): EventInfo | null {
-  const p = payload as Record<string, unknown> | null;
-  if (!p) return null;
-
-  switch (type) {
-    case 'TOOL_CALL': {
-      const tool = String(p.tool ?? 'unknown');
-      const input = (p.input ?? {}) as Record<string, unknown>;
-      const val = input.command ?? input.code ?? input.path ?? input.query ?? input.content;
-      const valStr = val ? String(val).replace(/\n/g, ' ').trim().slice(0, 80) : '';
-      const keys = Object.keys(input);
-      const text = toolCommentary(tool, valStr || (keys.length ? `${keys[0]}=…` : ''));
-      return {
-        label: tool.toUpperCase().slice(0, 8),
-        icon: getToolIcon(tool),
-        color: '#3b82f6',
-        bg: 'rgba(59,130,246,0.08)',
-        text,
-      };
-    }
-
-    case 'FILE_CREATE': {
-      const text = String(p.text ?? p.path ?? '');
-      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
-      const fname = m ? m[1] : text.slice(0, 80);
-      return { label: 'CREATE', icon: '📄', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', text: `New file: ${fname}` };
-    }
-
-    case 'FILE_MODIFY': {
-      const text = String(p.text ?? p.path ?? '');
-      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
-      const fname = m ? m[1] : text.slice(0, 80);
-      return { label: 'MODIFY', icon: '✏️', color: '#10b981', bg: 'rgba(16,185,129,0.08)', text: `Modified: ${fname}` };
-    }
-
-    case 'REASONING': {
-      if (p.text && typeof p.text === 'string') {
-        return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: p.text.trim() };
-      }
-      if (p.raw) {
-        const raw = p.raw as Record<string, unknown>;
-
-        if (raw.type === 'system' || raw.type === 'rate_limit_event') return null;
-
-        if (raw.type === 'user') {
-          const msg = raw.message as Record<string, unknown> | null;
-          const content = msg?.content;
-          if (Array.isArray(content)) {
-            const toolResult = (content as Record<string, unknown>[]).find((b) => b.type === 'tool_result');
-            if (toolResult?.content && typeof toolResult.content === 'string') {
-              const resultText = toolResult.content.replace(/\n/g, ' ').trim();
-              const isErr = /error|failed|exception|traceback|command not found/i.test(resultText);
-              return {
-                label: isErr ? 'FAIL' : 'RESULT',
-                icon: isErr ? '❌' : '✅',
-                color: isErr ? '#ef4444' : '#22c55e',
-                bg: isErr ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.06)',
-                text: resultText,
-              };
-            }
-          }
-          return null;
-        }
-
-        if (raw.type === 'result') {
-          const res = raw.result;
-          const resText = res && typeof res === 'string' ? res.trim() : null;
-          if (!resText) return null;
-          return { label: 'DONE', icon: '🏁', color: '#f97316', bg: 'rgba(249,115,22,0.08)', text: resText };
-        }
-
-        if (raw.type === 'assistant') {
-          const msg = raw.message as Record<string, unknown> | null;
-          const content = msg?.content;
-          if (Array.isArray(content)) {
-            const blocks = content as Record<string, unknown>[];
-
-            // Text output from agent
-            const tb = blocks.find((b) => b.type === 'text');
-            if (tb?.text && typeof tb.text === 'string') {
-              return { label: 'OUTPUT', icon: '💬', color: '#a78bfa', bg: 'rgba(167,139,250,0.07)', text: tb.text };
-            }
-
-            // Claude's internal thinking
-            const thinkBlock = blocks.find((b) => b.type === 'thinking');
-            if (thinkBlock?.thinking && typeof thinkBlock.thinking === 'string') {
-              const raw = thinkBlock.thinking.replace(/\n/g, ' ').trim();
-              // Take first natural sentence for punchy commentary
-              const sentence = raw.match(/[^.!?]{10,}[.!?]/)?.[0]?.trim() ?? raw;
-              return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: sentence };
-            }
-
-            // Tool invocation
-            const toolBlock = blocks.find((b) => b.type === 'tool_use');
-            if (toolBlock) {
-              const toolName = String(toolBlock.name ?? 'tool');
-              const input = toolBlock.input as Record<string, unknown> | undefined;
-              const val = input?.command ?? input?.code ?? input?.path ?? input?.content ?? input?.query ?? input?.pattern;
-              const valStr = val && typeof val === 'string' ? val.replace(/\n/g, ' ').slice(0, 80) : '';
-              const text = toolCommentary(toolName, valStr);
-              return {
-                label: toolName.toUpperCase().slice(0, 8),
-                icon: getToolIcon(toolName),
-                color: '#3b82f6',
-                bg: 'rgba(59,130,246,0.08)',
-                text,
-              };
-            }
-          }
-          return null;
-        }
-      }
-      return null;
-    }
-
-    case 'ERROR': {
-      const err = p.error;
-      let text = '';
-      if (typeof err === 'string') text = err;
-      else if (err && typeof err === 'object') {
-        const e = err as Record<string, unknown>;
-        text = String(e.message ?? e.text ?? JSON.stringify(err));
-      } else {
-        text = typeof p.raw === 'string' ? p.raw.slice(0, 120) : '';
-      }
-      if (!text) return null;
-      return { label: 'ERROR', icon: '⚠️', color: '#ef4444', bg: 'rgba(239,68,68,0.10)', text };
-    }
-
-    case 'COMMENTARY': {
-      const text = typeof p.text === 'string' ? p.text.trim() : '';
-      if (!text) return null;
-      return { label: '🎙️ Commentary', icon: '🎙️', color: '#eab308', bg: 'rgba(234,179,8,0.08)', text };
-    }
-
-    case 'TIME_WARNING':
-    case 'TIME_UP': {
-      const rem = p.remainingMs ?? p.remaining;
-      const text = rem != null ? `${Math.round(Number(rem) / 1000)}s remaining on the clock` : null;
-      if (!text) return null;
-      const isUp = type === 'TIME_UP';
-      return { label: isUp ? 'TIME UP' : 'TIME', icon: '⏰', color: isUp ? '#f97316' : '#eab308', bg: isUp ? 'rgba(249,115,22,0.12)' : 'rgba(234,179,8,0.10)', text };
-    }
-
-    case 'JUDGE_SCORE': {
-      const score = p.score ?? p.totalScore;
-      const crit = p.criterionId ?? p.criterion;
-      if (crit && score != null) return { label: 'SCORE', icon: '⚖️', color: '#a855f7', bg: 'rgba(168,85,247,0.10)', text: `${String(crit)} → ${score}` };
-      return null;
-    }
-
-    default: return null;
-  }
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -366,17 +177,6 @@ function getModelName(model: string): string {
   return model.split(':')[0].toLowerCase();
 }
 
-function getRelativeTime(eventTimestamp: string, competitionStartTime: number | null): string {
-  if (!competitionStartTime) return '';
-  const eventTime = new Date(eventTimestamp).getTime();
-  const diff = Math.max(0, eventTime - competitionStartTime);
-  const totalSecs = Math.floor(diff / 1000);
-  const mins = Math.floor(totalSecs / 60);
-  const secs = totalSecs % 60;
-  return `${mins}:${String(secs).padStart(2, '0')}`;
-}
-
-
 function ctrlBtn(color: string, bg: string): React.CSSProperties {
   return {
     fontSize: '0.72rem', fontWeight: 700, padding: '0.4rem 1rem',
@@ -461,72 +261,6 @@ function LaneHistogram({ events }: { events: ArenaEvent[] }) {
           />
         );
       })}
-    </div>
-  );
-}
-
-// ─── Event row ────────────────────────────────────────────────────────────────
-
-function EventRow({
-  event, competitionStartTime,
-}: {
-  event: ArenaEvent; competitionStartTime: number | null;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const info = classifyEvent(event.type, event.payload);
-  if (!info) return null;
-
-  const relTime = getRelativeTime(event.timestamp, competitionStartTime);
-  const text = info.text;
-
-  return (
-    <div className="arena-event-row" style={{
-      background: info.bg, borderRadius: '8px',
-      padding: '0.55rem 0.8rem', fontSize: '0.88rem', lineHeight: 1.5,
-      display: 'flex', gap: '0.55rem', alignItems: 'flex-start',
-      transition: 'background 0.15s ease',
-    }}>
-      {/* Timestamp */}
-      <span style={{
-        color: '#4a5568', fontSize: '0.75rem', fontFamily: 'monospace',
-        flexShrink: 0, width: '2.8rem', textAlign: 'right',
-        marginTop: '2px', letterSpacing: '-0.3px',
-      }}>
-        {relTime}
-      </span>
-      {/* Icon */}
-      <span style={{ flexShrink: 0, fontSize: '1.0rem', lineHeight: 1.4 }}>{info.icon}</span>
-      {/* Label badge */}
-      <span style={{
-        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.72rem',
-        letterSpacing: '0.5px',
-        background: `rgba(${hexToRgb(info.color)},0.12)`,
-        padding: '0.1rem 0.45rem', borderRadius: '4px', marginTop: '1px',
-        whiteSpace: 'nowrap',
-      }}>
-        {info.label}
-      </span>
-      {/* Summary text */}
-      <span
-        onClick={() => text.length > 120 && setExpanded(e => !e)}
-        style={{
-          color: '#c4d4e8',
-          flex: 1, minWidth: 0,
-          ...(expanded ? {
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            cursor: 'pointer',
-          } : {
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            cursor: text.length > 120 ? 'pointer' : 'default',
-          }),
-        }}
-      >
-        {text}
-      </span>
-      {!expanded && text.length > 120 && <span style={{fontSize:'0.6rem',color:'#2d4060',flexShrink:0,marginLeft:'0.3rem'}}>▼</span>}
     </div>
   );
 }
@@ -640,6 +374,8 @@ const LanePanel = forwardRef<
   const recentActivity = events.length > 0 &&
     (Date.now() - new Date(events[events.length - 1].timestamp).getTime()) < 5000;
 
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+
   // Flash "BATTLE COMMENCED" when first renderable event arrives
   const [showLaunch, setShowLaunch] = useState(false);
   const wasRenderable = useRef(false);
@@ -733,7 +469,13 @@ const LanePanel = forwardRef<
           </div>
         )}
         {events.map((ev) => (
-          <EventRow key={ev.eventId} event={ev} competitionStartTime={competitionStartTime} />
+          <EventRow
+            key={ev.eventId}
+            event={ev}
+            startTs={competitionStartTime ? new Date(competitionStartTime).toISOString() : null}
+            expanded={expandedEventId === ev.eventId}
+            onToggle={() => setExpandedEventId(prev => prev === ev.eventId ? null : ev.eventId)}
+          />
         ))}
       </div>
 
@@ -937,6 +679,7 @@ function ScoreDrawer({
   height,
   onToggle,
   fileEventsByTeam,
+  onForgeComplete,
 }: {
   competitionId: string;
   result: CompetitionResult;
@@ -944,8 +687,11 @@ function ScoreDrawer({
   height: number;
   onToggle: () => void;
   fileEventsByTeam?: TeamFileEvents[];
+  onForgeComplete?: (forge: ForgeOutput) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'>('scores');
+  const [activeTab, setActiveTab] = useState<'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'>(
+    result.forge ? 'forge' : 'scores'
+  );
   const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
@@ -961,7 +707,7 @@ function ScoreDrawer({
   }));
 
   const scoreSummary = teamDisplays
-    .map((d) => `${d.label} ${d.result.totalScore.toFixed(1)}`)
+    .map((d) => `${d.label} ${Math.round(d.result.totalScore * 100)}%`)
     .join('  vs  ');
 
   const totalFileCount = (result.deliverables ?? []).reduce((sum, td) => sum + td.files.length, 0);
@@ -975,6 +721,9 @@ function ScoreDrawer({
 
   const hasForge = result.forge != null;
   const [forging, setForging] = useState(false);
+  const [forgeError, setForgeError] = useState<string | null>(null);
+  const forgePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => () => { if (forgePollRef.current) clearInterval(forgePollRef.current); }, []);
 
   const tabStyle = (tab: 'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'): React.CSSProperties => ({
     fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
@@ -1088,7 +837,7 @@ function ScoreDrawer({
                           color: isWinner ? '#eab308' : '#e2e8f0',
                           flexShrink: 0, fontFamily: 'monospace',
                         }}>
-                          {tr.totalScore.toFixed(1)}
+                          {Math.round(tr.totalScore * 100)}%
                         </span>
                       </div>
 
@@ -1113,7 +862,7 @@ function ScoreDrawer({
                                 {cs.criterionId}
                               </span>
                               <span style={{ color: isWinner ? '#eab308' : '#e2e8f0', fontWeight: 700, marginLeft: '0.4rem', flexShrink: 0, fontFamily: 'monospace' }}>
-                                {cs.score}/{maxScore}
+                                {Math.round((cs.score / maxScore) * 100)}%
                               </span>
                             </div>
                             <div style={{ height: '4px', background: 'rgba(30,45,69,0.6)', borderRadius: '2px', overflow: 'hidden' }}>
@@ -1667,35 +1416,70 @@ function ScoreDrawer({
                       disabled={forging}
                       onClick={async () => {
                         setForging(true);
+                        setForgeError(null);
                         try {
                           const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
                           const res = await fetch(`${apiBase}/competitions/${competitionId}/forge`, {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'x-api-key': 'arena' },
+                            headers: { 'Content-Type': 'application/json' },
                           });
                           if (!res.ok) {
                             const data = await res.json().catch(() => ({}));
-                            console.error('Forge failed:', data);
+                            setForgeError(data.error ?? `Forge request failed (${res.status})`);
+                            setForging(false);
+                            return;
                           }
+                          // Poll for completion
+                          let attempts = 0;
+                          forgePollRef.current = setInterval(async () => {
+                            attempts++;
+                            try {
+                              const pollRes = await fetch(`${apiBase}/competitions/${competitionId}/forge`);
+                              if (pollRes.ok) {
+                                const data = await pollRes.json();
+                                if (data.status === 'complete' && data.forge) {
+                                  clearInterval(forgePollRef.current!); forgePollRef.current = null;
+                                  onForgeComplete?.(data.forge);
+                                  setActiveTab('forge');
+                                  setForging(false);
+                                }
+                              } else if (pollRes.status === 404) {
+                                clearInterval(forgePollRef.current!); forgePollRef.current = null;
+                                setForgeError('Forge failed server-side. Check the API server logs for details.');
+                                setForging(false);
+                              }
+                            } catch { /* network error, keep polling */ }
+                            if (attempts >= 60) {
+                              clearInterval(forgePollRef.current!); forgePollRef.current = null;
+                              setForgeError('Forge timed out after 3 minutes.');
+                              setForging(false);
+                            }
+                          }, 3000);
                         } catch (err) {
-                          console.error('Forge request failed:', err);
-                        } finally {
+                          setForgeError('Network error — is the API server running?');
                           setForging(false);
                         }
                       }}
                       style={{
-                        fontSize: '0.78rem', fontWeight: 800, color: forging ? '#8896ab' : '#0a0e17',
+                        fontSize: '0.78rem', fontWeight: 800, color: forging ? '#eab308' : '#0a0e17',
                         background: forging
-                          ? 'rgba(136,150,171,0.2)'
+                          ? 'rgba(234,179,8,0.1)'
                           : 'linear-gradient(135deg, #eab308, #f59e0b)',
-                        border: 'none', borderRadius: '8px',
+                        border: forging ? '1px solid rgba(234,179,8,0.4)' : 'none',
+                        borderRadius: '8px',
                         padding: '0.65rem 2rem', cursor: forging ? 'not-allowed' : 'pointer',
                         fontFamily: 'inherit', letterSpacing: '0.5px',
                         transition: 'all 0.15s',
+                        animation: forging ? 'judgingPulse 2s ease-in-out infinite' : 'none',
                       }}
                     >
-                      {forging ? 'Forging…' : 'Forge This Solution'}
+                      {forging ? '🔨 Forging… (~30s)' : 'Forge This Solution'}
                     </button>
+                    {forgeError && (
+                      <div style={{ fontSize: '0.7rem', color: '#ef4444', marginTop: '0.8rem', maxWidth: '400px', margin: '0.8rem auto 0', lineHeight: 1.5 }}>
+                        {forgeError}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -1752,9 +1536,8 @@ function StateBanner({ state, isPaused }: { state: CompetitionState; isPaused: b
 // ─── Commentary bar ───────────────────────────────────────────────────────────
 
 function CommentaryBar({ events }: { events: ArenaEvent[] }) {
-  const commentaryEvents = events.filter((e) => e.type === 'COMMENTARY');
-  if (commentaryEvents.length === 0) return null;
-  const latest = commentaryEvents[commentaryEvents.length - 1];
+  const latest = [...events].reverse().find((e) => e.type === 'COMMENTARY');
+  if (!latest) return null;
   const payload = latest.payload as Record<string, unknown>;
   const text = typeof payload.text === 'string' ? payload.text.trim() : '';
   if (!text) return null;
@@ -1855,11 +1638,36 @@ export default function CompetitionPage() {
     if (!id) return;
     fetch(`/api/competitions/${id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { teams?: Team[]; brief?: Brief; startedAt?: string } | null) => {
+      .then((data: { teams?: Team[]; brief?: Brief; startedAt?: string; state?: CompetitionState; result?: Record<string, unknown> | null } | null) => {
         if (!data) return;
         if (Array.isArray(data.teams)) setTeams(data.teams);
         if (data.brief) { setBrief(data.brief); setBriefTitle(data.brief.title ?? ''); }
         if (data.startedAt) setCompetitionStartTime(new Date(data.startedAt).getTime());
+        // Hydrate state + result for already-completed competitions (WS won't replay forge events)
+        if (data.state) setState(data.state);
+        if (data.result) {
+          // DB result has `scorecards` + `winnerId`; frontend expects `teams` + `winnerId`
+          const raw = data.result;
+          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
+          const normalized: CompetitionResult = {
+            winnerId: (raw.winnerId as string) ?? null,
+            teams: scorecards.map((sc) => ({
+              teamId: sc.teamId,
+              totalScore: sc.finalScore,
+              criteriaScores: sc.judgeResults?.[0]?.scores?.map(s => ({
+                criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary ?? '',
+              })) ?? [],
+              rank: sc.rank,
+            })),
+            summary: raw.summary as string | undefined,
+            synthesis: raw.synthesis as SynthesisResult | null | undefined,
+            presentations: raw.presentations as TeamPresentation[] | undefined,
+            forge: raw.forge as ForgeOutput | null | undefined,
+            deliverables: raw.deliverables as TeamDeliverable[] | undefined,
+          };
+          setResult(normalized);
+          setScoreDrawerHeight(SCORE_DRAWER_EXPANDED);
+        }
       })
       .catch(() => { /* non-critical */ });
   }, [id]);
@@ -1874,8 +1682,8 @@ export default function CompetitionPage() {
 
   // Elapsed timer — counts from competition start time, freezes when paused or post-run
   useEffect(() => {
-    const postRun = state === 'COMPLETE' || state === 'FAILED' || state === 'CANCELLED'
-      || state === 'COLLECTING' || state === 'JUDGING' || state === 'SYNTHESIZING';
+    const postRun = state === 'COMPLETE' || state === 'FORGE_COMPLETE' || state === 'FAILED' || state === 'CANCELLED'
+      || state === 'COLLECTING' || state === 'JUDGING' || state === 'SYNTHESIZING' || state === 'FORGING';
     if (isPaused || postRun) return;
     const base = competitionStartTime ?? Date.now();
     const iv = setInterval(() => setElapsed(Date.now() - base), 500);
@@ -2038,7 +1846,7 @@ export default function CompetitionPage() {
     : Array.from(teamEvents.keys()).map((tid) => ({ id: tid, model: tid }));
 
   // Collect FILE_CREATE events from the event stream, grouped by team
-  const fileEventsByTeam: TeamFileEvents[] = orderedTeams.map((team) => {
+  const fileEventsByTeam: TeamFileEvents[] = useMemo(() => orderedTeams.map((team) => {
     const events = teamEvents.get(team.id) ?? [];
     const files = events
       .filter((ev) => ev.type === 'FILE_CREATE')
@@ -2050,13 +1858,13 @@ export default function CompetitionPage() {
       })
       .filter((f) => f.path !== '');
     return { teamId: team.id, files };
-  });
+  }), [orderedTeams, teamEvents]);
 
   const numTeams = Math.max(orderedTeams.length, 1);
   const stateBadge = getStateStyle(state ?? 'PENDING');
   const isRunning = state === 'RUNNING';
-  const isComplete = state === 'COMPLETE';
-  const isTerminal = state === 'COMPLETE' || state === 'FAILED' || state === 'CANCELLED';
+  const isComplete = state === 'COMPLETE' || state === 'FORGE_COMPLETE';
+  const isTerminal = state === 'COMPLETE' || state === 'FORGE_COMPLETE' || state === 'FAILED' || state === 'CANCELLED';
 
   const totalEvents = Array.from(teamEvents.values()).reduce(
     (sum, evs) => sum + evs.length, 0,
@@ -2310,7 +2118,7 @@ export default function CompetitionPage() {
                     <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                       <span style={{ fontSize: '0.75rem', color: '#8896ab' }}>{c.id}</span>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>w={c.weight}</span>
+                        <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>{Math.round(c.weight * 100)}%</span>
                         <span style={{ fontSize: '0.72rem', color: '#c4cdd9', fontWeight: 700 }}>/{c.maxScore}</span>
                       </div>
                     </div>
@@ -2412,6 +2220,7 @@ export default function CompetitionPage() {
               h > SCORE_DRAWER_COLLAPSED ? SCORE_DRAWER_COLLAPSED : SCORE_DRAWER_EXPANDED
             )}
             fileEventsByTeam={fileEventsByTeam}
+            onForgeComplete={(forge) => setResult(prev => prev ? { ...prev, forge } : prev)}
           />
         )}
       </div>

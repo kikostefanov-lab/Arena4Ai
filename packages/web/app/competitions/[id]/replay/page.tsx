@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
-import { hexToRgb } from '../../../../lib/design-tokens';
+import { EventRow, classifyEvent } from '../../../../lib/EventRow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -47,147 +47,6 @@ const HIST_COLORS: Record<string, string> = {
   ERROR:       '#ef4444',
 };
 
-// ─── Event classification (same as arena page) ────────────────────────────────
-
-interface EventInfo {
-  label: string;
-  icon: string;
-  color: string;
-  bg: string;
-  text: string;
-}
-
-function getToolIcon(toolName: string): string {
-  const n = toolName.toLowerCase();
-  if (/bash|shell|run|exec|command/.test(n)) return '⚡';
-  if (/write|create|save/.test(n)) return '✍️';
-  if (/read|cat|view|open/.test(n)) return '👁️';
-  if (/search|grep|find|glob/.test(n)) return '🔍';
-  if (/python|py|node|js/.test(n)) return '🐍';
-  if (/edit|replace|patch|str/.test(n)) return '✏️';
-  if (/web|http|fetch|curl|url/.test(n)) return '🌐';
-  if (/list|ls|dir/.test(n)) return '📂';
-  if (/git/.test(n)) return '🔀';
-  return '🔧';
-}
-
-function toolCommentary(toolName: string, valStr: string): string {
-  const n = toolName.toLowerCase();
-  if (/bash|shell|run|exec/.test(n)) return `$ ${valStr}`;
-  if (/write|create/.test(n)) return `Writing to ${valStr}`;
-  if (/read|cat|view/.test(n)) return `Reading ${valStr}`;
-  if (/search|grep|find/.test(n)) return `Searching: ${valStr}`;
-  if (/edit|replace|patch|str/.test(n)) return `Patching ${valStr}`;
-  if (/glob/.test(n)) return `Glob: ${valStr}`;
-  return valStr ? `${toolName}: ${valStr}` : toolName;
-}
-
-function classifyEvent(type: string, payload: Record<string, unknown> | null): EventInfo | null {
-  const p = payload;
-  if (!p) return null;
-
-  switch (type) {
-    case 'TOOL_CALL': {
-      const tool = String(p.tool ?? 'unknown');
-      const input = (p.input ?? {}) as Record<string, unknown>;
-      const val = input.command ?? input.code ?? input.path ?? input.query ?? input.content;
-      const valStr = val ? String(val).replace(/\n/g, ' ').trim().slice(0, 80) : '';
-      const keys = Object.keys(input);
-      const text = toolCommentary(tool, valStr || (keys.length ? `${keys[0]}=…` : ''));
-      return { label: tool.toUpperCase().slice(0, 8), icon: getToolIcon(tool), color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', text };
-    }
-    case 'FILE_CREATE': {
-      const text = String(p.text ?? p.path ?? '');
-      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
-      return { label: 'CREATE', icon: '📄', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', text: `New file: ${m ? m[1] : text.slice(0, 80)}` };
-    }
-    case 'FILE_MODIFY': {
-      const text = String(p.text ?? p.path ?? '');
-      const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
-      return { label: 'MODIFY', icon: '✏️', color: '#10b981', bg: 'rgba(16,185,129,0.08)', text: `Modified: ${m ? m[1] : text.slice(0, 80)}` };
-    }
-    case 'REASONING': {
-      if (p.text && typeof p.text === 'string') {
-        return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: p.text.trim().slice(0, 160) };
-      }
-      if (p.raw) {
-        const raw = p.raw as Record<string, unknown>;
-        if (raw.type === 'system' || raw.type === 'rate_limit_event') return null;
-        if (raw.type === 'user') {
-          const msg = raw.message as Record<string, unknown> | null;
-          const content = msg?.content;
-          if (Array.isArray(content)) {
-            const toolResult = (content as Record<string, unknown>[]).find((b) => b.type === 'tool_result');
-            if (toolResult?.content && typeof toolResult.content === 'string') {
-              const resultText = toolResult.content.replace(/\n/g, ' ').trim();
-              const isErr = /error|failed|exception|traceback|command not found/i.test(resultText);
-              return { label: isErr ? 'FAIL' : 'RESULT', icon: isErr ? '❌' : '✅', color: isErr ? '#ef4444' : '#22c55e', bg: isErr ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.06)', text: resultText.slice(0, 160) };
-            }
-          }
-          return null;
-        }
-        if (raw.type === 'result') {
-          const res = raw.result;
-          const resText = res && typeof res === 'string' ? res.trim() : null;
-          if (!resText) return null;
-          return { label: 'DONE', icon: '🏁', color: '#f97316', bg: 'rgba(249,115,22,0.08)', text: resText.slice(0, 160) };
-        }
-        if (raw.type === 'assistant') {
-          const msg = raw.message as Record<string, unknown> | null;
-          const content = msg?.content;
-          if (Array.isArray(content)) {
-            const blocks = content as Record<string, unknown>[];
-            const tb = blocks.find((b) => b.type === 'text');
-            if (tb?.text && typeof tb.text === 'string') {
-              return { label: 'OUTPUT', icon: '💬', color: '#a78bfa', bg: 'rgba(167,139,250,0.07)', text: (tb.text as string).slice(0, 160) };
-            }
-            const thinkBlock = blocks.find((b) => b.type === 'thinking');
-            if (thinkBlock?.thinking && typeof thinkBlock.thinking === 'string') {
-              const rawThink = thinkBlock.thinking.replace(/\n/g, ' ').trim();
-              const sentence = rawThink.match(/[^.!?]{10,}[.!?]/)?.[0]?.trim() ?? rawThink;
-              return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: sentence.slice(0, 160) };
-            }
-            const toolBlock = blocks.find((b) => b.type === 'tool_use');
-            if (toolBlock) {
-              const toolName = String(toolBlock.name ?? 'tool');
-              const input = toolBlock.input as Record<string, unknown> | undefined;
-              const val = input?.command ?? input?.code ?? input?.path ?? input?.content ?? input?.query ?? input?.pattern;
-              const valStr = val && typeof val === 'string' ? val.replace(/\n/g, ' ').slice(0, 80) : '';
-              return { label: toolName.toUpperCase().slice(0, 8), icon: getToolIcon(toolName), color: '#3b82f6', bg: 'rgba(59,130,246,0.08)', text: toolCommentary(toolName, valStr) };
-            }
-          }
-          return null;
-        }
-      }
-      return null;
-    }
-    case 'ERROR': {
-      const err = p.error;
-      let text = '';
-      if (typeof err === 'string') text = err.slice(0, 160);
-      else if (err && typeof err === 'object') { const e = err as Record<string, unknown>; text = String(e.message ?? e.text ?? JSON.stringify(err)).slice(0, 160); }
-      else text = typeof p.raw === 'string' ? (p.raw as string).slice(0, 120) : '';
-      if (!text) return null;
-      return { label: 'ERROR', icon: '⚠️', color: '#ef4444', bg: 'rgba(239,68,68,0.10)', text };
-    }
-    case 'TIME_WARNING':
-    case 'TIME_UP': {
-      const rem = p.remainingMs ?? p.remaining;
-      const text = rem != null ? `${Math.round(Number(rem) / 1000)}s remaining on the clock` : null;
-      if (!text) return null;
-      const isUp = type === 'TIME_UP';
-      return { label: isUp ? 'TIME UP' : 'TIME', icon: '⏰', color: isUp ? '#f97316' : '#eab308', bg: isUp ? 'rgba(249,115,22,0.12)' : 'rgba(234,179,8,0.10)', text };
-    }
-    case 'JUDGE_SCORE': {
-      const score = p.score ?? p.totalScore;
-      const crit = p.criterionId ?? p.criterion;
-      if (crit && score != null) return { label: 'SCORE', icon: '⚖️', color: '#a855f7', bg: 'rgba(168,85,247,0.10)', text: `${String(crit)} → ${score}` };
-      return null;
-    }
-    default: return null;
-  }
-}
-
 const LANE_COLORS = ['#3b82f6', '#a855f7', '#22c55e', '#f97316', '#eab308'];
 
 const SPEEDS = [1, 2, 4, 10] as const;
@@ -205,15 +64,6 @@ function teamLabel(teams: Team[], teamId: string): string {
   const t = teams.find((x) => x.id === teamId);
   if (!t) return teamId;
   return t.persona ? `${t.model}:${t.persona}` : t.model;
-}
-
-function formatRelativeTime(eventTs: string, startTs: string): string {
-  const diff = new Date(eventTs).getTime() - new Date(startTs).getTime();
-  if (diff < 0) return '0:00';
-  const s = Math.floor(diff / 1000);
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
 // ─── LaneHistogram ───────────────────────────────────────────────────────────
@@ -323,51 +173,6 @@ function PreBattleScreen({ color, label }: { color: string; label: string }) {
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ─── EventRow ────────────────────────────────────────────────────────────────
-
-
-function EventRow({ event, startTs, isNew }: {
-  event: ArenaEvent; startTs: string; isNew: boolean;
-}) {
-  const info = classifyEvent(event.type, event.payload);
-  if (!info) return null;
-  const relTime = formatRelativeTime(event.timestamp, startTs);
-
-  return (
-    <div
-      className={isNew ? 'event-row event-appear' : 'event-row'}
-      style={{
-        background: info.bg, borderRadius: '8px',
-        padding: '0.55rem 0.8rem', fontSize: '0.88rem', lineHeight: 1.5,
-        display: 'flex', gap: '0.55rem', alignItems: 'flex-start',
-      }}
-    >
-      <span style={{
-        color: '#4a5568', fontSize: '0.75rem', minWidth: '2.8rem',
-        textAlign: 'right', flexShrink: 0, fontVariantNumeric: 'tabular-nums', marginTop: '2px',
-      }}>
-        {relTime}
-      </span>
-      <span style={{ flexShrink: 0, fontSize: '1.0rem', lineHeight: 1.3 }}>{info.icon}</span>
-      <span style={{
-        color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.72rem',
-        letterSpacing: '0.5px',
-        background: `rgba(${hexToRgb(info.color)},0.12)`,
-        padding: '0.1rem 0.45rem', borderRadius: '4px', marginTop: '1px',
-        whiteSpace: 'nowrap',
-      }}>
-        {info.label}
-      </span>
-      <span style={{
-        color: '#c4d4e8', overflow: 'hidden', textOverflow: 'ellipsis',
-        whiteSpace: 'nowrap', flex: 1, minWidth: 0,
-      }}>
-        {info.text}
-      </span>
     </div>
   );
 }
@@ -514,12 +319,13 @@ function TimelineScrubber({
           pointerEvents: 'none',
           boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
         }}>
-          <span style={{ marginRight: '0.3rem' }}>
-            {classifyEvent(hoveredEvent.type, hoveredEvent.payload)?.icon ?? '·'}
-          </span>
-          <span style={{ color: EVENT_COLOR[hoveredEvent.type] ?? '#8896ab', fontWeight: 700, marginRight: '0.4rem' }}>
-            {classifyEvent(hoveredEvent.type, hoveredEvent.payload)?.label ?? hoveredEvent.type}
-          </span>
+          {(() => {
+            const info = classifyEvent(hoveredEvent.type, hoveredEvent.payload);
+            return <>
+              <span style={{ marginRight: '0.3rem' }}>{info?.icon ?? '·'}</span>
+              <span style={{ color: EVENT_COLOR[hoveredEvent.type] ?? '#8896ab', fontWeight: 700, marginRight: '0.4rem' }}>{info?.label ?? hoveredEvent.type}</span>
+            </>;
+          })()}
           <span style={{ color: '#4a5568' }}>#{hoverIdx}</span>
         </div>
       )}
@@ -543,6 +349,7 @@ export default function ReplayPage() {
   const [error, setError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const laneRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
   // Fetch events
   useEffect(() => {
@@ -968,7 +775,7 @@ export default function ReplayPage() {
                     </p>
                   </div>
                 )}
-                {teamEvents.map((ev) => {
+                {teamEvents.map((ev, idx) => {
                   const globalIdx = allEvents.indexOf(ev);
                   const isNew = playing && globalIdx >= prevCursor && globalIdx < cursor;
                   return (
@@ -976,6 +783,8 @@ export default function ReplayPage() {
                       key={ev.id}
                       event={ev}
                       startTs={startTs}
+                      expanded={expandedEventId === ev.id}
+                      onToggle={() => setExpandedEventId(prev => prev === ev.id ? null : ev.id)}
                       isNew={isNew}
                     />
                   );
