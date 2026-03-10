@@ -1410,22 +1410,6 @@ function ScoreDrawer({
                       </details>
                     ))}
 
-                    {/* Download all button — single zip via API */}
-                    <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-                      <a
-                        href={`/api/competitions/${competitionId}/forge/download`}
-                        download
-                        style={{
-                          fontSize: '0.72rem', fontWeight: 700, color: '#eab308',
-                          background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.3)',
-                          borderRadius: '6px', padding: '0.5rem 1.2rem',
-                          textDecoration: 'none', fontFamily: 'inherit',
-                          display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                        }}
-                      >
-                        ⬇ Download All (.zip)
-                      </a>
-                    </div>
                   </>
                 ) : (
                   <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
@@ -1486,15 +1470,17 @@ function ScoreDrawer({
                           forgePollRef.current = setInterval(async () => {
                             attempts++;
                             try {
-                              // Poll progress (best-effort, don't fail if 404)
-                              const progRes = await fetch(`${apiBase}/competitions/${competitionId}/forge/progress`);
+                              // Poll progress + completion in parallel
+                              const [progRes, pollRes] = await Promise.all([
+                                fetch(`${apiBase}/competitions/${competitionId}/forge/progress`),
+                                fetch(`${apiBase}/competitions/${competitionId}/forge`),
+                              ]);
                               if (progRes.ok) {
                                 const { progress } = await progRes.json();
-                                setForgeProgress(progress);
+                                setForgeProgress((prev) =>
+                                  JSON.stringify(prev) === JSON.stringify(progress) ? prev : progress
+                                );
                               }
-
-                              // Poll for completion
-                              const pollRes = await fetch(`${apiBase}/competitions/${competitionId}/forge`);
                               if (pollRes.ok) {
                                 const data = await pollRes.json();
                                 if (data.status === 'complete' && data.forge) {

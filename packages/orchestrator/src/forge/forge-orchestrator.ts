@@ -8,7 +8,8 @@ type ProgressMap = Record<string, ArtifactStatus>;
 const forgeProgressStore = new Map<string, ProgressMap>();
 
 export function getForgeProgress(competitionId: string): ProgressMap | null {
-  return forgeProgressStore.get(competitionId) ?? null;
+  const progress = forgeProgressStore.get(competitionId);
+  return progress ? { ...progress } : null;
 }
 
 export interface ForgeInput {

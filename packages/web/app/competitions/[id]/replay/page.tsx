@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import { EventRow, classifyEvent } from '../../../../lib/EventRow';
+import { resolveTeamLabel } from '../../../../lib/format';
+import { hexToRgb } from '../../../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -60,11 +62,6 @@ const MARKER_EVENT_TYPES = new Set([
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function teamLabel(teams: Team[], teamId: string): string {
-  const t = teams.find((x) => x.id === teamId);
-  if (!t) return teamId;
-  return t.persona ? `${t.model}:${t.persona}` : t.model;
-}
 
 // ─── LaneHistogram ───────────────────────────────────────────────────────────
 
@@ -123,8 +120,7 @@ function PreBattleScreen({ color, label }: { color: string; label: string }) {
     return () => clearInterval(t);
   }, []);
 
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(color);
-  const rgb = result ? `${parseInt(result[1], 16)},${parseInt(result[2], 16)},${parseInt(result[3], 16)}` : '255,255,255';
+  const rgb = hexToRgb(color);
 
   return (
     <div style={{
@@ -750,7 +746,7 @@ export default function ReplayPage() {
           const teamEvents = visibleEvents.filter((e) => e.teamId === team.id);
           const allTeamEvents = allEvents.filter((e) => e.teamId === team.id);
           const color = LANE_COLORS[i] ?? '#8896ab';
-          const label = teamLabel(teams.length > 0 ? teams : orderedTeams, team.id);
+          const label = resolveTeamLabel(teams.length > 0 ? teams : orderedTeams, team.id, team.id);
 
           return (
             <div

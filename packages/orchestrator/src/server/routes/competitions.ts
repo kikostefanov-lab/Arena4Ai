@@ -255,14 +255,13 @@ competitionsRouter.get('/:id/forge/progress', (req: Request, res: Response) => {
 // GET /competitions/:id/forge/download — zip of all 6 forge artifacts
 competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-  const result = await repo.getResult(id);
+  const [result, comp] = await Promise.all([repo.getResult(id), repo.getCompetition(id)]);
   if (!result?.forge) {
     res.status(404).json({ error: 'No forge results for this competition' });
     return;
   }
 
   const forge = result.forge as ForgeOutput;
-  const comp = await repo.getCompetition(id);
   const title = (comp?.brief as { title?: string } | null)?.title ?? id;
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
 
