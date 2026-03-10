@@ -80,7 +80,7 @@ export default function GalleryPage() {
   useEffect(() => {
     fetch('/api/competitions')
       .then((r) => r.json())
-      .then((data: CompetitionSummary[]) => { setCompetitions(data); setLoading(false); })
+      .then((data: CompetitionSummary[]) => { setCompetitions(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => { setError('Failed to load competitions — is the API server running?'); setLoading(false); });
   }, []);
 
@@ -90,7 +90,7 @@ export default function GalleryPage() {
       if (document.visibilityState !== 'visible') return;
       fetch('/api/competitions')
         .then((r) => r.json())
-        .then((data: CompetitionSummary[]) => setCompetitions(data))
+        .then((data: CompetitionSummary[]) => setCompetitions(Array.isArray(data) ? data : []))
         .catch(() => { /* silently ignore refresh errors */ });
     };
     const interval = setInterval(refresh, 10_000);
