@@ -4,8 +4,11 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { TournamentRunner } from '../../engine/tournament-runner.js';
 import type { TournamentRanking } from '../../engine/tournament-runner.js';
+import type { CompetitionRunner } from '../../engine/competition-runner.js';
 import { TournamentRepository } from '../../db/repository.js';
 import { db } from '../../db/client.js';
+import { repo as compRepo } from '../repo.js';
+import { runnerRegistry } from '../runner-registry.js';
 
 export const tournamentsRouter = Router();
 
@@ -39,11 +42,12 @@ const CreateTournamentSchema = z.object({
 
 // Runtime-only fields not persisted to DB
 interface ActiveMeta {
-  currentMatch: { teamA: string; teamB: string } | null;
+  currentMatch: { teamA: string; teamB: string; competitionId?: string } | null;
   error: string | null;
 }
 
 const activeTournamentMeta = new Map<string, ActiveMeta>();
+const activeTournamentRunners = new Map<string, TournamentRunner>();
 
 // POST /tournaments — create and start a tournament asynchronously
 tournamentsRouter.post('/', async (req: Request, res: Response) => {
@@ -86,22 +90,57 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
     name: tournamentName,
   });
 
+  activeTournamentRunners.set(tournamentId, runner);
+
   // Local accumulator for matchIds (matchEnd event doesn't carry competitionId)
   const accumulatedMatchIds: string[] = [];
 
-  runner.on('matchStart', ({ teamA, teamB }: { teamA: string; teamB: string }) => {
+  runner.on('matchStart', ({ teamA, teamB, competitionId: matchId, runner: matchRunner }: {
+    teamA: string; teamB: string; competitionId: string; runner: CompetitionRunner;
+  }) => {
     const meta = activeTournamentMeta.get(tournamentId);
-    if (meta) meta.currentMatch = { teamA, teamB };
+    if (meta) meta.currentMatch = { teamA, teamB, competitionId: matchId };
+
+    // Register the match runner so WebSocket can stream live events
+    runnerRegistry.set(matchId, matchRunner);
+
+    // Persist match to DB so it appears in dashboard
+    const matchTeams = [
+      { id: 'team-a', model: teamA, persona: teamA.split(':')[1] ?? 'default' },
+      { id: 'team-b', model: teamB, persona: teamB.split(':')[1] ?? 'default' },
+    ];
+    compRepo.create(matchId, brief as any, matchTeams as [any, any]).catch(() => {});
+
+    // Wire match events → DB persistence (same wiring as individual competitions)
+    let stateQueue: Promise<void> = Promise.resolve();
+    matchRunner.on('stateChange', (state: any) => {
+      stateQueue = stateQueue.then(() =>
+        compRepo.updateState(matchId, state).catch(() => {}),
+      );
+    });
+    matchRunner.on('arenaEvent', (ev: any) => {
+      compRepo.appendEvent(ev).catch(() => {});
+    });
+    matchRunner.on('result', (result: any) => {
+      compRepo.saveResult(matchId, {
+        scorecards: result.scorecards,
+        winner: result.winner,
+        presentations: result.presentations,
+        synthesis: result.synthesis,
+        deliverables: result.deliverables,
+      }).catch(() => {});
+    });
   });
 
-  runner.on('matchEnd', (_payload: unknown) => {
+  runner.on('matchEnd', ({ competitionId: matchId }: { competitionId?: string }) => {
     const meta = activeTournamentMeta.get(tournamentId);
     if (meta) meta.currentMatch = null;
-    // Update progress in DB after each match (matchIds accumulated via run().then)
-    // We update with whatever has been pushed to accumulatedMatchIds so far
-    repo.updateTournamentProgress(tournamentId, [...accumulatedMatchIds], null).catch(() => {
-      // best-effort update
-    });
+    if (matchId) {
+      accumulatedMatchIds.push(matchId);
+      // Clean up runner registry after a delay
+      setTimeout(() => runnerRegistry.delete(matchId), 60_000);
+    }
+    repo.updateTournamentProgress(tournamentId, [...accumulatedMatchIds], null).catch(() => {});
   });
 
   runner.run()
@@ -117,9 +156,11 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
     })
     .then(() => {
       activeTournamentMeta.delete(tournamentId);
+      activeTournamentRunners.delete(tournamentId);
     })
     .catch((err: Error) => {
       activeTournamentMeta.set(tournamentId, { currentMatch: null, error: err.message });
+      activeTournamentRunners.delete(tournamentId);
       repo.updateTournamentState(tournamentId, 'FAILED').catch(() => {
         // best-effort
       });
@@ -145,4 +186,38 @@ tournamentsRouter.get('/:id', async (req: Request, res: Response) => {
   }
   const meta = activeTournamentMeta.get(t.id) ?? { currentMatch: null, error: null };
   res.json({ ...t, currentMatch: meta.currentMatch, error: meta.error });
+});
+
+// POST /tournaments/:id/cancel — cancel a running tournament
+tournamentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const t = await repo.getTournament(id);
+  if (!t) { res.status(404).json({ error: 'Tournament not found' }); return; }
+  if (t.state !== 'RUNNING' && t.state !== 'PENDING') {
+    res.status(409).json({ error: `Tournament is ${t.state}, not running` });
+    return;
+  }
+  // Cancel the in-memory runner if it exists (may be gone after server restart)
+  const runner = activeTournamentRunners.get(id);
+  if (runner) runner.cancel();
+  activeTournamentRunners.delete(id);
+  activeTournamentMeta.delete(id);
+  await repo.updateTournamentState(id, 'FAILED').catch(() => {});
+  res.json({ ok: true });
+});
+
+// DELETE /tournaments/:id — delete a tournament
+tournamentsRouter.delete('/:id', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  // Refuse to delete an active tournament — cancel it first
+  if (activeTournamentRunners.has(id)) {
+    res.status(409).json({ error: 'Tournament is active — cancel it before deleting' });
+    return;
+  }
+  const deleted = await repo.deleteTournament(id);
+  if (!deleted) {
+    res.status(404).json({ error: 'Tournament not found' });
+    return;
+  }
+  res.json({ ok: true });
 });

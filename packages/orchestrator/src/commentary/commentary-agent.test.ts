@@ -6,6 +6,7 @@ import type { CompetitionRunner } from '../engine/competition-runner.js';
 // Mock node:child_process before any imports that use it
 vi.mock('node:child_process', () => {
   const mockChild = {
+    stdin: { write: vi.fn(), end: vi.fn() },
     stdout: { on: vi.fn() },
     on: vi.fn(),
     kill: vi.fn(),

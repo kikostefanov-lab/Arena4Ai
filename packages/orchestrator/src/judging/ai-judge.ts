@@ -83,9 +83,12 @@ export async function aiJudge(
     const stdout = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         claudeBin,
-        ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
-        { env: claudeEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
+        ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
+        { env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] },
       );
+
+      child.stdin.write(prompt);
+      child.stdin.end();
 
       let out = '';
       child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'node:child_process';
 import { claudeEnv } from '../../utils/claude-env.js';
+import { extractJson } from '../../utils/extract-json.js';
 
 export const generateBriefRouter = Router();
 
@@ -36,9 +37,11 @@ Return ONLY valid JSON with this exact structure (no markdown, no preamble):
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         claudeBin,
-        ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
-        { stdio: ['ignore', 'pipe', 'ignore'], env: claudeEnv() },
+        ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
+        { stdio: ['pipe', 'pipe', 'ignore'], env: claudeEnv() },
       );
+      child.stdin!.write(prompt);
+      child.stdin!.end();
       let out = '';
       child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
       const timer = setTimeout(() => { child.kill(); reject(new Error('timeout')); }, 30_000);
@@ -50,9 +53,7 @@ Return ONLY valid JSON with this exact structure (no markdown, no preamble):
       child.on('error', reject);
     });
 
-    // Parse JSON — handle code fences if Claude adds them
-    const jsonStr = output.replace(/^```json?\n?/, '').replace(/\n?```$/, '').trim();
-    const brief = JSON.parse(jsonStr);
+    const brief = JSON.parse(extractJson(output));
     res.json(brief);
   } catch (err) {
     console.error('[arena] generate-brief failed:', err);

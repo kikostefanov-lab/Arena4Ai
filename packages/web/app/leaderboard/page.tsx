@@ -393,7 +393,7 @@ export default function LeaderboardPage() {
                     fontWeight: 600,
                     color: '#e2e8f0',
                   }}>
-                    {entry.avgScore.toFixed(1)}
+                    {Math.round(entry.avgScore * 100)}%
                   </div>
 
                   {/* Win Rate Bar */}

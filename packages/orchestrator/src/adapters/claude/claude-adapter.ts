@@ -51,7 +51,7 @@ export class ClaudeAdapter extends BaseAdapter {
 
     this.executionDone = new Promise<void>((resolve, reject) => {
       const claudeArgs = [
-        '--print', this.promptText,
+        '--print', '-',
         '--output-format', 'stream-json',
         '--verbose',
         '--dangerously-skip-permissions',
@@ -70,12 +70,18 @@ export class ClaudeAdapter extends BaseAdapter {
             claudeArgs,
             {
               cwd: this.workdir,
-              stdio: ['ignore', 'pipe', 'pipe'],
+              stdio: ['pipe', 'pipe', 'pipe'],
               env: claudeEnv(),
             },
           );
 
       this.process = child;
+
+      // Pipe prompt via stdin to avoid CLI arg length limits
+      if (child.stdin) {
+        child.stdin.write(this.promptText);
+        child.stdin.end();
+      }
 
       // Stream stdout line-by-line through the normalizer.
       const rl = createInterface({ input: child.stdout! });

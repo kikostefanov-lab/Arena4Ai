@@ -220,6 +220,11 @@ export class TournamentRepository {
     }).where(eq(tournaments.id, id));
   }
 
+  async deleteTournament(id: string): Promise<boolean> {
+    const rows = await this.db.delete(tournaments).where(eq(tournaments.id, id)).returning({ id: tournaments.id });
+    return rows.length > 0;
+  }
+
   async listTournaments(limit = 20): Promise<StoredTournament[]> {
     const rows = await this.db
       .select()

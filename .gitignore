@@ -6,3 +6,7 @@ runs/
 .turbo/
 *.tsbuildinfo
 .next/
+
+# OS / tooling
+.DS_Store
+.superpowers/

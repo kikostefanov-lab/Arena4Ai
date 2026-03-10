@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Arena — Concept Architecture</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2234;
+    --border: #1e2d45;
+    --text: #e2e8f0;
+    --text-dim: #8896ab;
+    --accent: #f97316;
+    --accent-dim: #c2410c;
+    --blue: #3b82f6;
+    --green: #22c55e;
+    --purple: #a855f7;
+    --red: #ef4444;
+    --cyan: #06b6d4;
+    --yellow: #eab308;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; line-height: 1.7; }
+
+  /* Navigation */
+  nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; background: rgba(10,14,23,0.92); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding: 0 2rem; display: flex; align-items: center; height: 56px; }
+  nav .logo { font-size: 0.85rem; font-weight: 700; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-right: 2rem; }
+  nav .nav-links { display: flex; gap: 0.25rem; overflow-x: auto; }
+  nav .nav-links a { color: var(--text-dim); text-decoration: none; font-size: 0.72rem; padding: 0.4rem 0.75rem; border-radius: 4px; white-space: nowrap; transition: all 0.2s; letter-spacing: 0.5px; }
+  nav .nav-links a:hover, nav .nav-links a.active { color: var(--text); background: var(--surface2); }
+
+  /* Hero */
+  .hero { padding: 7rem 2rem 3rem; max-width: 960px; margin: 0 auto; text-align: left; }
+  .hero .badge { display: inline-block; font-size: 0.65rem; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); border: 1px solid var(--accent-dim); padding: 0.3rem 0.8rem; border-radius: 3px; margin-bottom: 1.5rem; }
+  .hero h1 { font-size: 2.8rem; font-weight: 800; line-height: 1.15; margin-bottom: 1rem; background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .hero .subtitle { font-size: 1rem; color: var(--text-dim); max-width: 640px; line-height: 1.8; }
+  .hero .meta { margin-top: 2rem; display: flex; gap: 2rem; flex-wrap: wrap; }
+  .hero .meta-item { font-size: 0.7rem; color: var(--text-dim); }
+  .hero .meta-item span { color: var(--text); font-weight: 600; }
+
+  /* Main content */
+  main { max-width: 960px; margin: 0 auto; padding: 0 2rem 4rem; }
+
+  /* Section */
+  section { margin-bottom: 3rem; scroll-margin-top: 72px; }
+  .section-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; cursor: pointer; user-select: none; }
+  .section-header .num { font-size: 0.65rem; color: var(--accent); border: 1px solid var(--accent-dim); padding: 0.15rem 0.5rem; border-radius: 2px; font-weight: 700; }
+  .section-header h2 { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.3px; }
+  .section-header .toggle { margin-left: auto; font-size: 0.8rem; color: var(--text-dim); transition: transform 0.3s; }
+  .section-header .toggle.open { transform: rotate(90deg); }
+
+  .section-body { padding-left: 0.5rem; border-left: 2px solid var(--border); margin-left: 0.5rem; padding-bottom: 0.5rem; }
+  .section-body.collapsed { display: none; }
+
+  p { color: var(--text-dim); font-size: 0.82rem; margin-bottom: 1rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.8; }
+  p strong { color: var(--text); }
+
+  h3 { font-size: 0.9rem; color: var(--blue); margin: 1.5rem 0 0.75rem; font-weight: 700; }
+  h4 { font-size: 0.8rem; color: var(--cyan); margin: 1rem 0 0.5rem; font-weight: 600; }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 1.25rem; transition: border-color 0.2s; }
+  .card:hover { border-color: var(--accent-dim); }
+  .card .card-label { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); margin-bottom: 0.5rem; font-weight: 700; }
+  .card .card-title { font-size: 0.85rem; font-weight: 700; margin-bottom: 0.5rem; }
+  .card .card-text { font-size: 0.75rem; color: var(--text-dim); line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  /* Architecture diagram */
+  .arch-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2rem; margin: 1.5rem 0; overflow-x: auto; }
+  .arch-row { display: flex; align-items: center; justify-content: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .arch-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 1rem; font-size: 0.7rem; font-weight: 600; text-align: center; min-width: 120px; position: relative; }
+  .arch-box.accent { border-color: var(--accent-dim); color: var(--accent); }
+  .arch-box.blue { border-color: #1e40af; color: var(--blue); }
+  .arch-box.green { border-color: #166534; color: var(--green); }
+  .arch-box.purple { border-color: #6b21a8; color: var(--purple); }
+  .arch-box.cyan { border-color: #0e7490; color: var(--cyan); }
+  .arch-box.red { border-color: #991b1b; color: var(--red); }
+  .arch-box .box-sub { font-size: 0.55rem; color: var(--text-dim); font-weight: 400; margin-top: 0.2rem; }
+  .arch-arrow { color: var(--text-dim); font-size: 1rem; }
+  .arch-arrow-down { text-align: center; color: var(--text-dim); font-size: 1rem; margin: 0.25rem 0; }
+  .arch-label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1.5px; text-align: center; margin-bottom: 0.5rem; font-weight: 700; }
+  .arch-divider { border-top: 1px dashed var(--border); margin: 1rem 0; }
+
+  /* Flow diagram */
+  .flow { display: flex; align-items: stretch; gap: 0; margin: 1.5rem 0; overflow-x: auto; padding-bottom: 0.5rem; }
+  .flow-step { flex: 1; min-width: 140px; background: var(--surface); border: 1px solid var(--border); padding: 1rem; position: relative; }
+  .flow-step:first-child { border-radius: 6px 0 0 6px; }
+  .flow-step:last-child { border-radius: 0 6px 6px 0; }
+  .flow-step:not(:last-child)::after { content: '→'; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: var(--accent); font-size: 1.2rem; z-index: 2; }
+  .flow-step .step-num { font-size: 0.55rem; color: var(--accent); font-weight: 700; letter-spacing: 1px; }
+  .flow-step .step-title { font-size: 0.75rem; font-weight: 700; margin: 0.3rem 0; }
+  .flow-step .step-desc { font-size: 0.65rem; color: var(--text-dim); line-height: 1.5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.75rem; }
+  th { background: var(--surface2); color: var(--text); padding: 0.6rem 0.75rem; text-align: left; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid var(--border); }
+  td { padding: 0.6rem 0.75rem; border-bottom: 1px solid var(--border); color: var(--text-dim); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  tr:hover td { background: var(--surface); }
+
+  /* Code block */
+  .code-block { background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1rem; margin: 1rem 0; overflow-x: auto; font-size: 0.72rem; line-height: 1.6; color: var(--text-dim); }
+  .code-block .comment { color: #4a5568; }
+  .code-block .keyword { color: var(--purple); }
+  .code-block .string { color: var(--green); }
+  .code-block .type { color: var(--cyan); }
+
+  /* Tags */
+  .tag { display: inline-block; font-size: 0.6rem; padding: 0.15rem 0.5rem; border-radius: 3px; font-weight: 600; letter-spacing: 0.5px; margin-right: 0.3rem; }
+  .tag.orange { background: rgba(249,115,22,0.15); color: var(--accent); }
+  .tag.blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .tag.green { background: rgba(34,197,94,0.15); color: var(--green); }
+  .tag.purple { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .tag.red { background: rgba(239,68,68,0.15); color: var(--red); }
+  .tag.cyan { background: rgba(6,182,212,0.15); color: var(--cyan); }
+
+  /* Callout */
+  .callout { background: var(--surface); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1rem 0; border-radius: 0 4px 4px 0; }
+  .callout.blue { border-left-color: var(--blue); }
+  .callout.green { border-left-color: var(--green); }
+  .callout .callout-title { font-size: 0.7rem; font-weight: 700; color: var(--accent); margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 1px; }
+  .callout.blue .callout-title { color: var(--blue); }
+  .callout.green .callout-title { color: var(--green); }
+  .callout p { margin-bottom: 0.5rem; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  /* Lane visualization */
+  .lanes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin: 1.5rem 0; }
+  .lane { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .lane-header { padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.5rem; }
+  .lane-header .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .lane-header .lane-name { font-size: 0.7rem; font-weight: 700; }
+  .lane-header .lane-model { font-size: 0.6rem; color: var(--text-dim); margin-left: auto; }
+  .lane-body { padding: 0.75rem 1rem; }
+  .lane-event { font-size: 0.65rem; color: var(--text-dim); padding: 0.3rem 0; border-bottom: 1px solid rgba(30,45,69,0.5); display: flex; gap: 0.5rem; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .lane-event .ev-time { color: var(--text-dim); font-family: 'SF Mono', monospace; font-size: 0.6rem; min-width: 36px; }
+  .lane-event .ev-icon { font-size: 0.7rem; }
+
+  /* Timeline */
+  .timeline { position: relative; padding-left: 2rem; margin: 1.5rem 0; }
+  .timeline::before { content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+  .timeline-item { position: relative; margin-bottom: 1.5rem; }
+  .timeline-item::before { content: ''; position: absolute; left: -2rem; top: 0.35rem; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); background: var(--bg); z-index: 1; }
+  .timeline-item .tl-phase { font-size: 0.65rem; color: var(--accent); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .timeline-item .tl-title { font-size: 0.82rem; font-weight: 700; margin: 0.2rem 0 0.3rem; }
+  .timeline-item .tl-desc { font-size: 0.75rem; color: var(--text-dim); line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 1.8rem; }
+    .card-grid { grid-template-columns: 1fr; }
+    .lanes { grid-template-columns: 1fr; }
+    .flow { flex-direction: column; }
+    .flow-step:not(:last-child)::after { content: '↓'; right: auto; left: 50%; top: auto; bottom: -14px; transform: translateX(-50%); }
+    nav .nav-links { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">▲ Agent Arena</div>
+  <div class="nav-links">
+    <a href="#vision" class="active">Vision</a>
+    <a href="#experience">Experience</a>
+    <a href="#lifecycle">Lifecycle</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#models">Models</a>
+    <a href="#formats">Formats</a>
+    <a href="#judging">Judging</a>
+    <a href="#events">Events</a>
+    <a href="#roadmap">Roadmap</a>
+    <a href="#forge">The Forge</a>
+    <a href="#risks">Risks</a>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="badge">Concept Architecture — v0.1 Draft</div>
+  <h1>Agent Arena</h1>
+  <div class="subtitle">A competitive orchestration platform where AI agent teams — powered by Claude, Codex, Gemini, and beyond — compete head-to-head on real problems, observed in real time, with automated judging and synthesis of the best ideas into solutions no single model could produce alone.</div>
+  <div class="meta">
+    <div class="meta-item">Audience: <span>Builder-First (Operator as primary user)</span></div>
+    <div class="meta-item">Format: <span>Flexible Framework (sprints → deep dives)</span></div>
+    <div class="meta-item">Date: <span>March 8, 2026</span></div>
+    <div class="meta-item">Status: <span>Concept / Pre-Alpha</span></div>
+  </div>
+</div>
+
+<main>
+
+<!-- ═══ 1. VISION ═══ -->
+<section id="vision">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">01</span>
+    <h2>Vision & Core Thesis</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <div class="callout">
+      <div class="callout-title">Core Thesis</div>
+      <p><strong>Adversarial AI workflows produce dramatically better outputs than single-agent workflows.</strong> Competition forces divergent thinking. Synthesis of the top competing solutions creates outcomes no individual model could achieve alone. Agent Arena makes this repeatable, observable, and accessible.</p>
+    </div>
+
+    <p>Today, when a team needs a strategy, an architecture, or a creative solution, they prompt one AI model and iterate on its single perspective. Agent Arena inverts this: define the problem once, fan it out to competing AI teams, watch them race, judge the results, then synthesize the best elements into a hybrid solution.</p>
+
+    <p>The insight came from running a manual AI hackathon — four Claude-powered teams with distinct personas competed on the same brief. The two top solutions each had strengths the other lacked. The final product, synthesized from both, was materially better than either alone. <strong>Agent Arena productizes that workflow.</strong></p>
+
+    <h3>What Makes This Different</h3>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-label">Not a chatbot arena</div>
+        <div class="card-title">Multi-Step, Not Single-Turn</div>
+        <div class="card-text">Chatbot Arena tests single responses. Agent Arena tests entire workflows — research, planning, drafting, revision. Teams spawn sub-agents, use tools, iterate over minutes or hours.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Not a benchmark</div>
+        <div class="card-title">Real Problems, Not Standardized Tests</div>
+        <div class="card-text">Benchmarks measure capability on fixed tasks. Agent Arena measures performance on YOUR problems — your architecture decisions, your strategy questions, your creative briefs.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Not just scoring</div>
+        <div class="card-title">Synthesis, Not Selection</div>
+        <div class="card-text">The goal isn't just "which model won." It's "what's the best possible solution combining the top ideas?" The synthesis round is where the real value is created.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 2. EXPERIENCE FLOW ═══ -->
+<section id="experience">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">02</span>
+    <h2>Operator Experience Flow</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <p>The operator is the primary user in v1 — the person who sets up competitions, defines problems, configures teams, watches the action, and extracts results. The experience is designed to feel like a mission control console, not a form wizard.</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="step-num">PHASE 1</div>
+        <div class="step-title">Brief</div>
+        <div class="step-desc">Define the problem, constraints, deliverables, and scoring rubric</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">PHASE 2</div>
+        <div class="step-title">Configure</div>
+        <div class="step-desc">Select teams, models, personas, tools, time limits, visibility rules</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">PHASE 3</div>
+        <div class="step-title">Launch</div>
+        <div class="step-desc">Countdown, simultaneous start, sandbox provisioning</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">PHASE 4</div>
+        <div class="step-title">Observe</div>
+        <div class="step-desc">Live lane view, agent activity, tool calls, progress indicators</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">PHASE 5</div>
+        <div class="step-title">Judge</div>
+        <div class="step-desc">Multi-judge scoring, rubric evaluation, human override option</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">PHASE 6</div>
+        <div class="step-title">Synthesize</div>
+        <div class="step-desc">Hybrid creation from top solutions, optional synthesis round</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">PHASE 7</div>
+        <div class="step-title">Export</div>
+        <div class="step-desc">Deliverables, replay recording, performance analytics</div>
+      </div>
+    </div>
+
+    <h3>The Brief Builder</h3>
+    <p>The brief is the most important input. A structured brief template ensures competing teams get identical, unambiguous instructions. The brief builder guides the operator through defining the problem statement, context documents (uploaded or linked), explicit constraints and non-goals, deliverable format (document, code, architecture, presentation), scoring rubric with weighted criteria, and time budget.</p>
+    <p>Briefs are versioned and reusable. An operator can run the same brief against different model combinations to compare results, or iterate on the brief itself based on competition outcomes.</p>
+
+    <h3>The Arena View (Live Observation)</h3>
+    <p>This is the centerpiece of the experience. During a live competition, the operator sees a split-screen "lanes" view — one lane per competing team:</p>
+
+    <div class="lanes">
+      <div class="lane">
+        <div class="lane-header">
+          <div class="dot" style="background:var(--accent)"></div>
+          <div class="lane-name">Team Alpha</div>
+          <div class="lane-model"><span class="tag orange">Claude</span></div>
+        </div>
+        <div class="lane-body">
+          <div class="lane-event"><span class="ev-time">0:00</span><span class="ev-icon">🚀</span> Competition started</div>
+          <div class="lane-event"><span class="ev-time">0:12</span><span class="ev-icon">🔍</span> Spawned research sub-agent</div>
+          <div class="lane-event"><span class="ev-time">0:34</span><span class="ev-icon">📄</span> Reading context documents</div>
+          <div class="lane-event"><span class="ev-time">1:15</span><span class="ev-icon">🧠</span> Planning architecture approach</div>
+          <div class="lane-event"><span class="ev-time">2:40</span><span class="ev-icon">✍️</span> Writing proposal draft</div>
+          <div class="lane-event"><span class="ev-time">4:02</span><span class="ev-icon">🔧</span> Spawned specialist: cost modeling</div>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lane-header">
+          <div class="dot" style="background:var(--green)"></div>
+          <div class="lane-name">Team Beta</div>
+          <div class="lane-model"><span class="tag green">Codex</span></div>
+        </div>
+        <div class="lane-body">
+          <div class="lane-event"><span class="ev-time">0:00</span><span class="ev-icon">🚀</span> Competition started</div>
+          <div class="lane-event"><span class="ev-time">0:08</span><span class="ev-icon">⚡</span> Rapid-prototyping mode activated</div>
+          <div class="lane-event"><span class="ev-time">0:22</span><span class="ev-icon">💻</span> Writing code scaffold</div>
+          <div class="lane-event"><span class="ev-time">0:55</span><span class="ev-icon">🧪</span> Running initial tests</div>
+          <div class="lane-event"><span class="ev-time">1:30</span><span class="ev-icon">📄</span> Generating documentation</div>
+          <div class="lane-event"><span class="ev-time">2:15</span><span class="ev-icon">🔧</span> Spawned specialist: API design</div>
+        </div>
+      </div>
+      <div class="lane">
+        <div class="lane-header">
+          <div class="dot" style="background:var(--blue)"></div>
+          <div class="lane-name">Team Gamma</div>
+          <div class="lane-model"><span class="tag blue">Gemini</span></div>
+        </div>
+        <div class="lane-body">
+          <div class="lane-event"><span class="ev-time">0:00</span><span class="ev-icon">🚀</span> Competition started</div>
+          <div class="lane-event"><span class="ev-time">0:15</span><span class="ev-icon">🌐</span> Web research: market analysis</div>
+          <div class="lane-event"><span class="ev-time">0:48</span><span class="ev-icon">📊</span> Processing multimodal data</div>
+          <div class="lane-event"><span class="ev-time">1:20</span><span class="ev-icon">🧠</span> Cross-referencing 12 sources</div>
+          <div class="lane-event"><span class="ev-time">2:05</span><span class="ev-icon">✍️</span> Writing analysis document</div>
+          <div class="lane-event"><span class="ev-time">3:10</span><span class="ev-icon">🔧</span> Spawned specialist: visualization</div>
+        </div>
+      </div>
+    </div>
+
+    <p>Each event in the lane feed is clickable — expand to see the full tool call, the agent's reasoning, the files being created. The operator can zoom into any team at any time without pausing the competition. A timeline scrubber at the bottom allows rewinding to any point.</p>
+  </div>
+</section>
+
+<!-- ═══ 3. LIFECYCLE ═══ -->
+<section id="lifecycle">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">03</span>
+    <h2>Competition Lifecycle</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <p>Every competition follows a deterministic lifecycle managed by the Orchestrator. The lifecycle is event-driven — each state transition emits events that the front-end, judging engine, and recording system all consume.</p>
+
+    <div class="code-block">
+<span class="comment">// Competition State Machine</span>
+<span class="type">DRAFT</span> → <span class="type">CONFIGURED</span> → <span class="type">LAUNCHING</span> → <span class="type">RUNNING</span> → <span class="type">TIME_UP</span> → <span class="type">COLLECTING</span> → <span class="type">JUDGING</span> → <span class="type">SCORED</span> → <span class="type">SYNTHESIZING</span> → <span class="type">COMPLETE</span>
+                                                   ↓
+                                              <span class="type">PAUSED</span> (operator can pause/resume)
+                                                   ↓
+                                              <span class="type">CANCELLED</span> (operator can abort)
+    </div>
+
+    <h3>State Details</h3>
+    <table>
+      <tr><th>State</th><th>Duration</th><th>What Happens</th></tr>
+      <tr><td><span class="tag orange">DRAFT</span></td><td>Unlimited</td><td>Operator writes and refines the brief, configures teams and rules</td></tr>
+      <tr><td><span class="tag blue">CONFIGURED</span></td><td>Seconds</td><td>All settings locked. Sandboxes being provisioned. Teams allocated.</td></tr>
+      <tr><td><span class="tag purple">LAUNCHING</span></td><td>5-30s</td><td>Sandboxes spun up, model connections verified, briefs injected. Countdown.</td></tr>
+      <tr><td><span class="tag green">RUNNING</span></td><td>Config (15m-4h)</td><td>Teams are working. Events streaming. Clock ticking. Operator observes.</td></tr>
+      <tr><td><span class="tag red">TIME_UP</span></td><td>30-60s</td><td>Graceful shutdown signal. Agents get "wrap up" notification. Final commits.</td></tr>
+      <tr><td><span class="tag cyan">COLLECTING</span></td><td>10-30s</td><td>Deliverables extracted from each sandbox. Format validated.</td></tr>
+      <tr><td><span class="tag purple">JUDGING</span></td><td>1-5m</td><td>Judge panel evaluates all deliverables against rubric. Scores calculated.</td></tr>
+      <tr><td><span class="tag green">SCORED</span></td><td>Instant</td><td>Results displayed. Rankings revealed. Per-criterion breakdowns available.</td></tr>
+      <tr><td><span class="tag orange">SYNTHESIZING</span></td><td>2-10m</td><td>Top solutions fed to synthesis engine. Hybrid solution generated.</td></tr>
+      <tr><td><span class="tag blue">COMPLETE</span></td><td>—</td><td>All deliverables, scores, replay data, and synthesis available for export.</td></tr>
+    </table>
+
+    <h3>Configurable Rules</h3>
+    <p>The operator controls the rules of engagement for each competition. These are set during the DRAFT/CONFIGURED phases:</p>
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-label">Visibility</div>
+        <div class="card-title">Can Teams See Each Other?</div>
+        <div class="card-text"><strong>Blind mode:</strong> Teams work in isolation. Maximizes divergence. Best for creative/strategy problems. <strong>Open mode:</strong> Teams can see competitors' progress (read-only). Drives convergence and competitive pressure. <strong>Phased:</strong> Blind for first 60%, open for final 40%.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Tools</div>
+        <div class="card-title">What Can Teams Use?</div>
+        <div class="card-text">Tool access is configurable per competition: web search, code execution, file creation, external APIs, database access. Equal tooling ensures fair comparison. Asymmetric tooling tests adaptability.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Personas</div>
+        <div class="card-title">Team Identity & Strategy</div>
+        <div class="card-text">Each team gets a system prompt "persona" that shapes their approach. Examples: "Conservative enterprise architect" vs. "Move-fast startup CTO" vs. "Academic researcher." Same model, different cognitive frames.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Governance</div>
+        <div class="card-title">Resource Limits</div>
+        <div class="card-text">Token budgets, API call limits, sub-agent spawn caps, max file count. Prevents runaway costs and ensures teams must be strategic about resource allocation.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 4. ARCHITECTURE ═══ -->
+<section id="architecture">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">04</span>
+    <h2>Technical Architecture</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <div class="arch-diagram">
+      <div class="arch-label">Operator Layer</div>
+      <div class="arch-row">
+        <div class="arch-box accent">Arena UI<div class="box-sub">React + WebSocket</div></div>
+        <div class="arch-arrow">←→</div>
+        <div class="arch-box accent">Brief Builder<div class="box-sub">Structured editor</div></div>
+        <div class="arch-arrow">←→</div>
+        <div class="arch-box accent">Replay Viewer<div class="box-sub">Timeline scrubber</div></div>
+      </div>
+
+      <div class="arch-divider"></div>
+      <div class="arch-label">Orchestration Layer</div>
+      <div class="arch-row">
+        <div class="arch-box blue">API Gateway<div class="box-sub">Auth + Rate limiting</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box blue">Orchestrator<div class="box-sub">State machine + clock</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box blue">Event Bus<div class="box-sub">NATS JetStream</div></div>
+      </div>
+
+      <div class="arch-divider"></div>
+      <div class="arch-label">Execution Layer</div>
+      <div class="arch-row">
+        <div class="arch-box green">Sandbox A<div class="box-sub">Claude / Firecracker</div></div>
+        <div class="arch-box green">Sandbox B<div class="box-sub">Codex / Firecracker</div></div>
+        <div class="arch-box green">Sandbox C<div class="box-sub">Gemini / Firecracker</div></div>
+        <div class="arch-box green">Sandbox N<div class="box-sub">Any model</div></div>
+      </div>
+
+      <div class="arch-divider"></div>
+      <div class="arch-label">Intelligence Layer</div>
+      <div class="arch-row">
+        <div class="arch-box purple">Judge Panel<div class="box-sub">Multi-model evaluation</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box purple">Synthesis Engine<div class="box-sub">Hybrid generation</div></div>
+        <div class="arch-arrow">→</div>
+        <div class="arch-box purple">Analytics<div class="box-sub">Performance meta-data</div></div>
+      </div>
+
+      <div class="arch-divider"></div>
+      <div class="arch-label">Persistence Layer</div>
+      <div class="arch-row">
+        <div class="arch-box cyan">Event Store<div class="box-sub">Full event log</div></div>
+        <div class="arch-box cyan">Artifact Store<div class="box-sub">Deliverables + files</div></div>
+        <div class="arch-box cyan">Replay Store<div class="box-sub">Indexed recordings</div></div>
+        <div class="arch-box cyan">Meta Store<div class="box-sub">Model perf analytics</div></div>
+      </div>
+    </div>
+
+    <h3>Key Components</h3>
+
+    <h4>Orchestrator (The Brain)</h4>
+    <p>The orchestrator is a durable state machine (built on something like Inngest or Temporal) that manages the entire competition lifecycle. It handles sandbox provisioning, brief injection, clock management, pause/resume, graceful shutdown, deliverable collection, and transition between lifecycle phases. It never loses state — if the orchestrator crashes mid-competition, it recovers from the event log and resumes exactly where it left off.</p>
+
+    <h4>Sandboxes (The Arenas)</h4>
+    <p>Each team runs in a fully isolated sandbox — a lightweight VM (Firecracker microVM or Fly Machine) with a pre-configured environment: CLI tools, language runtimes, file system, and a model adapter. The sandbox exposes a standard interface: receive brief, emit events, produce deliverables. Inside the sandbox, each model's native agentic framework runs — Claude Code for Claude, Codex CLI for OpenAI, Gemini's agent framework for Google. The sandbox adapter normalizes the event stream so the platform sees a consistent format regardless of which model is running.</p>
+
+    <h4>Event Bus (The Nervous System)</h4>
+    <p>Every action inside every sandbox emits a structured event to a central event bus (NATS JetStream). Events include: agent_spawned, tool_called, file_created, file_modified, reasoning_step, deliverable_submitted, error_occurred. The event bus serves three consumers simultaneously: the live Arena UI (via WebSocket bridge), the event store (for replay), and the analytics engine (for performance tracking). Events are immutable and ordered — the event log IS the source of truth.</p>
+
+    <h4>Model Adapters (The Translators)</h4>
+    <p>Each model has a different native interface. The adapter layer normalizes this into a common protocol. For Claude: intercepts Claude Code's tool calls and streaming output. For Codex: wraps the Codex CLI agent loop. For Gemini: interfaces with the Gemini agent SDK. The adapter handles brief injection (translating the universal brief format into each model's preferred prompt structure), event emission (mapping model-specific events to the universal event schema), and deliverable extraction (collecting outputs in a standard format).</p>
+
+    <div class="callout blue">
+      <div class="callout-title">Architecture Principle</div>
+      <p><strong>The platform is model-agnostic by design.</strong> Adding a new model means writing one adapter — the rest of the platform doesn't change. This is critical for longevity: as new models emerge (Llama, Mistral, Grok, etc.), they can be added as competitors without architectural changes.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 5. MODELS ═══ -->
+<section id="models">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">05</span>
+    <h2>Model Cognitive Profiles</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <p>Different models don't just have different capabilities — they have different <strong>cognitive signatures</strong>. Understanding these signatures is key to setting up meaningful competitions and interpreting results.</p>
+
+    <table>
+      <tr><th>Dimension</th><th><span class="tag orange">Claude</span></th><th><span class="tag green">Codex</span></th><th><span class="tag blue">Gemini</span></th></tr>
+      <tr><td>Thinking style</td><td>Thorough, analytical, nuanced</td><td>Rapid, implementation-focused</td><td>Broad, multimodal, cross-referencing</td></tr>
+      <tr><td>Strength zone</td><td>Strategy, writing, complex reasoning</td><td>Code generation, rapid prototyping</td><td>Research, data synthesis, multimodal</td></tr>
+      <tr><td>Agent behavior</td><td>Deliberate planning before execution</td><td>Fast iteration, test-driven</td><td>Wide initial exploration, then focus</td></tr>
+      <tr><td>Sub-agent pattern</td><td>Fewer, specialized deep-dive agents</td><td>Many small task-focused agents</td><td>Research swarm then consolidation</td></tr>
+      <tr><td>Typical weakness</td><td>Can over-analyze, slower to ship</td><td>May under-plan, less strategic depth</td><td>Can spread too wide, less focused</td></tr>
+      <tr><td>Best competition for</td><td>Architecture, proposals, analysis</td><td>Working prototypes, tools, scripts</td><td>Market research, data-heavy problems</td></tr>
+    </table>
+
+    <div class="callout green">
+      <div class="callout-title">The Meta-Dataset Opportunity</div>
+      <p>Over hundreds of competitions, Agent Arena builds a unique dataset: <strong>which cognitive style wins for which problem type</strong>. "For strategic planning, Claude-led teams win 68% of the time. For rapid prototyping, Codex dominates. For problems requiring synthesis of 10+ data sources, Gemini has the edge." This data becomes a decision-support tool: "Based on 247 competitions, for your problem type, we recommend a Claude lead with Codex and Gemini challengers."</p>
+    </div>
+
+    <h3>Same Model, Different Personas</h3>
+    <p>Competitions don't have to be cross-model. Some of the most interesting results come from pitting the same model against itself with different personas. In the Monday Pulse hackathon, all four teams ran Claude — but "Team PULSE" had an enterprise analyst persona while "Signal Corps" had a military intelligence persona. The cognitive frames produced dramatically different solutions from the same underlying model. Agent Arena supports both cross-model and same-model-different-persona competitions.</p>
+  </div>
+</section>
+
+<!-- ═══ 6. FORMATS ═══ -->
+<section id="formats">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">06</span>
+    <h2>Competition Formats</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <p>The flexible framework supports multiple competition formats. Each format is a configuration preset — same engine, different rules.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-label">⚡ Speed Format</div>
+        <div class="card-title">Sprint</div>
+        <div class="card-text">15-30 minute rounds. Focused problems with clear deliverables. High energy, fast results. Think speed chess. Great for: API design, code challenges, quick strategy questions, creative briefs.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🏗️ Depth Format</div>
+        <div class="card-title">Hackathon</div>
+        <div class="card-text">1-4 hour sessions. Complex problems with multi-part deliverables. Teams can spawn dozens of sub-agents, do research, iterate. Think classical chess. Great for: architecture decisions, comprehensive proposals, full product designs.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🔄 Relay Format</div>
+        <div class="card-title">Relay Race</div>
+        <div class="card-text">Team A works for N minutes, then hands off to Team B (different model) who must continue. Tests interoperability and how well each model understands and extends another's work. Great for: testing model handoff capabilities.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🛡️ Adversarial Format</div>
+        <div class="card-title">Red vs. Blue</div>
+        <div class="card-text">One team builds, another team tries to break it. Red team / blue team with AI agents on both sides. Alternating rounds of build and attack. Great for: security review, stress testing, finding edge cases.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🏆 Tournament Format</div>
+        <div class="card-title">Bracket</div>
+        <div class="card-text">Multiple rounds with elimination. 8 teams → quarter-finals → semi-finals → final. Winners advance, losers eliminated. Best for: large-scale competitions with many participants or model variants.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">🔬 Lab Format</div>
+        <div class="card-title">A/B Experiment</div>
+        <div class="card-text">Not a competition — a controlled experiment. Same brief, same model, different configurations (temperature, persona, tool access). Measures the impact of specific variables. Great for: prompt engineering research.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 7. JUDGING ═══ -->
+<section id="judging">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">07</span>
+    <h2>Judging & Synthesis</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <h3>The Judge Panel</h3>
+    <p>Judging uses a multi-judge panel approach to eliminate bias. Each competition has N judges — configurable by the operator. The default panel includes one judge from each competing model family (so no home-field advantage), plus automated scoring on objective criteria.</p>
+
+    <table>
+      <tr><th>Judge Type</th><th>Role</th><th>When Used</th></tr>
+      <tr><td><span class="tag purple">AI Cross-Judge</span></td><td>Model A judges Model B's work. Eliminates self-scoring bias.</td><td>Always (default)</td></tr>
+      <tr><td><span class="tag blue">AI Neutral Judge</span></td><td>A model not competing in this round acts as impartial evaluator.</td><td>When 3+ models available</td></tr>
+      <tr><td><span class="tag green">Automated Scorer</span></td><td>Objective tests: code compiles, documents validate, math checks out.</td><td>When deliverables are testable</td></tr>
+      <tr><td><span class="tag orange">Human Judge</span></td><td>Operator or invited reviewers score manually. Can override AI judges.</td><td>Operator opt-in</td></tr>
+    </table>
+
+    <p>Scoring uses a weighted rubric defined in the brief. Example criteria: correctness (30%), creativity (20%), completeness (20%), feasibility (15%), presentation (15%). Each judge scores each criterion independently. Final scores are averaged with outlier detection — if one judge scores dramatically differently from the others, it's flagged.</p>
+
+    <h3>The Synthesis Engine</h3>
+    <p>This is Agent Arena's killer feature and what separates it from a simple "model comparison tool."</p>
+
+    <p>After judging, the synthesis engine takes the top 2-3 solutions and creates a hybrid that combines the best elements of each. The synthesis process is transparent: it identifies which specific ideas, sections, or approaches it's pulling from each solution and why. The output is a new deliverable — not a summary, but a fully realized solution that's materially better than any individual submission.</p>
+
+    <div class="callout">
+      <div class="callout-title">Synthesis Modes</div>
+      <p><strong>Auto-Synthesis:</strong> The platform's synthesis agent automatically combines top solutions. Fast, consistent, good for sprints.</p>
+      <p><strong>Guided Synthesis:</strong> The operator selects which elements to combine. More control, better for complex problems where domain expertise matters.</p>
+      <p><strong>Competitive Synthesis:</strong> Each remaining team is given the other top solutions and asked to produce an improved hybrid. A second round of competition on the synthesis itself.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 8. EVENT SYSTEM ═══ -->
+<section id="events">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">08</span>
+    <h2>Event System & Replay</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <p>Every competition is recorded as an immutable event stream. This enables three capabilities: live observation, full replay, and performance analytics.</p>
+
+    <h3>Event Schema</h3>
+    <div class="code-block">
+{
+  <span class="string">"eventId"</span>: <span class="string">"evt_a1b2c3d4"</span>,
+  <span class="string">"competitionId"</span>: <span class="string">"comp_xyz789"</span>,
+  <span class="string">"teamId"</span>: <span class="string">"team_alpha"</span>,
+  <span class="string">"timestamp"</span>: <span class="string">"2026-03-08T14:32:15.442Z"</span>,
+  <span class="string">"elapsedMs"</span>: <span class="type">72442</span>,
+  <span class="string">"type"</span>: <span class="string">"agent_spawned"</span>,
+  <span class="string">"payload"</span>: {
+    <span class="string">"agentId"</span>: <span class="string">"agt_research_01"</span>,
+    <span class="string">"purpose"</span>: <span class="string">"Market research on competitor pricing"</span>,
+    <span class="string">"parentAgentId"</span>: <span class="string">"agt_lead_alpha"</span>,
+    <span class="string">"model"</span>: <span class="string">"claude-opus-4-6"</span>
+  },
+  <span class="string">"metadata"</span>: {
+    <span class="string">"tokenCount"</span>: <span class="type">0</span>,
+    <span class="string">"tokenBudgetRemaining"</span>: <span class="type">487200</span>,
+    <span class="string">"activeAgents"</span>: <span class="type">3</span>
+  }
+}
+    </div>
+
+    <h3>Event Types</h3>
+    <table>
+      <tr><th>Category</th><th>Events</th><th>Visualization</th></tr>
+      <tr><td>Agent lifecycle</td><td>agent_spawned, agent_completed, agent_failed</td><td>Nodes appearing/fading in agent tree</td></tr>
+      <tr><td>Tool usage</td><td>tool_called, tool_result, tool_error</td><td>Tool icons with input/output preview</td></tr>
+      <tr><td>File operations</td><td>file_created, file_modified, file_deleted</td><td>File tree with diff highlights</td></tr>
+      <tr><td>Reasoning</td><td>reasoning_step, decision_made, approach_changed</td><td>Thought bubbles with intent labels</td></tr>
+      <tr><td>Communication</td><td>sub_agent_delegated, result_integrated</td><td>Arrows between agent nodes</td></tr>
+      <tr><td>Resources</td><td>tokens_used, budget_warning, limit_reached</td><td>Resource gauge with alerts</td></tr>
+      <tr><td>Deliverables</td><td>deliverable_drafted, deliverable_revised, deliverable_submitted</td><td>Document preview with version history</td></tr>
+    </table>
+
+    <h3>Replay System</h3>
+    <p>Every competition can be replayed at variable speed — 1x, 2x, 4x, 10x. The replay viewer reconstructs the exact visual state at any point in time from the event stream. Operators can scrub to any moment, pause, zoom into a specific team's activity, and see what every agent was doing at that exact timestamp. Replays are shareable via URL — this is the foundation for the spectator experience in later versions.</p>
+
+    <div class="callout blue">
+      <div class="callout-title">Commentary Track (Future)</div>
+      <p>An AI narrator can generate a "commentary track" for replays — explaining what each team's strategy was, calling out pivotal moments ("At 3:42, Team Beta made a critical architectural decision that ultimately won them the round"), and providing expert analysis. Think sports commentary for AI competitions.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 9. ROADMAP ═══ -->
+<section id="roadmap">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">09</span>
+    <h2>Build Roadmap</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <div class="timeline">
+      <div class="timeline-item">
+        <div class="tl-phase">Phase 0 — Foundation (Weeks 1-3)</div>
+        <div class="tl-title">CLI Orchestrator + Single Model</div>
+        <div class="tl-desc">Build the core competition engine as a CLI tool. One model (Claude), two competing teams with different personas, structured brief input (JSON/YAML), event logging to file, basic judging with rubric scoring. No UI — terminal output only. This validates the orchestration logic and event system. Essentially productizing what you did manually for The Monday Pulse.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-phase">Phase 1 — Multi-Model + Web UI (Weeks 4-8)</div>
+        <div class="tl-title">Add Codex + Gemini, Build Arena View</div>
+        <div class="tl-desc">Write model adapters for Codex and Gemini. Build the React Arena UI with live lane view, WebSocket streaming, and basic replay. Add sandbox isolation (Docker initially, Firecracker later). Build the brief builder with template library. This is the first version where you can watch AI teams compete in real time from a browser.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-phase">Phase 2 — Synthesis + Formats (Weeks 9-14)</div>
+        <div class="tl-title">The Intelligence Layer</div>
+        <div class="tl-desc">Build the synthesis engine. Implement the multi-judge panel. Add competition format presets (sprint, hackathon, relay, red/blue). Build the replay viewer with timeline scrubbing. Add performance analytics dashboard. This is where Agent Arena becomes genuinely valuable — not just showing who won, but creating solutions better than any individual submission.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-phase">Phase 3 — Spectator + Sharing (Weeks 15-20)</div>
+        <div class="tl-title">The Audience Layer</div>
+        <div class="tl-desc">Shareable replay URLs. Spectator mode (view-only access to live competitions). AI-generated commentary tracks. Competition highlights and summaries. Public competition gallery. This is where the platform starts generating content that can attract an audience beyond operators.</div>
+      </div>
+      <div class="timeline-item">
+        <div class="tl-phase">Phase 4 — Platform + Community (Weeks 21+)</div>
+        <div class="tl-title">Ecosystem Expansion</div>
+        <div class="tl-desc">Public API for programmatic competition creation. Community brief library (shareable, forkable briefs). Leaderboards and model rankings. Custom model adapter SDK for bringing any model into the arena. Integration with CI/CD for automated architecture review competitions. This is where the flywheel starts — more competitions generate more data, better analytics attract more operators, more operators generate more competitions.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ 10. THE FORGE ═══ -->
+<section id="forge">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">10</span>
+    <h2>The Forge — Arena to Execution</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <div class="callout">
+      <div class="callout-title">The Gap</div>
+      <p>Arena competitions produce brilliant <strong>proposals and designs</strong> — the <em>what</em> and the <em>why</em>. But a team that opens those documents Monday morning still can't start building. They need task breakdowns, repo scaffolds, dependency graphs, and acceptance criteria. <strong>The Forge bridges arena output to execution.</strong></p>
+    </div>
+
+    <p>The Forge is an optional post-arena phase that consumes the winning or synthesized solution and produces actionable build artifacts. It can run as a single-agent decomposition or — staying true to the arena philosophy — as its own competitive round where teams race to produce the best implementation plan from the same winning solution.</p>
+
+    <h3>Extended Lifecycle</h3>
+    <div class="code-block">
+<span class="comment">// Standard Arena lifecycle</span>
+... → <span class="type">SCORED</span> → <span class="type">SYNTHESIZING</span> → <span class="type">COMPLETE</span>
+
+<span class="comment">// With The Forge enabled</span>
+... → <span class="type">SCORED</span> → <span class="type">SYNTHESIZING</span> → <span class="type">FORGING</span> → <span class="type">FORGE_COMPLETE</span>
+                                                ↓
+                                     <span class="keyword">Forge Mode: competitive</span> → runs a mini-arena
+                                     <span class="keyword">Forge Mode: solo</span> → single-agent decomposition
+                                     <span class="keyword">Forge Mode: guided</span> → operator picks elements
+    </div>
+
+    <h3>Output Tiers</h3>
+    <p>The Forge produces three tiers of deliverables, each building on the previous:</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="step-num">TIER 1</div>
+        <div class="step-title">Arena Outputs</div>
+        <div class="step-desc">Proposal, technical design, strategic rationale. "Convince stakeholders" artifacts.</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">TIER 2</div>
+        <div class="step-title">Forge Outputs</div>
+        <div class="step-desc">Implementation plan, task graph, repo blueprint, API contracts. "Start building Monday" artifacts.</div>
+      </div>
+      <div class="flow-step">
+        <div class="step-num">TIER 3</div>
+        <div class="step-title">Launchpad</div>
+        <div class="step-desc">Working code scaffolds, CI/CD configs, deployed previews. "Already started" artifacts.</div>
+      </div>
+    </div>
+
+    <h3>Tier 2 — Forge Deliverables (Detail)</h3>
+    <table>
+      <tr><th>Artifact</th><th>Format</th><th>Purpose</th></tr>
+      <tr>
+        <td><strong>Implementation Roadmap</strong></td>
+        <td>Structured Markdown</td>
+        <td>Phases, milestones, dependencies, go/no-go gates. The narrative backbone of execution. Translates the "why" into sequenced "when."</td>
+      </tr>
+      <tr>
+        <td><strong>Task Graph</strong></td>
+        <td>JSON + Markdown</td>
+        <td>Every task with ID, description, acceptance criteria, effort estimate, dependencies, skill type. Importable into Jira, Linear, GitHub Projects.</td>
+      </tr>
+      <tr>
+        <td><strong>Repo Blueprint</strong></td>
+        <td>Directory tree + stubs</td>
+        <td>Full project structure, key file stubs with purpose comments, package manifests with dependencies, environment templates (.env.example), Docker/compose configs.</td>
+      </tr>
+      <tr>
+        <td><strong>API Contracts</strong></td>
+        <td>OpenAPI / GraphQL SDL</td>
+        <td>Service interfaces derived from the technical design. Enables parallel frontend/backend development from day one.</td>
+      </tr>
+      <tr>
+        <td><strong>Risk Register</strong></td>
+        <td>Markdown table</td>
+        <td>Risks with probability, impact, mitigation, and owner. Seeded from competing teams' critiques of each other — the arena naturally surfaces blind spots.</td>
+      </tr>
+      <tr>
+        <td><strong>Decision Log</strong></td>
+        <td>ADR format</td>
+        <td>Architecture Decision Records capturing every significant choice, alternatives considered, and rationale. Prevents re-litigating decisions during build.</td>
+      </tr>
+    </table>
+
+    <h3>Forge Feedback Loop</h3>
+    <p>Once a Forge output is being executed — people are actually building from it — the platform can track which tasks were accurate vs. needed rework, which estimates were close vs. wildly off, which dependencies were correctly identified vs. missed. This execution feedback feeds into the meta-dataset, making future Forge outputs better. Over time: "Claude estimates average 1.3x actual effort. Codex repo scaffolds need 30% fewer modifications than Gemini-generated ones."</p>
+
+    <div class="callout green">
+      <div class="callout-title">Proof of Concept</div>
+      <p>The Monday Pulse hackathon produced a Proposal and Technical Design through competitive arena-style generation. Those documents were then fed through a Forge prototype to produce an Implementation Roadmap, Task Graph, and Repo Blueprint — demonstrating the full arena-to-execution pipeline on a real project.</p>
+    </div>
+
+  </div>
+</section>
+
+<!-- ═══ 11. RISKS ═══ -->
+<section id="risks">
+  <div class="section-header" onclick="toggleSection(this)">
+    <span class="num">11</span>
+    <h2>Open Questions & Risks</h2>
+    <span class="toggle open">▸</span>
+  </div>
+  <div class="section-body">
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-label">⚠️ Technical Risk</div>
+        <div class="card-title">Event Normalization Across Models</div>
+        <div class="card-text">Claude Code, Codex CLI, and Gemini's agent framework emit fundamentally different event types. Normalizing these into a universal schema without losing model-specific nuance is the hardest technical challenge. Start with a minimal common schema and extend per-model.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">⚠️ Cost Risk</div>
+        <div class="card-title">Token Budget Per Competition</div>
+        <div class="card-text">A 4-team, 2-hour hackathon with aggressive sub-agent spawning could consume millions of tokens. Clear governance limits, budget visualization, and "efficiency scoring" (rewarding teams that achieve more with fewer tokens) help manage this.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">⚠️ Fairness Risk</div>
+        <div class="card-title">Apples-to-Oranges Comparisons</div>
+        <div class="card-text">Models have different context windows, tool capabilities, and latencies. Is it fair to compare Claude (200K context) vs. a model with 32K? Need clear "weight classes" or handicap systems. Or lean into it — asymmetric capability IS the point.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">⚠️ Platform Risk</div>
+        <div class="card-title">API Access & Rate Limits</div>
+        <div class="card-text">Running multiple concurrent agentic sessions against multiple model providers means navigating different rate limits, pricing tiers, and TOS. Some providers may restrict competitive benchmarking. Need solid relationships or self-hosted model options.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">❓ Open Question</div>
+        <div class="card-title">What's the Right Naming?</div>
+        <div class="card-text">"Agent Arena" is the working title. Alternatives: The Colosseum, AgentOlympics, BattleGround, The Forge, The Crucible, Clash. The name should convey competition, intelligence, and the seriousness of the outputs — not just gaming entertainment.</div>
+      </div>
+      <div class="card">
+        <div class="card-label">❓ Open Question</div>
+        <div class="card-title">Open Source or Proprietary?</div>
+        <div class="card-text">Open-sourcing the orchestration engine could drive adoption and community contributions. Proprietary synthesis + analytics could be the monetization layer. Hybrid approach: open core with premium intelligence features.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<script>
+function toggleSection(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.toggle');
+  body.classList.toggle('collapsed');
+  toggle.classList.toggle('open');
+}
+
+// Navigation active state
+const sections = document.querySelectorAll('section');
+const navLinks = document.querySelectorAll('nav .nav-links a');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      navLinks.forEach(link => link.classList.remove('active'));
+      const activeLink = document.querySelector(`nav a[href="#${entry.target.id}"]`);
+      if (activeLink) activeLink.classList.add('active');
+    }
+  });
+}, { rootMargin: '-80px 0px -70% 0px' });
+
+sections.forEach(section => observer.observe(section));
+
+// Smooth scrolling
+navLinks.forEach(link => {
+  link.addEventListener('click', (e) => {
+    e.preventDefault();
+    const target = document.querySelector(link.getAttribute('href'));
+    target.scrollIntoView({ behavior: 'smooth' });
+  });
+});
+</script>
+</body>
+</html>

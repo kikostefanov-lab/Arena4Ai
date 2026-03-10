@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { getModelColor, getStateStyle } from '../../../lib/design-tokens';
 
@@ -33,7 +33,7 @@ interface TournamentEntry {
     expectedOutput?: string;
   };
   rankings: RankingEntry[] | null;
-  currentMatch: { teamA: string; teamB: string } | null;
+  currentMatch: { teamA: string; teamB: string; competitionId?: string } | null;
   error: string | null;
 }
 
@@ -56,9 +56,11 @@ export default function TournamentPage() {
   const params = useParams<{ id: string }>();
   const id = params.id;
 
+  const router = useRouter();
   const [tournament, setTournament] = useState<TournamentEntry | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
 
   const fetchTournament = useCallback(async () => {
     try {
@@ -173,17 +175,60 @@ export default function TournamentPage() {
                 </span>
               </div>
             </div>
-            <Link
-              href="/"
-              className="nav-link"
-              style={{
-                fontSize: '0.6rem', color: '#8896ab', padding: '0.4rem 0.8rem',
-                border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
-                letterSpacing: '1px', fontWeight: 600, flexShrink: 0,
-              }}
-            >
-              ← GALLERY
-            </Link>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
+              {isRunning && (
+                <button
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    if (!confirm('Cancel this tournament? Running matches will be stopped.')) return;
+                    setActionLoading(true);
+                    try {
+                      await fetch(`/api/tournaments/${id}?action=cancel`, { method: 'POST' });
+                      fetchTournament();
+                    } finally { setActionLoading(false); }
+                  }}
+                  style={{
+                    fontSize: '0.6rem', fontWeight: 700, color: '#ef4444', padding: '0.4rem 0.8rem',
+                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '1px',
+                  }}
+                >
+                  CANCEL
+                </button>
+              )}
+              {(isComplete || isFailed) && (
+                <button
+                  disabled={actionLoading}
+                  onClick={async () => {
+                    if (!confirm('Delete this tournament permanently?')) return;
+                    setActionLoading(true);
+                    try {
+                      const res = await fetch(`/api/tournaments/${id}`, { method: 'DELETE' });
+                      if (res.ok) router.push('/');
+                      else { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Delete failed'); }
+                    } finally { setActionLoading(false); }
+                  }}
+                  style={{
+                    fontSize: '0.6rem', fontWeight: 700, color: '#ef4444', padding: '0.4rem 0.8rem',
+                    background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                    borderRadius: '4px', cursor: 'pointer', fontFamily: 'inherit', letterSpacing: '1px',
+                  }}
+                >
+                  DELETE
+                </button>
+              )}
+              <Link
+                href="/"
+                className="nav-link"
+                style={{
+                  fontSize: '0.6rem', color: '#8896ab', padding: '0.4rem 0.8rem',
+                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  letterSpacing: '1px', fontWeight: 600,
+                }}
+              >
+                ← GALLERY
+              </Link>
+            </div>
           </div>
         </div>
 
@@ -209,7 +254,7 @@ export default function TournamentPage() {
               {winner.model}
             </div>
             <div style={{ fontSize: '0.65rem', color: '#8896ab', marginTop: '0.3rem' }}>
-              {winner.wins}W · {winner.losses}L · {winner.draws}D · {winner.totalScore.toFixed(1)} pts
+              {winner.wins}W · {winner.losses}L · {winner.draws}D · {Math.round(winner.totalScore * 100)}%
             </div>
           </div>
         )}
@@ -258,14 +303,16 @@ export default function TournamentPage() {
             <span style={{ color: getModelColor(tournament.currentMatch.teamB.split(':')[0]), fontWeight: 700, fontSize: '0.75rem' }}>
               {formatTeamLabel(tournament.currentMatch.teamB)}
             </span>
-            {/* Link to the most recent match if available */}
-            {tournament.matchIds.length > 0 && (
+            {tournament.currentMatch.competitionId && (
               <Link
-                href={`/competitions/${tournament.matchIds[tournament.matchIds.length - 1]}`}
+                href={`/competitions/${tournament.currentMatch.competitionId}`}
                 className="match-link"
-                style={{ marginLeft: 'auto', fontSize: '0.62rem', color: '#8896ab', textDecoration: 'none', flexShrink: 0 }}
+                style={{
+                  marginLeft: 'auto', fontSize: '0.62rem', color: '#f97316', textDecoration: 'none', flexShrink: 0,
+                  fontWeight: 700, letterSpacing: '1px',
+                }}
               >
-                Watch →
+                WATCH LIVE →
               </Link>
             )}
           </div>
@@ -317,7 +364,7 @@ export default function TournamentPage() {
                     <span style={{ textAlign: 'center', fontSize: '0.72rem', color: '#22c55e', fontWeight: 700 }}>{entry.wins}</span>
                     <span style={{ textAlign: 'center', fontSize: '0.72rem', color: '#ef4444', fontWeight: 700 }}>{entry.losses}</span>
                     <span style={{ textAlign: 'center', fontSize: '0.72rem', color: '#8896ab' }}>{entry.draws}</span>
-                    <span style={{ textAlign: 'right', fontSize: '0.72rem', color: '#e2e8f0', fontWeight: 700 }}>{entry.totalScore.toFixed(1)}</span>
+                    <span style={{ textAlign: 'right', fontSize: '0.72rem', color: '#e2e8f0', fontWeight: 700 }}>{Math.round(entry.totalScore * 100)}%</span>
                     <span style={{ textAlign: 'right', fontSize: '0.65rem', color: '#4a5568' }}>{entry.matchesPlayed}</span>
                   </div>
                 );

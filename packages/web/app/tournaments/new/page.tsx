@@ -419,14 +419,14 @@ export default function NewTournamentPage() {
                     />
                   </div>
                   <div>
-                    <span style={{ fontSize: '0.55rem', color: '#4a5568', display: 'block', marginBottom: '0.2rem' }}>WEIGHT</span>
+                    <span style={{ fontSize: '0.55rem', color: '#4a5568', display: 'block', marginBottom: '0.2rem' }}>WEIGHT %</span>
                     <input
                       type="number"
-                      value={c.weight}
-                      onChange={(e) => updateCriterion(i, 'weight', Number(e.target.value))}
-                      min={0}
-                      max={1}
-                      step={0.1}
+                      value={Math.round(c.weight * 100)}
+                      onChange={(e) => updateCriterion(i, 'weight', Number(e.target.value) / 100)}
+                      min={1}
+                      max={100}
+                      step={1}
                       style={{ ...inputStyle, width: '70px' }}
                     />
                   </div>

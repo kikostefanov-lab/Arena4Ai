@@ -22,10 +22,12 @@ const MOCK_JSON_RESPONSE = JSON.stringify({
 vi.mock('node:child_process', () => ({
   spawn: vi.fn(() => {
     const child = new EventEmitter() as EventEmitter & {
+      stdin: { write: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
       stdout: EventEmitter;
       stderr: EventEmitter;
       kill: ReturnType<typeof vi.fn>;
     };
+    child.stdin = { write: vi.fn(), end: vi.fn() };
     child.stdout = new EventEmitter();
     child.stderr = new EventEmitter();
     child.kill = vi.fn();

@@ -1134,11 +1134,11 @@ export default function NewCompetitionPage() {
                           <label style={{
                             display: 'block', fontSize: '0.5rem', fontWeight: 700,
                             color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
-                          }}>Weight</label>
+                          }}>Weight %</label>
                           <input
                             className="arena-input"
-                            type="number" min={0} max={1} step={0.01} required value={c.weight}
-                            onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value))}
+                            type="number" min={1} max={100} step={1} required value={Math.round(c.weight * 100)}
+                            onChange={(e) => updateCriterion(idx, 'weight', Number(e.target.value) / 100)}
                           />
                         </div>
                       </div>

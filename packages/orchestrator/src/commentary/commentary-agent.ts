@@ -61,9 +61,11 @@ export class CommentaryAgent {
       const text = await new Promise<string>((resolve, reject) => {
         const child = spawn(
           this.claudeBin,
-          ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
-          { stdio: ['ignore', 'pipe', 'ignore'], env: claudeEnv() },
+          ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
+          { stdio: ['pipe', 'pipe', 'ignore'], env: claudeEnv() },
         );
+        child.stdin!.write(prompt);
+        child.stdin!.end();
         let out = '';
         child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
         const timer = setTimeout(() => { child.kill(); reject(new Error('timeout')); }, 15_000);

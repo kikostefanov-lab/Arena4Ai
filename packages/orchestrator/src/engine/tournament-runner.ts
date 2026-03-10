@@ -66,14 +66,14 @@ export class TournamentRunner extends EventEmitter {
       const teamAEntry = { id: 'team-a', model: teamA, persona: teamA.split(':')[1] ?? 'default' };
       const teamBEntry = { id: 'team-b', model: teamB, persona: teamB.split(':')[1] ?? 'default' };
 
-      this.emit('matchStart', { teamA, teamB });
-
       try {
         const runner = new CompetitionRunner(
           brief,
           [teamAEntry, teamBEntry],
           options,
         );
+
+        this.emit('matchStart', { teamA, teamB, competitionId: runner.competitionId, runner });
 
         const result = await runner.run();
         matchIds.push(runner.competitionId);
@@ -102,6 +102,7 @@ export class TournamentRunner extends EventEmitter {
         this.emit('matchEnd', {
           teamA,
           teamB,
+          competitionId: runner.competitionId,
           winner: winner === 'team-a' ? teamA : winner === 'team-b' ? teamB : null,
         });
       } catch (err) {

@@ -98,9 +98,12 @@ You MUST include one entry per criterionId, in the same order.`;
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         claudeBin,
-        ['--print', prompt, '--output-format', 'text', '--dangerously-skip-permissions'],
-        { stdio: ['ignore', 'pipe', 'pipe'], env: claudeEnv() },
+        ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
+        { stdio: ['pipe', 'pipe', 'pipe'], env: claudeEnv() },
       );
+
+      child.stdin.write(prompt);
+      child.stdin.end();
 
       let out = '';
       child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
