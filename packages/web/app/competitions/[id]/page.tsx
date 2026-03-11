@@ -6,6 +6,7 @@ import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS as TOKEN_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
+import type { ForgeRun, ForgeSource } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ interface CriterionFinding { criterionId: string; finding: string; strength: str
 interface TeamPresentation { teamId: string; model: string; approach: string; criterionFindings: CriterionFinding[]; keyInsight: string; deliverableSummary: string; }
 interface ForgeArtifact { type: string; title: string; content: string; generatedAt: string; universal?: boolean; }
 interface ForgeOutput { forgeModel: string; artifacts: ForgeArtifact[]; generatedAt: string; domain?: string; selectedTypes?: string[]; }
-interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: SynthesisResult | null; deliverables?: TeamDeliverable[]; presentations?: TeamPresentation[]; forge?: ForgeOutput | null; }
+interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: SynthesisResult | null; deliverables?: TeamDeliverable[]; presentations?: TeamPresentation[]; forge?: ForgeRun[] | null; }
 
 type CompetitionState = 'PENDING' | 'RUNNING' | 'COLLECTING' | 'PRESENTING' | 'JUDGING' | 'SYNTHESIZING' | 'COMPLETE' | 'FORGING' | 'FORGE_COMPLETE' | 'ERROR' | 'FAILED' | 'CANCELLED';
 
@@ -713,7 +714,7 @@ function ScoreDrawer({
   height,
   onToggle,
   fileEventsByTeam,
-  onForgeComplete,
+  comp,
 }: {
   competitionId: string;
   result: CompetitionResult;
@@ -721,10 +722,10 @@ function ScoreDrawer({
   height: number;
   onToggle: () => void;
   fileEventsByTeam?: TeamFileEvents[];
-  onForgeComplete?: (forge: ForgeOutput) => void;
+  comp?: { state: string } | null;
 }) {
   const [activeTab, setActiveTab] = useState<'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'>(
-    result.forge ? 'forge' : 'scores'
+    result.forge && result.forge.length > 0 ? 'forge' : 'scores'
   );
   const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
   const [expandedFile, setExpandedFile] = useState<{ teamId: string; path: string } | null>(null);
@@ -756,14 +757,66 @@ function ScoreDrawer({
 
   const hasPresentations = (result.presentations ?? []).length > 0;
 
-  const hasForge = result.forge != null;
+  const hasForge = result.forge != null && result.forge.length > 0;
   const [synthRunning, setSynthRunning] = useState(false);
   const [synthError, setSynthError] = useState<string | null>(null);
-  const [forging, setForging] = useState(false);
+
+  // Forge stacked-runs state
+  const [forgeRuns, setForgeRuns] = useState<ForgeRun[]>(result.forge ?? []);
+  const [forgeRunning, setForgeRunning] = useState(false);
+  const [forgeSource, setForgeSource] = useState<ForgeSource>('winner');
   const [forgeError, setForgeError] = useState<string | null>(null);
-  const [forgeProgress, setForgeProgress] = useState<Record<string, string> | null>(null);
+  const [activeForgeRunId, setActiveForgeRunId] = useState<string | null>(
+    result.forge && result.forge.length > 0 ? result.forge[result.forge.length - 1].id : null
+  );
+
+  // winner/loser for source picker
+  const winnerId = result.winnerId;
+  const winnerTeam = teams.find((t) => t.id === winnerId);
+  const loserTeam = teams.find((t) => t.id !== winnerId);
+
+  async function triggerForge() {
+    setForgeRunning(true);
+    setForgeError(null);
+    try {
+      const res = await fetch(`/api/competitions/${competitionId}/forge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: forgeSource }),
+      });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        setForgeError(body.error ?? 'Forge failed to start');
+      }
+      // Polling loop will pick up new run when done
+    } catch {
+      setForgeError('Network error');
+    } finally {
+      setForgeRunning(false);
+    }
+  }
+
+  // Poll for new forge runs while FORGING
   const forgePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => () => { if (forgePollRef.current) clearInterval(forgePollRef.current); }, []);
+  useEffect(() => {
+    if (comp?.state !== 'FORGING') {
+      if (forgePollRef.current) { clearInterval(forgePollRef.current); forgePollRef.current = null; }
+      return;
+    }
+    if (forgePollRef.current) return;
+    forgePollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/competitions/${competitionId}/forge`);
+        if (!res.ok) return;
+        const data = await res.json() as { runs?: ForgeRun[] };
+        if (Array.isArray(data.runs)) {
+          setForgeRuns(data.runs);
+          setActiveForgeRunId((prev) => prev ?? (data.runs!.length > 0 ? data.runs![data.runs!.length - 1].id : null));
+        }
+      } catch { /* ignore */ }
+    }, 3000);
+    return () => { if (forgePollRef.current) { clearInterval(forgePollRef.current); forgePollRef.current = null; } };
+  }, [comp?.state, competitionId]);
 
   const tabStyle = (tab: 'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'): React.CSSProperties => ({
     fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
@@ -884,7 +937,7 @@ function ScoreDrawer({
             </button>
             <button style={tabStyle('synthesis')} onClick={() => setActiveTab('synthesis')}>SYNTHESIS</button>
             <button style={tabStyle('forge')} onClick={() => setActiveTab('forge')}>
-              FORGE{hasForge ? ' ✓' : ''}
+              FORGE{forgeRuns.length > 0 ? ` (${forgeRuns.length})` : ''}
             </button>
           </div>
 
@@ -1461,270 +1514,138 @@ function ScoreDrawer({
               </div>
             )}
 
-            {/* FORGE TAB — build-ready artifacts */}
+            {/* FORGE TAB — source picker + stacked runs */}
             {activeTab === 'forge' && (
               <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-                {hasForge ? (
-                  <>
-                    {/* Header */}
-                    <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <span style={{ fontSize: '1.1rem' }}>🔨</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#eab308', letterSpacing: '0.08em', textTransform: 'uppercase' }}>The Forge</div>
-                        <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>
-                          Build-ready artifacts forged by <code style={{ fontFamily: 'monospace', color: '#00f0ff' }}>{result.forge!.forgeModel}</code>
-                        </div>
-                      </div>
-                      <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
-                        {new Date(result.forge!.generatedAt).toLocaleString()}
-                      </span>
+                {/* Source picker */}
+                <div style={{
+                  background: '#050f1e', border: '1px dashed #0a2235', borderRadius: '8px',
+                  padding: '1.5rem', textAlign: 'center', marginBottom: '1rem',
+                }}>
+                  <div style={{ fontSize: '0.62rem', color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.85rem' }}>
+                    ⚒ Forge a new set of artifacts from
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
+                    {([
+                      { value: 'winner' as ForgeSource, label: `🏆 Winner (${winnerTeam?.model ?? '?'})`, disabled: false },
+                      { value: 'loser' as ForgeSource, label: `📋 Loser (${loserTeam?.model ?? '?'})`, disabled: false },
+                      { value: 'synthesis' as ForgeSource, label: '🔮 Synthesis', disabled: !result.synthesis },
+                    ] as const).map(({ value, label, disabled }) => (
+                      <button
+                        key={value}
+                        disabled={disabled}
+                        onClick={() => setForgeSource(value)}
+                        style={{
+                          padding: '0.5rem 1rem', borderRadius: '6px',
+                          border: `1.5px solid ${forgeSource === value ? (value === 'winner' ? 'rgba(255,102,0,0.6)' : '#00f0ff') : '#0a2235'}`,
+                          background: forgeSource === value ? (value === 'winner' ? 'rgba(255,102,0,0.1)' : 'rgba(0,240,255,0.08)') : '#050f1e',
+                          color: disabled ? '#1e4a5a' : forgeSource === value ? (value === 'winner' ? '#ff6600' : '#00f0ff') : '#7cc6db',
+                          cursor: disabled ? 'not-allowed' : 'pointer',
+                          fontSize: '0.68rem', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.5px',
+                        }}
+                      >
+                        {label}
+                        {disabled && ' (run synthesis first)'}
+                      </button>
+                    ))}
+                  </div>
+                  {forgeError && <div style={{ fontSize: '0.65rem', color: '#ef4444', marginBottom: '0.75rem' }}>{forgeError}</div>}
+                  <button
+                    onClick={triggerForge}
+                    disabled={forgeRunning || comp?.state === 'FORGING'}
+                    style={{
+                      fontSize: '0.72rem', fontWeight: 800, padding: '0.55rem 1.4rem',
+                      borderRadius: '6px', background: 'rgba(0,240,255,0.12)',
+                      border: '1px solid rgba(0,240,255,0.4)', color: '#00f0ff',
+                      cursor: forgeRunning ? 'not-allowed' : 'pointer',
+                      fontFamily: 'monospace', letterSpacing: '1.5px', textTransform: 'uppercase',
+                      opacity: forgeRunning ? 0.6 : 1,
+                    }}
+                  >
+                    {forgeRunning || comp?.state === 'FORGING' ? '⚒ Forging…' : '⚒ Forge This'}
+                  </button>
+                </div>
+
+                {/* Stacked runs list */}
+                {forgeRuns.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '0.58rem', color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                      Previous forge runs
                     </div>
-
-                    {/* Forged by badge + domain badge + Download All */}
-                    {result.forge && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
-                        <span style={{
-                          fontSize: '0.6rem', fontWeight: 700, letterSpacing: '1px',
-                          color: '#eab308', background: 'rgba(234,179,8,0.1)',
-                          border: '1px solid rgba(234,179,8,0.25)', borderRadius: '4px',
-                          padding: '0.15rem 0.5rem',
-                        }}>
-                          ⚒ Forged by {result.forge.forgeModel}
-                        </span>
-                        <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
-                          {new Date(result.forge.generatedAt).toLocaleDateString()}
-                        </span>
-                        {result.forge.domain && (
-                          <div style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                            padding: '0.2rem 0.6rem', borderRadius: '20px',
-                            background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.25)',
-                            fontSize: '0.6rem', fontWeight: 700, color: '#eab308',
-                            letterSpacing: '1px', textTransform: 'uppercase',
-                          }}>
-                            ◆ {result.forge.domain} domain
-                          </div>
-                        )}
-                        <a
-                          href={`/api/competitions/${competitionId}/forge/download`}
-                          download
-                          style={{
-                            marginLeft: 'auto',
-                            fontSize: '0.65rem', fontWeight: 700, color: '#4a8fa8',
-                            background: 'rgba(136,150,171,0.08)', border: '1px solid rgba(136,150,171,0.2)',
-                            borderRadius: '4px', padding: '0.3rem 0.7rem',
-                            textDecoration: 'none', letterSpacing: '0.5px',
-                            display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                          }}
-                        >
-                          ⬇ Download All (.zip)
-                        </a>
-                      </div>
-                    )}
-
-                    {/* Artifact cards — universal first, then domain-specific */}
-                    {(() => {
-                      const renderArtifact = (artifact: ForgeArtifact) => (
-                        <details key={artifact.type} style={{
-                          marginBottom: '0.75rem',
-                          border: '1px solid #0a2235',
-                          borderRadius: '8px', overflow: 'hidden',
-                          background: '#010810',
-                        }}>
-                          <summary style={{
-                            padding: '0.7rem 1rem',
-                            cursor: 'pointer',
-                            display: 'flex', alignItems: 'center', gap: '0.6rem',
-                            background: '#000408',
-                            fontSize: '0.75rem', fontWeight: 700, color: '#c8eef8',
-                            listStyle: 'none',
-                          }}>
-                            <span style={{ fontSize: '0.85rem' }}>
-                              {ARTIFACT_EMOJI[artifact.type] ?? '📄'}
-                            </span>
-                            <span style={{ flex: 1 }}>{artifact.title}</span>
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const blob = new Blob([artifact.content], { type: 'text/markdown' });
-                                const url = URL.createObjectURL(blob);
-                                const a = document.createElement('a');
-                                a.href = url;
-                                a.download = `${artifact.type}.md`;
-                                a.click();
-                                URL.revokeObjectURL(url);
-                              }}
-                              style={{
-                                fontSize: '0.58rem', color: '#4a6080', background: 'none',
-                                border: '1px solid #0a2235', borderRadius: '4px',
-                                padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace',
-                              }}
-                            >
-                              ⬇ download
-                            </button>
-                            <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>▼</span>
-                          </summary>
-                          <div style={{
-                            padding: '1rem', borderTop: '1px solid #0a2235',
-                            fontFamily: "-apple-system, 'Segoe UI', sans-serif",
-                            fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa',
-                            whiteSpace: 'pre-wrap',
-                          }}>
-                            {artifact.content}
-                          </div>
-                        </details>
-                      );
-
-                      const universalArtifacts = result.forge!.artifacts.filter((a) => a.universal);
-                      const domainArtifacts = result.forge!.artifacts.filter((a) => !a.universal);
-                      return (
-                        <>
-                          {universalArtifacts.length > 0 && (
-                            <>
-                              <div style={{
-                                fontSize: '0.55rem', color: '#4a8fa8', letterSpacing: '2px',
-                                textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem',
-                                marginTop: '0.25rem',
-                              }}>
-                                ◆ Universal
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      {[...forgeRuns].reverse().map((run, idx) => {
+                        const sourceLabel = run.source === 'winner' ? '🏆 Winner' : run.source === 'loser' ? '📋 Loser' : '🔮 Synthesis';
+                        const runNum = forgeRuns.length - idx;
+                        const isActive = activeForgeRunId === run.id;
+                        return (
+                          <div
+                            key={run.id}
+                            style={{
+                              background: '#050f1e',
+                              border: `1px solid ${isActive ? '#0e3050' : '#0a2235'}`,
+                              borderRadius: '8px', padding: '0.9rem',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#e4f8ff' }}>
+                                {sourceLabel} — Run #{runNum}
                               </div>
-                              {universalArtifacts.map((artifact) => renderArtifact(artifact))}
-                            </>
-                          )}
-                          {domainArtifacts.length > 0 && (
-                            <>
-                              <div style={{
-                                fontSize: '0.55rem', color: '#4a8fa8', letterSpacing: '2px',
-                                textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem',
-                                marginTop: '1rem',
-                              }}>
-                                ◆ Domain: {result.forge!.domain ?? 'specialized'}
+                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                <span style={{ fontSize: '0.58rem', color: '#3d7d94' }}>
+                                  {run.artifacts.length} artifacts
+                                </span>
+                                <a
+                                  href={`/api/competitions/${competitionId}/forge/${run.id}/download`}
+                                  download
+                                  style={{
+                                    fontSize: '0.6rem', padding: '0.18rem 0.5rem', borderRadius: '4px',
+                                    background: 'transparent', border: '1px solid #0a2235', color: '#7cc6db',
+                                    textDecoration: 'none', fontFamily: 'monospace', fontWeight: 700,
+                                  }}
+                                >
+                                  ↓ ZIP
+                                </a>
+                                <button
+                                  onClick={() => setActiveForgeRunId(isActive ? null : run.id)}
+                                  style={{
+                                    fontSize: '0.6rem', padding: '0.18rem 0.5rem', borderRadius: '4px',
+                                    background: isActive ? 'rgba(0,240,255,0.1)' : 'transparent',
+                                    border: `1px solid ${isActive ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
+                                    color: isActive ? '#00f0ff' : '#7cc6db',
+                                    cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700,
+                                  }}
+                                >
+                                  {isActive ? 'Hide' : 'View'}
+                                </button>
                               </div>
-                              {domainArtifacts.map((artifact) => renderArtifact(artifact))}
-                            </>
-                          )}
-                          {universalArtifacts.length === 0 && domainArtifacts.length === 0 &&
-                            result.forge!.artifacts.map((artifact) => renderArtifact(artifact))
-                          }
-                        </>
-                      );
-                    })()}
-
-                  </>
-                ) : (
-                  <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>🔨</div>
-                    <div style={{ fontSize: '0.82rem', color: '#c8eef8', fontWeight: 700, marginBottom: '0.5rem' }}>
-                      The Forge
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6, maxWidth: '400px', margin: '0 auto 1.2rem' }}>
-                      Review the presentations, scores, and synthesis above. When you&apos;re ready, forge the winning solution into build-ready artifacts.
-                    </div>
-                    {forging && (
-                      <div style={{ marginBottom: '1.5rem', textAlign: 'left', display: 'inline-block' }}>
-                        <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '2px', color: '#4a8fa8', marginBottom: '0.6rem' }}>
-                          FORGING ARTIFACTS
-                        </div>
-                        {forgeProgress ? (
-                          Object.entries(forgeProgress).map(([type, status]) => (
-                            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                              <span style={{ fontSize: '0.8rem', color: status === 'done' ? '#00f0ff' : status === 'error' ? '#ef4444' : status === 'generating' ? '#00f0ff' : '#1e4a5a', flexShrink: 0, width: '1rem', textAlign: 'center' }}>
-                                {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'generating' ? '⟳' : '○'}
-                              </span>
-                              <span style={{ fontSize: '0.68rem', color: status === 'done' ? '#00f0ff' : status === 'error' ? '#ef4444' : status === 'generating' ? '#00f0ff' : '#1e4a5a' }}>
-                                {ARTIFACT_EMOJI[type] ?? '📄'} {type.replace(/_/g, ' ')}
-                              </span>
                             </div>
-                          ))
-                        ) : (
-                          <div style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
-                            Selecting domain artifacts…
+                            {/* Artifact chips */}
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: isActive ? '0.75rem' : 0 }}>
+                              {run.artifacts.map((a) => (
+                                <span key={a.type} style={{
+                                  fontSize: '0.58rem', padding: '0.12rem 0.4rem', borderRadius: '3px', fontWeight: 700, letterSpacing: '0.5px',
+                                  background: a.universal ? 'rgba(0,212,255,0.1)' : 'rgba(0,102,255,0.1)',
+                                  color: a.universal ? '#00d4ff' : '#0066ff',
+                                }}>
+                                  {a.title}
+                                </span>
+                              ))}
+                            </div>
+                            {/* Expanded artifact view */}
+                            {isActive && run.artifacts.map((artifact) => (
+                              <div key={artifact.type} style={{ marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid #0a2235' }}>
+                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#00f0ff', marginBottom: '0.4rem', letterSpacing: '0.5px' }}>
+                                  {artifact.title}
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: '#7cc6db', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                                  {artifact.content}
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        )}
-                      </div>
-                    )}
-                    <button
-                      disabled={forging}
-                      onClick={async () => {
-                        setForging(true);
-                        setForgeError(null);
-                        try {
-                          const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-                          const res = await fetch(`${apiBase}/competitions/${competitionId}/forge`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                          });
-                          if (!res.ok) {
-                            const data = await res.json().catch(() => ({}));
-                            setForgeError(data.error ?? `Forge request failed (${res.status})`);
-                            setForging(false);
-                            return;
-                          }
-                          // Poll for completion
-                          let attempts = 0;
-                          forgePollRef.current = setInterval(async () => {
-                            attempts++;
-                            try {
-                              // Poll progress + completion in parallel
-                              const [progRes, pollRes] = await Promise.all([
-                                fetch(`${apiBase}/competitions/${competitionId}/forge/progress`),
-                                fetch(`${apiBase}/competitions/${competitionId}/forge`),
-                              ]);
-                              if (progRes.ok) {
-                                const { progress } = await progRes.json();
-                                setForgeProgress((prev) =>
-                                  JSON.stringify(prev) === JSON.stringify(progress) ? prev : progress
-                                );
-                              }
-                              if (pollRes.ok) {
-                                const data = await pollRes.json();
-                                if (data.status === 'complete' && data.forge) {
-                                  clearInterval(forgePollRef.current!); forgePollRef.current = null;
-                                  setForgeProgress(null);
-                                  onForgeComplete?.(data.forge);
-                                  setActiveTab('forge');
-                                  setForging(false);
-                                }
-                              } else if (pollRes.status === 404) {
-                                clearInterval(forgePollRef.current!); forgePollRef.current = null;
-                                setForgeProgress(null);
-                                setForgeError('Forge failed server-side. Check the API server logs for details.');
-                                setForging(false);
-                              }
-                            } catch { /* network error, keep polling */ }
-                            if (attempts >= 60) {
-                              clearInterval(forgePollRef.current!); forgePollRef.current = null;
-                              setForgeProgress(null);
-                              setForgeError('Forge timed out after 3 minutes.');
-                              setForging(false);
-                            }
-                          }, 3000);
-                        } catch (err) {
-                          setForgeError('Network error — is the API server running?');
-                          setForging(false);
-                        }
-                      }}
-                      style={{
-                        fontSize: '0.78rem', fontWeight: 800, color: forging ? '#eab308' : '#000408',
-                        background: forging
-                          ? 'rgba(234,179,8,0.1)'
-                          : 'linear-gradient(135deg, #eab308, #f59e0b)',
-                        border: forging ? '1px solid rgba(234,179,8,0.4)' : 'none',
-                        borderRadius: '8px',
-                        padding: '0.65rem 2rem', cursor: forging ? 'not-allowed' : 'pointer',
-                        fontFamily: 'inherit', letterSpacing: '0.5px',
-                        transition: 'all 0.15s',
-                        animation: forging ? 'judgingPulse 2s ease-in-out infinite' : 'none',
-                      }}
-                    >
-                      {forging ? '🔨 Forging… (~30s)' : 'Forge This Solution'}
-                    </button>
-                    {forgeError && (
-                      <div style={{ fontSize: '0.7rem', color: '#ef4444', marginTop: '0.8rem', maxWidth: '400px', margin: '0.8rem auto 0', lineHeight: 1.5 }}>
-                        {forgeError}
-                      </div>
-                    )}
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2036,7 +1957,7 @@ export default function CompetitionPage() {
             summary: raw.summary as string | undefined,
             synthesis: raw.synthesis as SynthesisResult | null | undefined,
             presentations: raw.presentations as TeamPresentation[] | undefined,
-            forge: raw.forge as ForgeOutput | null | undefined,
+            forge: Array.isArray(raw.forge) ? raw.forge as ForgeRun[] : null,
             deliverables: raw.deliverables as TeamDeliverable[] | undefined,
           };
           setResult(normalized);
@@ -2594,7 +2515,7 @@ export default function CompetitionPage() {
               h > SCORE_DRAWER_COLLAPSED ? SCORE_DRAWER_COLLAPSED : SCORE_DRAWER_EXPANDED
             )}
             fileEventsByTeam={fileEventsByTeam}
-            onForgeComplete={(forge) => setResult(prev => prev ? { ...prev, forge } : prev)}
+            comp={{ state }}
           />
         )}
       </div>
