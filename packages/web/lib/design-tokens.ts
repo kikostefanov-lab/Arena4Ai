@@ -1,3 +1,5 @@
+import type React from 'react';
+
 /**
  * Shared design tokens for Arena4Ai web UI.
  *
@@ -98,3 +100,94 @@ export function glowShadow(color: string, intensity: number = 1): string {
   const rgb = hexToRgb(color);
   return `0 0 ${5 * intensity}px rgba(${rgb},${0.25 * intensity}), 0 0 ${10 * intensity}px rgba(${rgb},${0.1 * intensity})`;
 }
+
+// ─── Typography tokens ────────────────────────────────────────────────────────
+
+/** Font family — Orbitron first, monospace fallbacks. Use everywhere. (TY-001,005) */
+export const MONOSPACE_FONT = "var(--font-orbitron), 'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
+
+/** Label / kicker letter-spacing — matches marketing .stamp (TY-004) */
+export const LABEL_LETTER_SPACING = '5px';
+
+/** Button letter-spacing — matches marketing CTA buttons (TY-007) */
+export const BUTTON_LETTER_SPACING = '2px';
+
+/** Nav link letter-spacing — matches marketing .nav-cta (TY-007) */
+export const NAV_LETTER_SPACING = '1.5px';
+
+/** Font weights — map to the Orbitron weights loaded in layout.tsx (TY-010) */
+export const FONT_WEIGHT_REGULAR   = 400;
+export const FONT_WEIGHT_BOLD      = 700;
+export const FONT_WEIGHT_EXTRABOLD = 900;
+
+/** Form label style — shared across competitions/new and tournaments/new (TY-008) */
+export const FORM_LABEL_STYLE: React.CSSProperties = {
+  color: '#4a8fa8',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '1.5px',
+  fontWeight: 700,
+  fontSize: '0.6rem',
+};
+
+// ─── Accent colors ────────────────────────────────────────────────────────────
+
+/** Rank badge accent colors — leaderboard podium (TY-009) */
+export const ACCENT_GOLD   = '#eab308';
+export const ACCENT_SILVER = '#94a3b8';
+export const ACCENT_BRONZE = '#b47c3c';
+
+// ─── Interaction tokens ───────────────────────────────────────────────────────
+
+/** Hover state colors for interactive elements (CP-009) */
+export const HOVER_DARK = '#0e3050';
+export const HOVER_TEXT = '#c8eef8';
+
+// ─── Layout tokens ────────────────────────────────────────────────────────────
+
+/** Standard page container max-width (CP-011) */
+export const CONTAINER_MAX_WIDTH = '960px';
+
+/** Spacing scale — use for padding, margin, gap (CP-005) */
+export const SPACING = {
+  xs:   '0.5rem',
+  sm:   '0.75rem',
+  md:   '1rem',
+  lg:   '1.5rem',
+  xl:   '2rem',
+  xxl:  '2.5rem',
+  xxxl: '3rem',
+} as const;
+
+/** Section divider gradient — use instead of plain border-bottom (CP-004) */
+export const DIVIDER_GRADIENT = 'linear-gradient(to right, transparent, #0a2235 30%, #0a2235 70%, transparent)';
+
+// ─── Badge style presets ──────────────────────────────────────────────────────
+
+/**
+ * Stamp / kicker style — TRON label pattern.
+ * Usage: <div style={STAMP_STYLE}>EARLY ACCESS</div>
+ * (TY-003)
+ */
+export const STAMP_STYLE: React.CSSProperties = {
+  fontSize: '0.55rem',
+  fontWeight: 800,
+  letterSpacing: '5px',
+  color: TEXT_DIM,
+  textTransform: 'uppercase' as const,
+  border: `1px solid ${BORDER_DIM}`,
+  padding: '0.25rem 0.85rem',
+  borderRadius: '2px',
+  display: 'inline-block',
+};
+
+/**
+ * Kicker label style — above page titles.
+ * (TY-003,004)
+ */
+export const KICKER_STYLE: React.CSSProperties = {
+  fontSize: '0.55rem',
+  fontWeight: 800,
+  letterSpacing: LABEL_LETTER_SPACING,
+  color: TEXT_DIM,
+  textTransform: 'uppercase' as const,
+};
