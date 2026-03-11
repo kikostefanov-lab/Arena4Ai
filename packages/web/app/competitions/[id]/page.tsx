@@ -727,6 +727,8 @@ function ScoreDrawer({
     result.forge ? 'forge' : 'scores'
   );
   const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
+  const [expandedFile, setExpandedFile] = useState<{ teamId: string; path: string } | null>(null);
+  const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string } | null>(null);
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
   const winnerLabel = result.winnerId
@@ -1051,8 +1053,6 @@ function ScoreDrawer({
                   const label = resolveLabel(teams, td.teamId, td.teamId);
                   const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
                   const rgb = hexToRgb(color);
-                  const currentFileIdx = activeFileIdx[td.teamId] ?? 0;
-                  const currentFile = td.files[currentFileIdx];
 
                   return (
                     <div key={td.teamId} style={{
@@ -1073,6 +1073,20 @@ function ScoreDrawer({
                         <span style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
                           {td.files.length} {td.files.length === 1 ? 'file' : 'files'}
                         </span>
+                        <span style={{ flex: 1 }} />
+                        <a
+                          href={`/api/competitions/${competitionId}/deliverables/${td.teamId}/download`}
+                          download
+                          style={{
+                            fontSize: '0.62rem', fontWeight: 700, padding: '0.25rem 0.65rem',
+                            borderRadius: '5px', background: 'rgba(0,240,255,0.1)',
+                            border: '1px solid rgba(0,240,255,0.35)', color: '#00f0ff',
+                            textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                            letterSpacing: '0.5px',
+                          }}
+                        >
+                          📦 ZIP
+                        </a>
                       </div>
 
                       {td.files.length === 0 && (
@@ -1082,61 +1096,67 @@ function ScoreDrawer({
                       )}
 
                       {td.files.length > 0 && (
-                        <>
-                          {/* File tabs */}
-                          {td.files.length > 1 && (
-                            <div style={{
-                              display: 'flex', gap: '2px', padding: '0.4rem 0.6rem',
-                              background: '#000408', borderBottom: '1px solid #0a2235',
-                              flexWrap: 'wrap',
-                            }}>
-                              {td.files.map((f, fIdx) => (
-                                <button
-                                  key={fIdx}
-                                  onClick={() => setActiveFileIdx((prev) => ({ ...prev, [td.teamId]: fIdx }))}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0.4rem 0.5rem' }}>
+                          {td.files.map((file) => {
+                            const isFileExpanded = expandedFile?.teamId === td.teamId && expandedFile?.path === file.path;
+                            const previewLines = file.content.split('\n').slice(0, 50).join('\n');
+                            const hasMore = file.content.split('\n').length > 50;
+
+                            return (
+                              <div key={file.path}>
+                                {/* File row */}
+                                <div
+                                  onClick={() => setExpandedFile(isFileExpanded ? null : { teamId: td.teamId, path: file.path })}
                                   style={{
-                                    fontSize: '0.68rem', padding: '0.2rem 0.6rem',
-                                    borderRadius: '4px', cursor: 'pointer',
-                                    fontFamily: 'inherit', border: 'none',
-                                    background: fIdx === currentFileIdx ? `rgba(${rgb},0.15)` : 'transparent',
-                                    color: fIdx === currentFileIdx ? color : '#1e4a5a',
-                                    fontWeight: fIdx === currentFileIdx ? 700 : 400,
-                                    transition: 'all 0.1s ease',
+                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                    padding: '0.35rem 0.6rem', borderRadius: '5px',
+                                    background: isFileExpanded ? 'rgba(0,240,255,0.06)' : 'rgba(10,34,53,0.4)',
+                                    cursor: 'pointer',
+                                    borderLeft: isFileExpanded ? '2px solid #00f0ff' : '2px solid transparent',
+                                    transition: 'all 0.15s ease',
                                   }}
                                 >
-                                  {f.path}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* File content */}
-                          {currentFile && (
-                            <div>
-                              {td.files.length === 1 && (
-                                <div style={{
-                                  padding: '0.35rem 0.85rem',
-                                  background: '#000408', borderBottom: '1px solid #0a2235',
-                                  fontSize: '0.68rem', color: '#1e4a5a', fontFamily: 'monospace',
-                                }}>
-                                  {currentFile.path}
+                                  <span style={{ fontSize: '0.7rem' }}>📄</span>
+                                  <span style={{ fontSize: '0.72rem', color: '#e4f8ff', flex: 1 }}>{file.path}</span>
+                                  <span style={{ fontSize: '0.6rem', color: '#3d7d94' }}>
+                                    {(file.content.length / 1024).toFixed(1)} KB
+                                  </span>
+                                  <span style={{ fontSize: '0.6rem', color: isFileExpanded ? '#00f0ff' : '#3d7d94' }}>
+                                    {isFileExpanded ? '▲' : '▾'}
+                                  </span>
                                 </div>
-                              )}
-                              <pre style={{
-                                fontSize: '0.78rem', color: '#d8f0fa',
-                                whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-                                lineHeight: 1.6, margin: 0,
-                                padding: '0.85rem 1rem',
-                                background: '#010810',
-                                overflowX: 'auto',
-                              }}>
-                                {currentFile.content.length > 5000
-                                  ? `${currentFile.content.slice(0, 5000)}\n\n… (truncated — ${currentFile.content.length - 5000} chars remaining)`
-                                  : currentFile.content}
-                              </pre>
-                            </div>
-                          )}
-                        </>
+
+                                {/* Inline preview */}
+                                {isFileExpanded && (
+                                  <div style={{
+                                    background: '#000408', border: '1px solid #0a2235',
+                                    borderTop: 'none', borderRadius: '0 0 6px 6px',
+                                    padding: '0.65rem 0.8rem',
+                                    maxHeight: '240px', overflowY: 'auto',
+                                    fontFamily: "'SF Mono', 'Fira Code', monospace",
+                                    fontSize: '0.68rem', color: '#7cc6db', lineHeight: 1.6,
+                                    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                                  }}>
+                                    {previewLines}
+                                    {hasMore && (
+                                      <div style={{ marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px solid #0a2235' }}>
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setFileModalContent({ path: file.path, content: file.content }); }}
+                                          style={{
+                                            background: 'none', border: 'none', color: '#00f0ff',
+                                            fontSize: '0.62rem', cursor: 'pointer', fontFamily: 'inherit', padding: 0,
+                                          }}
+                                        >
+                                          Open full file ({file.content.split('\n').length} lines) →
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   );
@@ -1607,6 +1627,61 @@ function ScoreDrawer({
 
           </div>
         </>
+      )}
+
+      {/* Full-file modal */}
+      {fileModalContent && (
+        <div
+          onClick={() => setFileModalContent(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,4,8,0.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#050f1e', border: '1px solid #0a2235', borderRadius: '10px',
+              width: 'min(760px, 92vw)', maxHeight: '82vh',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            <div style={{
+              padding: '0.85rem 1.1rem', borderBottom: '1px solid #0a2235',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#e4f8ff', fontFamily: 'monospace' }}>
+                {fileModalContent.path}
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  onClick={() => navigator.clipboard.writeText(fileModalContent.content)}
+                  style={{
+                    fontSize: '0.6rem', padding: '0.2rem 0.55rem', borderRadius: '4px',
+                    background: 'rgba(0,240,255,0.08)', border: '1px solid rgba(0,240,255,0.3)',
+                    color: '#00f0ff', cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700,
+                  }}
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => setFileModalContent(null)}
+                  style={{ background: 'none', border: 'none', color: '#3d7d94', cursor: 'pointer', fontSize: '1rem' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div style={{
+              padding: '0.85rem 1.1rem', overflowY: 'auto', flex: 1,
+              fontFamily: "'SF Mono', 'Fira Code', monospace",
+              fontSize: '0.68rem', color: '#7cc6db', lineHeight: 1.7,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+            }}>
+              {fileModalContent.content}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
