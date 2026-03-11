@@ -1570,136 +1570,113 @@ function ScoreDrawer({
 
             {/* SYNTHESIS TAB */}
             {activeTab === 'synthesis' && (
-              <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {result.synthesis ? (
-                  <>
-                    {/* Header — what synthesis is */}
-                    <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                      <span style={{ fontSize: '1.1rem' }}>🔬</span>
-                      <div>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI Synthesis</div>
-                        <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>The best elements from all submissions merged into a single hybrid solution</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '42% 1fr', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+                    {/* Left: criterion verdicts table */}
+                    <div className="arena-scrollbar" style={{ borderRight: '1px solid #0a2235', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                      {/* Thesis callout */}
+                      {result.synthesis.overallRationale && (
+                        <div style={{ padding: '0.85rem 1rem', background: 'rgba(0,240,255,0.04)', borderBottom: '1px solid rgba(0,240,255,0.15)', flexShrink: 0 }}>
+                          <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Synthesis Thesis</div>
+                          <div style={{ fontSize: '0.72rem', color: '#c8eef8', lineHeight: 1.6 }}>{result.synthesis.overallRationale}</div>
+                        </div>
+                      )}
+
+                      {/* Column header */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', padding: '0.4rem 1rem', background: '#020b14', borderBottom: '1px solid #0a2235', position: 'sticky', top: 0, zIndex: 2, flexShrink: 0 }}>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px' }}>CRITERION</div>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', textAlign: 'center' }}>WINNER</div>
                       </div>
-                    </div>
 
-                    {/* Overall thesis */}
-                    {result.synthesis.overallRationale && (
-                      <div style={{
-                        marginBottom: '1.2rem', padding: '0.85rem 1rem',
-                        background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.2)',
-                        borderRadius: '8px',
-                      }}>
-                        <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
-                          Synthesis Thesis
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#c8eef8', lineHeight: 1.7 }}>
-                          {result.synthesis.overallRationale}
-                        </div>
-                      </div>
-                    )}
+                      {/* Criterion rows */}
+                      {(result.synthesis.perCriterion ?? []).map((entry) => {
+                        const winnerTeam = teams.find(t => t.id === entry.teamId);
+                        const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
+                        const wLabel = resolveLabel(teams, entry.teamId, entry.teamId);
+                        const isOpen = selectedSynthCriterionId === entry.criterionId;
 
-                    {/* Per-criterion breakdown */}
-                    {(result.synthesis.perCriterion?.length ?? 0) > 0 && (
-                      <div style={{ marginBottom: '1.4rem', background: '#010810', border: '1px solid #0a2235', borderRadius: '8px', overflow: 'hidden' }}>
-                        <div style={{ padding: '0.5rem 0.9rem', background: '#000408', borderBottom: '1px solid #0a2235', fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                          Criterion-by-criterion verdict
-                        </div>
-                        <div style={{ padding: '0.4rem 0' }}>
-                          {(result.synthesis.perCriterion ?? []).map((entry, i) => {
-                            const winnerTeam = teams.find(t => t.id === entry.teamId);
-                            const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
-                            const winnerLabel = resolveLabel(teams, entry.teamId, entry.teamId);
-                            return (
-                              <div key={entry.criterionId} style={{
-                                padding: '0.7rem 0.9rem',
-                                borderBottom: i < (result.synthesis?.perCriterion?.length ?? 1) - 1 ? '1px solid rgba(10,34,53,0.6)' : 'none',
-                              }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-                                  <code style={{ fontSize: '0.62rem', color: '#4a6080', background: '#000408', padding: '0.15rem 0.4rem', borderRadius: '3px', border: '1px solid #0a2235', whiteSpace: 'nowrap' }}>{entry.criterionId}</code>
-                                  <span style={{ fontSize: '0.68rem', fontWeight: 700, color: teamColor }}>{winnerLabel} wins</span>
-                                </div>
-
-                                {/* Winning approach */}
+                        return (
+                          <div key={entry.criterionId}>
+                            <div
+                              onClick={() => setSelectedSynthCriterionId(isOpen ? null : entry.criterionId)}
+                              style={{
+                                display: 'grid', gridTemplateColumns: '1fr 100px',
+                                padding: '0.5rem 1rem',
+                                borderBottom: '1px solid rgba(10,34,53,0.5)',
+                                cursor: 'pointer',
+                                background: isOpen ? 'rgba(0,240,255,0.05)' : 'transparent',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <span style={{ fontSize: '0.58rem', color: isOpen ? '#00f0ff' : '#3d7d94' }}>{isOpen ? '▼' : '▶'}</span>
+                                <span style={{ fontSize: '0.7rem', color: isOpen ? '#7cc6db' : '#4a8fa8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {entry.criterionId}
+                                </span>
+                              </div>
+                              <div style={{ textAlign: 'center' }}>
+                                <span style={{
+                                  fontSize: '0.62rem', fontWeight: 800, padding: '0.12rem 0.4rem', borderRadius: '3px',
+                                  color: teamColor, background: `rgba(${hexToRgb(teamColor)},0.12)`,
+                                }}>
+                                  {wLabel.split(':')[0].toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                            {isOpen && (
+                              <div style={{ padding: '0.6rem 1rem', background: '#020b14', borderBottom: '1px solid #0a2235' }}>
                                 {entry.winningApproach && (
-                                  <div style={{ fontSize: '0.72rem', color: '#d8f0fa', lineHeight: 1.6, marginBottom: '0.3rem' }}>
-                                    <span style={{ color: '#00f0ff', fontWeight: 700, marginRight: '0.3rem' }}>Selected:</span>
-                                    {entry.winningApproach}
+                                  <div style={{ fontSize: '0.7rem', color: '#7cc6db', lineHeight: 1.5, marginBottom: '0.35rem' }}>
+                                    <span style={{ color: '#00f0ff', fontWeight: 700 }}>Selected: </span>{entry.winningApproach}
                                   </div>
                                 )}
-
-                                {/* Losing approach */}
                                 {entry.losingApproach && (
                                   <div style={{ fontSize: '0.68rem', color: '#4a8fa8', lineHeight: 1.5, marginBottom: '0.3rem' }}>
-                                    <span style={{ color: '#1e4a5a', fontWeight: 700, marginRight: '0.3rem' }}>Alternative:</span>
-                                    {entry.losingApproach}
+                                    <span style={{ color: '#1e4a5a', fontWeight: 700 }}>Alternative: </span>{entry.losingApproach}
                                   </div>
                                 )}
-
-                                {/* Rationale */}
-                                <div style={{ fontSize: '0.68rem', color: '#4a8fa8', fontStyle: 'italic', lineHeight: 1.5 }}>
-                                  {entry.rationale}
-                                </div>
+                                {entry.rationale && (
+                                  <div style={{ fontSize: '0.68rem', color: '#4a8fa8', fontStyle: 'italic', lineHeight: 1.5 }}>
+                                    {entry.rationale}
+                                  </div>
+                                )}
                               </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                    {/* Synthesized solution */}
-                    <details style={{ background: '#000408', border: '1px solid #0a2235', borderRadius: '8px', overflow: 'hidden', marginBottom: '0.8rem' }}>
-                      <summary style={{
-                        padding: '0.5rem 0.9rem', background: '#010810',
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        cursor: 'pointer', listStyle: 'none',
-                      }}>
-                        <span style={{ fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase' }}>Full Hybrid Solution</span>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              navigator.clipboard.writeText(result.synthesis?.synthesis ?? '').catch(() => {});
-                            }}
-                            style={{ fontSize: '0.58rem', color: '#4a6080', background: 'none', border: '1px solid #0a2235', borderRadius: '4px', padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace' }}
-                          >
-                            📋 copy
-                          </button>
-                          <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>▼</span>
-                        </div>
-                      </summary>
-                      <div style={{ padding: '1rem', borderTop: '1px solid #0a2235', fontFamily: "-apple-system, 'Segoe UI', sans-serif", fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa' }}>
+                    {/* Right: full synthesis document */}
+                    <div className="arena-scrollbar" style={{ overflowY: 'auto', padding: '1rem 1.2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexShrink: 0 }}>
+                        <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', textTransform: 'uppercase' }}>Full Hybrid Solution</div>
+                        <button
+                          onClick={() => navigator.clipboard.writeText(result.synthesis?.synthesis ?? '').catch(() => {})}
+                          style={{ fontSize: '0.6rem', color: '#4a6080', background: 'none', border: '1px solid #0a2235', borderRadius: '4px', padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace' }}
+                        >
+                          📋 copy
+                        </button>
+                      </div>
+                      <div style={{ fontFamily: "-apple-system, 'Segoe UI', sans-serif", fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa' }}>
                         {renderedSynthesis}
                       </div>
-                    </details>
-                  </>
+                    </div>
+                  </div>
                 ) : (
-                  <div style={{
-                    textAlign: 'center', padding: '4rem 2rem',
-                    background: '#050f1e', border: '1px solid #0a2235', borderRadius: '8px',
-                  }}>
+                  /* No synthesis yet — centered CTA */
+                  <div style={{ textAlign: 'center', padding: '4rem 2rem', background: '#050f1e', border: '1px solid #0a2235', borderRadius: '8px', margin: '1rem' }}>
                     <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🔮</div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#e4f8ff', marginBottom: '0.5rem' }}>
-                      Synthesize a Hybrid Solution
-                    </div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#e4f8ff', marginBottom: '0.5rem' }}>Synthesize a Hybrid Solution</div>
                     <div style={{ fontSize: '0.75rem', color: '#7cc6db', maxWidth: '400px', margin: '0 auto 1.5rem', lineHeight: 1.7 }}>
-                      Ask AI to merge the best elements from all teams into a single unified deliverable,
-                      with per-criterion attribution showing what came from whom.
+                      Ask AI to merge the best elements from all teams into a single unified deliverable, with per-criterion attribution showing what came from whom.
                     </div>
-                    {synthError && (
-                      <div style={{ fontSize: '0.68rem', color: '#ef4444', marginBottom: '1rem' }}>{synthError}</div>
-                    )}
+                    {synthError && <div style={{ fontSize: '0.68rem', color: '#ef4444', marginBottom: '1rem' }}>{synthError}</div>}
                     <button
                       onClick={runSynthesis}
                       disabled={synthRunning}
-                      style={{
-                        fontSize: '0.72rem', fontWeight: 800, padding: '0.6rem 1.5rem',
-                        borderRadius: '6px', background: 'rgba(0,240,255,0.12)',
-                        border: '1px solid rgba(0,240,255,0.4)', color: '#00f0ff',
-                        cursor: synthRunning ? 'not-allowed' : 'pointer',
-                        fontFamily: 'monospace', letterSpacing: '1.5px', textTransform: 'uppercase',
-                        opacity: synthRunning ? 0.6 : 1,
-                      }}
+                      style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.6rem 1.5rem', borderRadius: '6px', background: 'rgba(0,240,255,0.12)', border: '1px solid rgba(0,240,255,0.4)', color: '#00f0ff', cursor: synthRunning ? 'not-allowed' : 'pointer', fontFamily: 'monospace', letterSpacing: '1.5px', textTransform: 'uppercase', opacity: synthRunning ? 0.6 : 1 }}
                     >
                       {synthRunning ? '🔮 Running…' : '🔮 Run Synthesis'}
                     </button>
@@ -1708,140 +1685,156 @@ function ScoreDrawer({
               </div>
             )}
 
-            {/* FORGE TAB — source picker + stacked runs */}
+            {/* FORGE TAB */}
             {activeTab === 'forge' && (
-              <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-                {/* Source picker */}
-                <div style={{
-                  background: '#050f1e', border: '1px dashed #0a2235', borderRadius: '8px',
-                  padding: '1.5rem', textAlign: 'center', marginBottom: '1rem',
-                }}>
-                  <div style={{ fontSize: '0.62rem', color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.85rem' }}>
-                    ⚒ Forge a new set of artifacts from
+              <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', height: '100%', overflow: 'hidden' }}>
+
+                {/* Left: run navigator + source picker */}
+                <div className="arena-scrollbar" style={{ borderRight: '1px solid #0a2235', overflowY: 'auto', background: '#020b14', display: 'flex', flexDirection: 'column' }}>
+                  <div style={{ padding: '0.5rem 0.85rem', fontSize: '0.58rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', borderBottom: '1px solid #0a2235', flexShrink: 0 }}>
+                    Forge Runs
                   </div>
-                  <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '1rem' }}>
-                    {([
-                      { value: 'winner' as ForgeSource, label: `🏆 Winner (${winnerTeam?.model ?? '?'})`, disabled: false },
-                      { value: 'loser' as ForgeSource, label: `📋 Loser (${loserTeam?.model ?? '?'})`, disabled: false },
-                      { value: 'synthesis' as ForgeSource, label: '🔮 Synthesis', disabled: !result.synthesis },
-                    ] as const).map(({ value, label, disabled }) => (
-                      <button
-                        key={value}
-                        disabled={disabled}
-                        onClick={() => setForgeSource(value)}
-                        style={{
-                          padding: '0.5rem 1rem', borderRadius: '6px',
-                          border: `1.5px solid ${forgeSource === value ? (value === 'winner' ? 'rgba(255,102,0,0.6)' : '#00f0ff') : '#0a2235'}`,
-                          background: forgeSource === value ? (value === 'winner' ? 'rgba(255,102,0,0.1)' : 'rgba(0,240,255,0.08)') : '#050f1e',
-                          color: disabled ? '#1e4a5a' : forgeSource === value ? (value === 'winner' ? '#ff6600' : '#00f0ff') : '#7cc6db',
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          fontSize: '0.68rem', fontFamily: 'monospace', fontWeight: 700, letterSpacing: '0.5px',
-                        }}
-                      >
-                        {label}
-                        {disabled && ' (run synthesis first)'}
-                      </button>
-                    ))}
+
+                  {/* Run list — newest first */}
+                  <div style={{ flex: 1, overflowY: 'auto' }}>
+                    {forgeRuns.length === 0 && (
+                      <div style={{ padding: '1rem 0.85rem', fontSize: '0.7rem', color: '#1e4a5a', fontStyle: 'italic' }}>
+                        No runs yet
+                      </div>
+                    )}
+                    {[...forgeRuns].reverse().map((run, idx) => {
+                      const runNum = forgeRuns.length - idx;
+                      const sourceLabel = run.source === 'winner' ? '🏆 Winner' : run.source === 'loser' ? '📋 Loser' : '🔮 Synthesis';
+                      const isActive = activeForgeRunId === run.id;
+                      return (
+                        <div
+                          key={run.id}
+                          onClick={() => setActiveForgeRunId(run.id)}
+                          style={{
+                            padding: '0.6rem 0.85rem',
+                            borderBottom: '1px solid rgba(10,34,53,0.4)',
+                            cursor: 'pointer',
+                            background: isActive ? 'rgba(0,240,255,0.07)' : 'transparent',
+                            borderLeft: isActive ? '2px solid #00f0ff' : '2px solid transparent',
+                          }}
+                        >
+                          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: isActive ? '#c8eef8' : '#7cc6db', marginBottom: '0.15rem' }}>
+                            {sourceLabel} — #{runNum}
+                          </div>
+                          <div style={{ fontSize: '0.6rem', color: '#3d7d94' }}>
+                            {run.forgeModel?.split('-').slice(0, 3).join('-') ?? 'claude'} · {run.artifacts.length} artifacts
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  {forgeError && <div style={{ fontSize: '0.65rem', color: '#ef4444', marginBottom: '0.75rem' }}>{forgeError}</div>}
-                  <button
-                    onClick={triggerForge}
-                    disabled={forgeRunning || comp?.state === 'FORGING'}
-                    style={{
-                      fontSize: '0.72rem', fontWeight: 800, padding: '0.55rem 1.4rem',
-                      borderRadius: '6px', background: 'rgba(0,240,255,0.12)',
-                      border: '1px solid rgba(0,240,255,0.4)', color: '#00f0ff',
-                      cursor: forgeRunning ? 'not-allowed' : 'pointer',
-                      fontFamily: 'monospace', letterSpacing: '1.5px', textTransform: 'uppercase',
-                      opacity: forgeRunning ? 0.6 : 1,
-                    }}
-                  >
-                    {forgeRunning || comp?.state === 'FORGING' ? '⚒ Forging…' : '⚒ Forge This'}
-                  </button>
+
+                  {/* Source picker + trigger */}
+                  <div style={{ flexShrink: 0, borderTop: '1px solid #0a2235', padding: '0.75rem 0.85rem', background: '#010810' }}>
+                    <div style={{ fontSize: '0.55rem', color: '#3d7d94', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>New Run</div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginBottom: '0.6rem' }}>
+                      {([
+                        { value: 'winner' as ForgeSource, label: '🏆 Winner', disabled: false },
+                        { value: 'loser' as ForgeSource, label: '📋 Loser', disabled: false },
+                        { value: 'synthesis' as ForgeSource, label: '🔮 Synthesis', disabled: !result.synthesis },
+                      ] as const).map(({ value, label, disabled }) => (
+                        <button
+                          key={value}
+                          disabled={disabled}
+                          onClick={() => setForgeSource(value)}
+                          style={{
+                            padding: '0.35rem 0.65rem', borderRadius: '4px', textAlign: 'left',
+                            border: `1px solid ${forgeSource === value ? (value === 'winner' ? 'rgba(255,102,0,0.5)' : '#00f0ff') : '#0a2235'}`,
+                            background: forgeSource === value ? (value === 'winner' ? 'rgba(255,102,0,0.1)' : 'rgba(0,240,255,0.08)') : 'transparent',
+                            color: disabled ? '#1e4a5a' : forgeSource === value ? (value === 'winner' ? '#ff6600' : '#00f0ff') : '#7cc6db',
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            fontSize: '0.65rem', fontFamily: 'monospace', fontWeight: 700,
+                          }}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {forgeError && <div style={{ fontSize: '0.6rem', color: '#ef4444', marginBottom: '0.4rem' }}>{forgeError}</div>}
+                    <button
+                      onClick={triggerForge}
+                      disabled={forgeRunning || comp?.state === 'FORGING'}
+                      style={{
+                        width: '100%', padding: '0.45rem', borderRadius: '5px',
+                        background: 'rgba(0,240,255,0.12)', border: '1px solid rgba(0,240,255,0.4)',
+                        color: '#00f0ff', cursor: forgeRunning ? 'not-allowed' : 'pointer',
+                        fontSize: '0.65rem', fontFamily: 'monospace', fontWeight: 800,
+                        letterSpacing: '1px', textTransform: 'uppercase',
+                        opacity: forgeRunning ? 0.6 : 1,
+                      }}
+                    >
+                      {forgeRunning || comp?.state === 'FORGING' ? '⚒ Forging…' : '⚒ Forge'}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Stacked runs list */}
-                {forgeRuns.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '0.58rem', color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
-                      Previous forge runs
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                      {[...forgeRuns].reverse().map((run, idx) => {
-                        const sourceLabel = run.source === 'winner' ? '🏆 Winner' : run.source === 'loser' ? '📋 Loser' : '🔮 Synthesis';
-                        const runNum = forgeRuns.length - idx;
-                        const isActive = activeForgeRunId === run.id;
-                        return (
-                          <div
-                            key={run.id}
-                            style={{
-                              background: '#050f1e',
-                              border: `1px solid ${isActive ? '#0e3050' : '#0a2235'}`,
-                              borderRadius: '8px', padding: '0.9rem',
-                            }}
-                          >
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-                              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#e4f8ff' }}>
-                                {sourceLabel} — Run #{runNum}
-                              </div>
-                              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                <span style={{ fontSize: '0.58rem', color: '#3d7d94' }}>
-                                  {run.artifacts.length} artifacts
-                                </span>
-                                <a
-                                  href={`/api/competitions/${competitionId}/forge/${run.id}/download`}
-                                  download
-                                  style={{
-                                    fontSize: '0.6rem', padding: '0.18rem 0.5rem', borderRadius: '4px',
-                                    background: 'transparent', border: '1px solid #0a2235', color: '#7cc6db',
-                                    textDecoration: 'none', fontFamily: 'monospace', fontWeight: 700,
-                                  }}
-                                >
-                                  ↓ ZIP
-                                </a>
-                                <button
-                                  onClick={() => setActiveForgeRunId(isActive ? null : run.id)}
-                                  style={{
-                                    fontSize: '0.6rem', padding: '0.18rem 0.5rem', borderRadius: '4px',
-                                    background: isActive ? 'rgba(0,240,255,0.1)' : 'transparent',
-                                    border: `1px solid ${isActive ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
-                                    color: isActive ? '#00f0ff' : '#7cc6db',
-                                    cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700,
-                                  }}
-                                >
-                                  {isActive ? 'Hide' : 'View'}
-                                </button>
-                              </div>
-                            </div>
-                            {/* Artifact chips */}
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginBottom: isActive ? '0.75rem' : 0 }}>
-                              {run.artifacts.map((a) => (
-                                <span key={a.type} style={{
-                                  fontSize: '0.58rem', padding: '0.12rem 0.4rem', borderRadius: '3px', fontWeight: 700, letterSpacing: '0.5px',
-                                  background: a.universal ? 'rgba(0,212,255,0.1)' : 'rgba(0,102,255,0.1)',
-                                  color: a.universal ? '#00d4ff' : '#0066ff',
-                                }}>
-                                  {a.title}
-                                </span>
-                              ))}
-                            </div>
-                            {/* Expanded artifact view */}
-                            {isActive && run.artifacts.map((artifact) => (
-                              <div key={artifact.type} style={{ marginBottom: '1.25rem', paddingBottom: '1rem', borderBottom: '1px solid #0a2235' }}>
-                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#00f0ff', marginBottom: '0.4rem', letterSpacing: '0.5px' }}>
-                                  {artifact.title}
-                                </div>
-                                <div style={{ fontSize: '0.72rem', color: '#7cc6db', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                                  {artifact.content}
-                                </div>
-                              </div>
-                            ))}
+                {/* Right: artifact grid for active run */}
+                <div className="arena-scrollbar" style={{ overflowY: 'auto', padding: '0.85rem 1rem' }}>
+                  {(() => {
+                    const activeRun = forgeRuns.find(r => r.id === activeForgeRunId);
+                    if (!activeRun) return (
+                      <div style={{ color: '#1e4a5a', fontSize: '0.78rem', fontStyle: 'italic', textAlign: 'center', paddingTop: '2rem' }}>
+                        Select a run from the sidebar, or forge a new one.
+                      </div>
+                    );
+
+                    return (
+                      <>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.85rem', flexShrink: 0 }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#c8eef8' }}>
+                            {activeRun.source === 'winner' ? '🏆 Winner' : activeRun.source === 'loser' ? '📋 Loser' : '🔮 Synthesis'} — Run #{forgeRuns.indexOf(activeRun) + 1}
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                          <a
+                            href={`/api/competitions/${competitionId}/forge/${activeRun.id}/download`}
+                            download
+                            style={{ fontSize: '0.6rem', padding: '0.2rem 0.55rem', borderRadius: '4px', background: 'transparent', border: '1px solid #0a2235', color: '#7cc6db', textDecoration: 'none', fontFamily: 'monospace', fontWeight: 700 }}
+                          >
+                            ↓ ZIP
+                          </a>
+                        </div>
+
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(3, 1fr)',
+                          gap: '0.65rem',
+                        }}>
+                          {activeRun.artifacts.map((artifact) => (
+                            <div
+                              key={artifact.type}
+                              onClick={() => setFileModalContent({ path: artifact.title, content: artifact.content })}
+                              style={{
+                                background: '#050f1e', border: '1px solid #0a2235', borderRadius: '6px',
+                                padding: '0.75rem 0.85rem', cursor: 'pointer',
+                                transition: 'border-color 0.15s',
+                              }}
+                              onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,240,255,0.25)'; }}
+                              onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#0a2235'; }}
+                            >
+                              <div style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>
+                                {ARTIFACT_EMOJI[artifact.type] ?? '📄'}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', fontWeight: 800, color: artifact.universal ? '#00d4ff' : '#7cc6db', marginBottom: '0.3rem', letterSpacing: '0.3px' }}>
+                                {artifact.title}
+                              </div>
+                              <div style={{
+                                fontSize: '0.65rem', color: '#3d7d94', lineHeight: 1.5,
+                                overflow: 'hidden', display: '-webkit-box',
+                                WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
+                              }}>
+                                {artifact.content.slice(0, 200)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             )}
 
