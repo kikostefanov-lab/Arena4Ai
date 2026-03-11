@@ -8,6 +8,8 @@ import { leaderboardRouter } from './routes/leaderboard.js';
 import { generateBriefRouter } from './routes/generate-brief.js';
 import { tournamentsRouter } from './routes/tournaments.js';
 import { briefsRouter } from './routes/briefs.js';
+import { compareRouter } from './routes/compare.js';
+import { criteriaRouter } from './routes/criteria.js';
 import { attachWebSocket } from './websocket.js';
 
 const CORS = {
@@ -46,7 +48,9 @@ export function createApp(): Application {
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use('/competitions', createLimiter, competitionsRouter);
+  app.use('/analytics/criteria', criteriaRouter);
   app.use('/analytics', analyticsRouter);
+  app.use('/compare', compareRouter);
   app.use('/leaderboard', leaderboardRouter);
   app.use('/generate-brief', generateBriefRouter);
   app.use('/tournaments', tournamentsRouter);

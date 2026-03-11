@@ -49,6 +49,8 @@ export default function NewTournamentPage() {
 
   const [name, setName] = useState('');
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
+  const [tournamentType, setTournamentType] = useState<'ROUND_ROBIN' | 'SWISS'>('ROUND_ROBIN');
+  const [swissRounds, setSwissRounds] = useState<number | 'auto'>('auto');
   const [problem, setProblem] = useState('');
   const [format, setFormat] = useState<'SPRINT' | 'HACKATHON' | 'RELAY_RACE' | 'RED_VS_BLUE'>('SPRINT');
   const [timeLimitMins, setTimeLimitMins] = useState(15);
@@ -119,6 +121,8 @@ export default function NewTournamentPage() {
     try {
       const body = {
         name: name.trim() || undefined,
+        type: tournamentType,
+        ...(tournamentType === 'SWISS' && swissRounds !== 'auto' ? { swissRounds } : {}),
         teams: selectedTeams,
         brief: {
           title: name.trim() || 'Tournament',
@@ -202,7 +206,7 @@ export default function NewTournamentPage() {
                 Create Tournament
               </h1>
               <p style={{ fontSize: '0.7rem', color: '#4a8fa8', marginTop: '0.35rem' }}>
-                Round-robin: every selected team faces every other team once.
+                Choose Round Robin or Swiss format below.
               </p>
             </div>
             <Link
@@ -382,6 +386,64 @@ export default function NewTournamentPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Tournament Format */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={labelStyle}>Tournament Format</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.75rem' }}>
+              {([
+                { value: 'ROUND_ROBIN', label: 'Round Robin', desc: 'Every team faces every other team once.' },
+                { value: 'SWISS', label: 'Swiss', desc: 'N rounds, paired by win count. Buchholz tiebreaker.' },
+              ] as const).map(({ value, label, desc }) => {
+                const active = tournamentType === value;
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    className="team-card"
+                    onClick={() => setTournamentType(value)}
+                    style={{
+                      padding: '0.85rem 1rem',
+                      borderRadius: '8px',
+                      border: `2px solid ${active ? '#00f0ff' : '#0a2235'}`,
+                      background: active ? 'rgba(0,240,255,0.06)' : '#050f1e',
+                      color: active ? '#00f0ff' : '#4a8fa8',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    }}
+                  >
+                    <div style={{ marginBottom: '0.25rem' }}>{label}</div>
+                    <div style={{ fontSize: '0.58rem', fontWeight: 400, color: active ? 'rgba(0,240,255,0.65)' : '#1e4a5a', lineHeight: 1.4 }}>
+                      {desc}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {tournamentType === 'SWISS' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <label style={{ ...labelStyle, margin: 0 }}>Rounds</label>
+                <select
+                  value={swissRounds}
+                  onChange={(e) => setSwissRounds(e.target.value === 'auto' ? 'auto' : Number(e.target.value))}
+                  style={{ ...inputStyle, width: '9rem' }}
+                >
+                  <option value="auto">Auto (ceil log₂ teams)</option>
+                  {[2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                    <option key={n} value={n}>{n} rounds</option>
+                  ))}
+                </select>
+                <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
+                  {selectedTeams.length >= 2
+                    ? `auto = ${Math.ceil(Math.log2(selectedTeams.length))} rounds for ${selectedTeams.length} teams`
+                    : 'select teams first'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Brief section header */}

@@ -154,6 +154,10 @@ export class CompetitionRepository {
       .limit(limit);
   }
 
+  async updateNotes(id: string, notes: string): Promise<void> {
+    await this.db.update(competitions).set({ notes }).where(eq(competitions.id, id));
+  }
+
   async listSummary(limit = 50) {
     const rows = await this.db
       .select({
@@ -163,6 +167,7 @@ export class CompetitionRepository {
         state: competitions.state,
         startedAt: competitions.startedAt,
         completedAt: competitions.completedAt,
+        notes: competitions.notes,
         winnerId: results.winnerId,
       })
       .from(competitions)

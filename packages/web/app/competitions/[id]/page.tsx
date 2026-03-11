@@ -2002,6 +2002,15 @@ export default function CompetitionPage() {
   const [competitionStartTime, setCompetitionStartTime] = useState<number | null>(null);
   const [rematchLoading, setRematchLoading] = useState(false);
   const [copyLabel, setCopyLabel] = useState<'🔗 Copy Link' | '✓ Copied'>('🔗 Copy Link');
+  const [notes, setNotes] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+  const notesSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Browser notification state
+  const notifyOnComplete = useRef(false);
+  const [notifyActive, setNotifyActive] = useState(false);
+  const [notifyDenied, setNotifyDenied] = useState(false);
+  const hasNotifiedRef = useRef(false);
 
   // E4: Mobile layout
   const [isMobile, setIsMobile] = useState(false);
@@ -2056,13 +2065,14 @@ export default function CompetitionPage() {
     if (!id) return;
     fetch(`/api/competitions/${id}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((data: { teams?: Team[]; brief?: Brief; startedAt?: string; state?: CompetitionState; result?: Record<string, unknown> | null } | null) => {
+      .then((data: { teams?: Team[]; brief?: Brief; startedAt?: string; state?: CompetitionState; result?: Record<string, unknown> | null; notes?: string | null } | null) => {
         if (!data) return;
         if (Array.isArray(data.teams)) setTeams(data.teams);
         if (data.brief) { setBrief(data.brief); setBriefTitle(data.brief.title ?? ''); }
         if (data.startedAt) setCompetitionStartTime(new Date(data.startedAt).getTime());
         // Hydrate state + result for already-completed competitions (WS won't replay forge events)
         if (data.state) setState(data.state);
+        if (data.notes) setNotes(data.notes);
         if (data.result) {
           // DB result has `scorecards` + `winnerId`; frontend expects `teams` + `winnerId`
           const raw = data.result;
@@ -2259,9 +2269,72 @@ export default function CompetitionPage() {
     }
   };
 
+  const handleNotesSave = (value: string) => {
+    if (notesSaveRef.current) clearTimeout(notesSaveRef.current);
+    notesSaveRef.current = setTimeout(async () => {
+      setNotesSaving(true);
+      try {
+        await fetch(`/api/competitions/${id}/notes`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: value }),
+        });
+      } finally {
+        setNotesSaving(false);
+      }
+    }, 800);
+  };
+
+  // Notification toggle handler
+  const handleNotifyToggle = async () => {
+    if (notifyActive) {
+      // Turn off
+      notifyOnComplete.current = false;
+      setNotifyActive(false);
+      return;
+    }
+    if (typeof Notification === 'undefined') return;
+    if (Notification.permission === 'denied') {
+      setNotifyDenied(true);
+      return;
+    }
+    if (Notification.permission === 'default') {
+      const perm = await Notification.requestPermission();
+      if (perm === 'denied') {
+        setNotifyDenied(true);
+        return;
+      }
+      if (perm !== 'granted') return;
+    }
+    notifyOnComplete.current = true;
+    setNotifyActive(true);
+    setNotifyDenied(false);
+  };
+
   const orderedTeams: Team[] = teams.length > 0
     ? teams
     : Array.from(teamEvents.keys()).map((tid) => ({ id: tid, model: tid }));
+
+  // Fire notification when competition reaches a terminal state
+  useEffect(() => {
+    if (!notifyOnComplete.current) return;
+    if (hasNotifiedRef.current) return;
+    if (state !== 'COMPLETE' && state !== 'FORGE_COMPLETE') return;
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+    hasNotifiedRef.current = true;
+    const winnerLabel = result?.winnerId
+      ? resolveLabel(orderedTeams, result.winnerId, result.winnerId)
+      : null;
+    const body = winnerLabel
+      ? `${briefTitle || 'Competition'} — ${winnerLabel} wins!`
+      : `${briefTitle || 'Competition'} — complete!`;
+
+    new Notification('Arena4Ai', { body, icon: '/icon.svg' });
+    notifyOnComplete.current = false;
+    setNotifyActive(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, result, briefTitle]);
 
   // Collect FILE_CREATE events from the event stream, grouped by team
   const fileEventsByTeam: TeamFileEvents[] = useMemo(() => orderedTeams.map((team) => {
@@ -2455,6 +2528,52 @@ export default function CompetitionPage() {
             </a>
           )}
 
+          {/* Spectate link — always shown */}
+          <a
+            href={`/competitions/${id}/spectate`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: '0.70rem', color: '#4a8fa8', textDecoration: 'none',
+              border: '1px solid #0a2235', borderRadius: '6px',
+              padding: '0.35rem 0.75rem', flexShrink: 0,
+              letterSpacing: '0.5px', fontWeight: 600,
+              display: 'flex', alignItems: 'center', gap: '0.35rem',
+              transition: 'all 0.15s ease',
+            }}
+            title="Open fullscreen spectator view"
+          >
+            ⤢ Spectate
+          </a>
+
+          {/* Notification toggle — shown when competition is in progress */}
+          {!isTerminal && !notifyDenied && (
+            <button
+              onClick={handleNotifyToggle}
+              style={{
+                fontSize: '0.70rem',
+                color: notifyActive ? '#00f0ff' : '#4a8fa8',
+                background: notifyActive ? 'rgba(0,240,255,0.08)' : 'transparent',
+                border: `1px solid ${notifyActive ? 'rgba(0,240,255,0.35)' : '#0a2235'}`,
+                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
+                letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+                transition: 'all 0.15s ease', fontFamily: 'inherit',
+              }}
+              title={notifyActive ? 'Click to cancel notification' : 'Notify me when this competition finishes'}
+            >
+              {notifyActive ? '🔕 Notifying…' : '🔔 Notify'}
+            </button>
+          )}
+          {notifyDenied && (
+            <span style={{
+              fontSize: '0.62rem', color: '#ef4444', flexShrink: 0,
+              padding: '0.35rem 0',
+            }}>
+              Notifications blocked
+            </span>
+          )}
+
           <div style={{
             fontFamily: 'monospace',
             color: isRunning ? '#00f0ff' : '#4a8fa8',
@@ -2643,6 +2762,37 @@ export default function CompetitionPage() {
             comp={{ state }}
           />
         )}
+
+        {/* ── Notes section ────────────────────────────────────────────────── */}
+        <div style={{
+          flexShrink: 0, borderTop: '1px solid #0a2235',
+          background: '#010810', padding: '0.6rem 1.4rem',
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+        }}>
+          <span style={{ fontSize: '0.55rem', color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 700, flexShrink: 0 }}>
+            NOTES
+          </span>
+          <textarea
+            value={notes}
+            onChange={(e) => {
+              setNotes(e.target.value);
+              handleNotesSave(e.target.value);
+            }}
+            placeholder="Add notes about this competition... (e.g. 'tried 5min limit', 'persona experiment')"
+            rows={1}
+            style={{
+              flex: 1, background: 'transparent', border: 'none',
+              color: '#7cc6db', fontSize: '0.68rem', fontFamily: 'inherit',
+              resize: 'none', outline: 'none', lineHeight: 1.5,
+              fontStyle: notes ? 'italic' : 'normal',
+            }}
+          />
+          {notesSaving && (
+            <span style={{ fontSize: '0.52rem', color: '#3d7d94', flexShrink: 0, letterSpacing: '1px' }}>
+              saving...
+            </span>
+          )}
+        </div>
       </div>
     </>
   );

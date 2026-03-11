@@ -25,9 +25,10 @@ interface CompetitionSummary {
   state: string;
   startedAt: string | null;
   completedAt: string | null;
-  brief: { title: string; format?: string; timeLimitMs?: number; problem?: string; tags?: string[] };
+  brief: { id?: string; title: string; format?: string; timeLimitMs?: number; problem?: string; tags?: string[] };
   teams: Team[];
   winnerId: string | null;
+  notes?: string | null;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -273,7 +274,9 @@ export default function GalleryPage() {
               {([
                 { href: '/briefs', label: 'Briefs' },
                 { href: '/analytics', label: 'Analytics' },
+                { href: '/compare', label: 'Compare' },
                 { href: '/leaderboard', label: 'Leaderboard' },
+                { href: '/personas', label: 'Personas' },
                 { href: '/tournaments/new', label: 'Tournaments' },
               ] as const).map(({ href, label }) => (
                 <Link
@@ -506,7 +509,13 @@ export default function GalleryPage() {
 
         {/* Competition Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-          {filteredCompetitions.map((comp, index) => {
+          {(() => {
+            const briefRunCounts = new Map<string, number>();
+            for (const c of competitions) {
+              const bid = c.brief?.id;
+              if (bid) briefRunCounts.set(bid, (briefRunCounts.get(bid) ?? 0) + 1);
+            }
+            return filteredCompetitions.map((comp, index) => {
             const teamA = comp.teams?.[0];
             const teamB = comp.teams?.[1];
             const winnerTeam = comp.teams?.find((t) => t.id === comp.winnerId);
@@ -516,6 +525,7 @@ export default function GalleryPage() {
             const isFailed = comp.state === 'FAILED';
             const isCancelled = comp.state === 'CANCELLED';
             const isHovered = hoveredId === comp.id;
+            const briefRunCount = comp.brief?.id ? (briefRunCounts.get(comp.brief.id) ?? 0) : 0;
 
             return (
               <Link key={comp.id} href={`/competitions/${comp.id}`} style={{ textDecoration: 'none' }}>
@@ -648,7 +658,28 @@ export default function GalleryPage() {
                             </span>
                           </>
                         )}
+                        {briefRunCount > 1 && comp.brief?.id && (
+                          <>
+                            <span style={{ color: '#0a2235' }}>·</span>
+                            <button
+                              onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/briefs/${comp.brief!.id}/runs`; }}
+                              style={{
+                                fontSize: '0.58rem', color: '#7cc6db', background: 'none', border: 'none',
+                                cursor: 'pointer', padding: 0, fontFamily: 'inherit', fontWeight: 600,
+                              }}
+                            >
+                              📊 {briefRunCount} runs
+                            </button>
+                          </>
+                        )}
                       </div>
+                      {comp.notes && (
+                        <div style={{ paddingLeft: '1.6rem', marginTop: '0.3rem' }}>
+                          <span style={{ fontSize: '0.6rem', color: '#3d7d94', fontStyle: 'italic' }}>
+                            {comp.notes}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Right section */}
@@ -707,7 +738,8 @@ export default function GalleryPage() {
                 </div>
               </Link>
             );
-          })}
+          });
+          })()}
         </div>
 
         {/* Tournaments Section */}

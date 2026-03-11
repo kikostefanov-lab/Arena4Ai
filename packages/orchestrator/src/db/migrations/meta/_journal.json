@@ -36,6 +36,13 @@
       "when": 1773089000000,
       "tag": "0004_add_deliverables",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1773200000000,
+      "tag": "0007_add_notes",
+      "breakpoints": true
     }
   ]
 }

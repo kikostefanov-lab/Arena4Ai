@@ -9,6 +9,7 @@ export const competitions = pgTable('competitions', {
   state:       text('state').notNull(),
   startedAt:   timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+  notes:       text('notes'),
 });
 
 export const events = pgTable('events', {

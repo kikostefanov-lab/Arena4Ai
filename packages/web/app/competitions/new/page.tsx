@@ -3,7 +3,24 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
+import type { SavedPersona } from '../../personas/page';
 import './new-competition.css';
+
+// ─── localStorage helpers ─────────────────────────────────────────────────────
+
+const PERSONAS_STORAGE_KEY = 'arena4ai:personas';
+
+function loadSavedPersonas(): SavedPersona[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(PERSONAS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -327,6 +344,13 @@ export default function NewCompetitionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Saved custom personas from localStorage
+  const [savedPersonas, setSavedPersonas] = useState<SavedPersona[]>([]);
+
+  useEffect(() => {
+    setSavedPersonas(loadSavedPersonas());
+  }, []);
+
   // Step expansion state
   const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
 
@@ -356,6 +380,21 @@ export default function NewCompetitionPage() {
     { id: 'team-a', model: 'claude' as Model, persona: 'speedrunner' },
     { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
   ]);
+
+  // Pre-fill team from ?personaId=<id> — jumps to step 3
+  useEffect(() => {
+    const personaId = searchParams.get('personaId');
+    if (!personaId) return;
+    const all = loadSavedPersonas();
+    const persona = all.find((p) => p.id === personaId);
+    if (!persona) return;
+    setTeams((prev) => [
+      { ...prev[0], model: persona.model as Model, persona: persona.name },
+      prev[1] ?? { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
+    ]);
+    setExpandedStep(3);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Pre-fill from a previous competition if ?from=<id>
   useEffect(() => {
@@ -1333,6 +1372,18 @@ export default function NewCompetitionPage() {
                               onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: p } : t))}
                             >
                               {p}
+                            </button>
+                          ))}
+                          {/* Custom saved personas for this model */}
+                          {savedPersonas.filter((sp) => sp.model === team.model).map((sp) => (
+                            <button
+                              key={sp.id} type="button"
+                              className={`persona-chip ${team.persona === sp.name ? 'active' : ''}`}
+                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: sp.name } : t))}
+                              title={sp.description || sp.name}
+                              style={{ borderStyle: 'dashed' }}
+                            >
+                              {sp.name} *
                             </button>
                           ))}
                         </div>

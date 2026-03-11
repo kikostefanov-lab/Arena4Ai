@@ -157,6 +157,24 @@ export default async function AnalyticsPage() {
               </div>
             </div>
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <a href="/analytics/criteria" style={{
+              fontSize: '0.62rem', color: '#4a8fa8', textDecoration: 'none',
+              letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
+              border: '1px solid #0a2235', borderRadius: '4px',
+              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+            }}>
+              📊 Criteria →
+            </a>
+            <a href="/compare" style={{
+              fontSize: '0.62rem', color: '#4a8fa8', textDecoration: 'none',
+              letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
+              border: '1px solid #0a2235', borderRadius: '4px',
+              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+            }}>
+              ⚔ Compare →
+            </a>
+          </div>
         </div>
 
         {!data ? (

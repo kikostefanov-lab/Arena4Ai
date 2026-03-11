@@ -14,11 +14,19 @@ interface RankingEntry {
   draws: number;
   totalScore: number;
   matchesPlayed: number;
+  buchholz?: number;
+}
+
+interface SwissMeta {
+  currentRound: number;
+  totalRounds: number;
+  roundPairings: Array<{ round: number; pairs: Array<[string, string]> }>;
 }
 
 interface TournamentEntry {
   id: string;
   name: string;
+  type: 'ROUND_ROBIN' | 'SWISS';
   state: 'PENDING' | 'RUNNING' | 'COMPLETE' | 'FAILED';
   teams: string[];
   matchIds: string[];
@@ -33,6 +41,7 @@ interface TournamentEntry {
     expectedOutput?: string;
   };
   rankings: RankingEntry[] | null;
+  swissMeta: SwissMeta | null;
   currentMatch: { teamA: string; teamB: string; competitionId?: string } | null;
   error: string | null;
 }
@@ -171,7 +180,11 @@ export default function TournamentPage() {
                   {tournament.state}
                 </span>
                 <span style={{ fontSize: '0.65rem', color: '#4a8fa8' }}>
-                  {tournament.teams.length} teams · {tournament.matchIds.length} match{tournament.matchIds.length !== 1 ? 'es' : ''} played
+                  {tournament.teams.length} teams ·{' '}
+                  {tournament.type === 'SWISS' && tournament.swissMeta
+                    ? `Round ${tournament.swissMeta.currentRound}/${tournament.swissMeta.totalRounds} · `
+                    : ''}
+                  {tournament.matchIds.length} match{tournament.matchIds.length !== 1 ? 'es' : ''} played
                 </span>
               </div>
             </div>
@@ -318,6 +331,39 @@ export default function TournamentPage() {
           </div>
         )}
 
+        {/* Swiss round indicator */}
+        {tournament.type === 'SWISS' && tournament.swissMeta && (
+          <div style={{
+            marginBottom: '1rem',
+            padding: '0.65rem 1rem',
+            background: 'rgba(0,240,255,0.04)',
+            border: '1px solid rgba(0,240,255,0.15)',
+            borderRadius: '8px',
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+          }}>
+            <span style={{
+              fontSize: '0.5rem', fontWeight: 800, padding: '0.15rem 0.5rem',
+              borderRadius: '3px', letterSpacing: '2px',
+              background: 'rgba(0,240,255,0.12)', color: '#00f0ff',
+            }}>
+              SWISS
+            </span>
+            <span style={{ fontSize: '0.68rem', color: '#4a8fa8' }}>
+              Round{' '}
+              <strong style={{ color: '#c8eef8' }}>
+                {tournament.swissMeta.currentRound}
+              </strong>
+              {' '}of{' '}
+              <strong style={{ color: '#c8eef8' }}>
+                {tournament.swissMeta.totalRounds}
+              </strong>
+            </span>
+            <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
+              · {tournament.matchIds.length} matches played
+            </span>
+          </div>
+        )}
+
         {/* Standings Table */}
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ fontSize: '0.6rem', color: '#4a8fa8', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>
@@ -328,7 +374,9 @@ export default function TournamentPage() {
               {/* Table header */}
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: '2.5rem 1fr 3rem 3rem 3rem 5rem 4.5rem',
+                gridTemplateColumns: tournament.type === 'SWISS'
+                  ? '2.5rem 1fr 3rem 3rem 3rem 4rem 5rem 4.5rem'
+                  : '2.5rem 1fr 3rem 3rem 3rem 5rem 4.5rem',
                 padding: '0.5rem 1rem',
                 borderBottom: '1px solid #0a2235',
                 fontSize: '0.52rem', color: '#1e4a5a', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
@@ -338,6 +386,9 @@ export default function TournamentPage() {
                 <span style={{ textAlign: 'center' }}>W</span>
                 <span style={{ textAlign: 'center' }}>L</span>
                 <span style={{ textAlign: 'center' }}>D</span>
+                {tournament.type === 'SWISS' && (
+                  <span style={{ textAlign: 'right' }}>Buch.</span>
+                )}
                 <span style={{ textAlign: 'right' }}>Score</span>
                 <span style={{ textAlign: 'right' }}>Matches</span>
               </div>
@@ -348,7 +399,9 @@ export default function TournamentPage() {
                     key={entry.model}
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: '2.5rem 1fr 3rem 3rem 3rem 5rem 4.5rem',
+                      gridTemplateColumns: tournament.type === 'SWISS'
+                        ? '2.5rem 1fr 3rem 3rem 3rem 4rem 5rem 4.5rem'
+                        : '2.5rem 1fr 3rem 3rem 3rem 5rem 4.5rem',
                       padding: '0.65rem 1rem',
                       borderBottom: i < tournament.rankings!.length - 1 ? '1px solid #081520' : 'none',
                       alignItems: 'center',
@@ -364,6 +417,9 @@ export default function TournamentPage() {
                     <span style={{ textAlign: 'center', fontSize: '0.72rem', color: '#0066ff', fontWeight: 700 }}>{entry.wins}</span>
                     <span style={{ textAlign: 'center', fontSize: '0.72rem', color: '#ef4444', fontWeight: 700 }}>{entry.losses}</span>
                     <span style={{ textAlign: 'center', fontSize: '0.72rem', color: '#4a8fa8' }}>{entry.draws}</span>
+                    {tournament.type === 'SWISS' && (
+                      <span style={{ textAlign: 'right', fontSize: '0.68rem', color: '#7cc6db' }}>{entry.buchholz ?? 0}</span>
+                    )}
                     <span style={{ textAlign: 'right', fontSize: '0.72rem', color: '#c8eef8', fontWeight: 700 }}>{Math.round(entry.totalScore * 100)}%</span>
                     <span style={{ textAlign: 'right', fontSize: '0.65rem', color: '#1e4a5a' }}>{entry.matchesPlayed}</span>
                   </div>
@@ -380,6 +436,46 @@ export default function TournamentPage() {
             </div>
           )}
         </div>
+
+        {/* Swiss Round History */}
+        {tournament.type === 'SWISS' && tournament.swissMeta && tournament.swissMeta.roundPairings.length > 0 && (
+          <div style={{ marginBottom: '1.5rem' }}>
+            <div style={{ fontSize: '0.6rem', color: '#4a8fa8', letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.75rem' }}>
+              Swiss Rounds
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {tournament.swissMeta.roundPairings.map(({ round, pairs }) => (
+                <div key={round} style={{
+                  background: '#050f1e',
+                  border: '1px solid #0a2235',
+                  borderRadius: '8px',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{
+                    padding: '0.5rem 1rem',
+                    borderBottom: '1px solid #0a2235',
+                    fontSize: '0.55rem', color: '#00f0ff', fontWeight: 700, letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                  }}>
+                    Round {round}
+                  </div>
+                  <div style={{ padding: '0.5rem 1rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                    {pairs.map(([a, b], pi) => (
+                      <div key={pi} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem',
+                        fontSize: '0.68rem',
+                      }}>
+                        <span style={{ color: getModelColor(a.split(':')[0]), fontWeight: 700 }}>{a}</span>
+                        <span style={{ color: '#1e4a5a', fontSize: '0.58rem' }}>vs</span>
+                        <span style={{ color: getModelColor(b.split(':')[0]), fontWeight: 700 }}>{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Match History */}
         {tournament.matchIds.length > 0 && (

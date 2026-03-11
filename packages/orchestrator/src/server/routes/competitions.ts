@@ -127,7 +127,7 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     repo.countEvents(id),
     repo.getResult(id),
   ]);
-  res.json({ id: comp.id, state: comp.state, brief: comp.brief, teams: comp.teams, startedAt: comp.startedAt, eventCount, result });
+  res.json({ id: comp.id, state: comp.state, brief: comp.brief, teams: comp.teams, startedAt: comp.startedAt, notes: comp.notes ?? null, eventCount, result });
 });
 
 // GET /competitions/:id/events — full event history for replay/analysis
@@ -329,6 +329,20 @@ competitionsRouter.get('/:id/synthesis', async (req: Request, res: Response) => 
     status: inProgress ? 'running' : result.synthesis ? 'complete' : 'idle',
     synthesis: result.synthesis ?? null,
   });
+});
+
+// PATCH /competitions/:id/notes — update freetext notes for a competition
+competitionsRouter.patch('/:id/notes', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const notes = (req.body as { notes?: unknown })?.notes;
+  if (typeof notes !== 'string') {
+    res.status(400).json({ error: 'notes must be a string' });
+    return;
+  }
+  const comp = await repo.getCompetition(id);
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
+  await repo.updateNotes(id, notes);
+  res.json({ ok: true });
 });
 
 // DELETE /competitions/:id — remove a competition and all its data

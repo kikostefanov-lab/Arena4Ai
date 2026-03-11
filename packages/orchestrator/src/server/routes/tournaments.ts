@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { TournamentRunner } from '../../engine/tournament-runner.js';
-import type { TournamentRanking } from '../../engine/tournament-runner.js';
+import type { TournamentRanking, SwissMeta } from '../../engine/tournament-runner.js';
 import type { CompetitionRunner } from '../../engine/competition-runner.js';
 import { TournamentRepository } from '../../db/repository.js';
 import { db } from '../../db/client.js';
@@ -16,6 +16,8 @@ const repo = new TournamentRepository(db);
 
 const CreateTournamentSchema = z.object({
   name: z.string().optional(),
+  type: z.enum(['ROUND_ROBIN', 'SWISS']).default('ROUND_ROBIN'),
+  swissRounds: z.number().int().min(1).max(10).optional(),
   brief: z.object({
     title: z.string(),
     format: z.string(),
@@ -56,9 +58,9 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { brief, teams, options = {}, name } = parsed.data;
+  const { brief, teams, options = {}, name, type, swissRounds } = parsed.data;
   const tournamentId = randomUUID();
-  const tournamentName = name ?? `Tournament ${tournamentId.slice(0, 8)}`;
+  const tournamentName = name ?? `${type === 'SWISS' ? 'Swiss' : 'Round-Robin'} Tournament ${tournamentId.slice(0, 8)}`;
 
   // Persist initial state to DB
   await repo.createTournament({
@@ -67,7 +69,7 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     brief: brief as any,
     teams,
-    type: 'ROUND_ROBIN',
+    type,
     state: 'RUNNING',
     matchIds: [],
     rankings: null,
@@ -86,6 +88,8 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
     skipSandbox: options.skipSandbox ?? true,
     printResults: false,
     name: tournamentName,
+    type,
+    ...(swissRounds !== undefined ? { swissRounds } : {}),
   });
 
   activeTournamentRunners.set(tournamentId, runner);
@@ -147,8 +151,16 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
       accumulatedMatchIds.length = 0;
       accumulatedMatchIds.push(...result.matchIds);
 
+      // For Swiss tournaments, append a sentinel object at the end of the rankings
+      // array to store Swiss metadata in the jsonb column without a schema change.
+      // The GET handler strips this sentinel before returning rankings to the client.
+      const rankingsPayload: TournamentRanking[] = [...result.rankings];
+      if (result.swissMeta) {
+        (rankingsPayload as unknown as Array<unknown>).push({ __swissMeta: result.swissMeta });
+      }
+
       return Promise.all([
-        repo.updateTournamentProgress(tournamentId, result.matchIds, result.rankings as TournamentRanking[]),
+        repo.updateTournamentProgress(tournamentId, result.matchIds, rankingsPayload),
         repo.updateTournamentState(tournamentId, 'COMPLETE', new Date().toISOString()),
       ]);
     })
@@ -170,10 +182,26 @@ tournamentsRouter.get('/', async (_req: Request, res: Response) => {
   const list = await repo.listTournaments(50);
   const response = list.map((t) => {
     const meta = activeTournamentMeta.get(t.id) ?? { currentMatch: null, error: null };
-    return { ...t, currentMatch: meta.currentMatch, error: meta.error };
+    const { rankings, swissMeta } = extractSwissMeta(t.rankings);
+    return { ...t, rankings, swissMeta: swissMeta ?? null, currentMatch: meta.currentMatch, error: meta.error };
   });
   res.json(response);
 });
+
+/** Extract Swiss metadata sentinel from rankings array (mutates-free) */
+function extractSwissMeta(
+  rankings: TournamentRanking[] | null,
+): { rankings: TournamentRanking[] | null; swissMeta: SwissMeta | null } {
+  if (!rankings || rankings.length === 0) return { rankings, swissMeta: null };
+  const last = rankings[rankings.length - 1] as unknown as Record<string, unknown>;
+  if (last && '__swissMeta' in last) {
+    return {
+      rankings: rankings.slice(0, -1),
+      swissMeta: last.__swissMeta as SwissMeta,
+    };
+  }
+  return { rankings, swissMeta: null };
+}
 
 // GET /tournaments/:id — get tournament status
 tournamentsRouter.get('/:id', async (req: Request, res: Response) => {
@@ -183,7 +211,8 @@ tournamentsRouter.get('/:id', async (req: Request, res: Response) => {
     return;
   }
   const meta = activeTournamentMeta.get(t.id) ?? { currentMatch: null, error: null };
-  res.json({ ...t, currentMatch: meta.currentMatch, error: meta.error });
+  const { rankings, swissMeta } = extractSwissMeta(t.rankings);
+  res.json({ ...t, rankings, swissMeta: swissMeta ?? null, currentMatch: meta.currentMatch, error: meta.error });
 });
 
 // POST /tournaments/:id/cancel — cancel a running tournament
