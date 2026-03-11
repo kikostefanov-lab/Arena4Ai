@@ -25,7 +25,7 @@ export interface SynthesisResult {
  * hybrid solution using Claude as the synthesis agent.
  *
  * Returns a SynthesisResult with a markdown synthesis and per-criterion analysis,
- * or null if there are no deliverables (e.g. both teams produced empty output).
+ * or null if there are no deliverables (e.g. all teams produced empty output).
  */
 export async function synthesizeDeliverables(
   brief: BriefInput,
@@ -70,7 +70,8 @@ export async function synthesizeDeliverables(
       .join('\n\n---\n\n');
   }
 
-  const prompt = `You are a synthesis expert presenting results to a human decision-maker. ${nonEmpty.length} competing AI teams worked on the same problem. Your job is to analyze both approaches criterion-by-criterion, then create a hybrid solution that combines the strongest elements.
+  const teamCount = nonEmpty.length;
+  const prompt = `You are a synthesis expert presenting results to a human decision-maker. ${teamCount} competing AI teams worked on the same problem. Your job is to analyze all ${teamCount} approaches criterion-by-criterion, then create a hybrid solution that combines the strongest elements from each.
 
 Write for a smart person who wants to understand WHY each choice was made, not just WHAT was chosen.
 
@@ -80,20 +81,20 @@ ${brief.problem}
 ## Judging Criteria
 ${criteriaList}
 
-## Team Submissions
+## Team Submissions (${teamCount} teams)
 ${teamContext}
 
 ## Your Task
 
 For each criterion:
-1. Identify which team's approach was stronger
+1. Identify which team's approach was strongest
 2. Explain what the winning team did well (2-3 sentences)
-3. Explain what the losing team did differently (1-2 sentences)
-4. Give a clear rationale for why the winner's approach is better
+3. Briefly note what the other team(s) did differently (1-2 sentences total)
+4. Give a clear rationale for why the winner's approach is best
 
 Then:
 5. Write an overall thesis (2-3 sentences) explaining the philosophy of the hybrid
-6. Create the synthesized solution as clean markdown
+6. Create the synthesized solution as clean markdown, drawing the best elements from all ${teamCount} teams
 
 Return valid JSON (no markdown fences, just raw JSON):
 {
@@ -103,8 +104,8 @@ Return valid JSON (no markdown fences, just raw JSON):
       "criterionId": "<id>",
       "teamId": "<winning-team-id>",
       "winningApproach": "<2-3 sentences: what was selected from this team>",
-      "losingApproach": "<1-2 sentences: what the other team did differently>",
-      "rationale": "<1-2 sentences: why the winner's approach is better>"
+      "losingApproach": "<1-2 sentences: what the other team(s) did differently>",
+      "rationale": "<1-2 sentences: why the winner's approach is best>"
     },
     ...
   ],
@@ -130,11 +131,13 @@ You MUST include one entry per criterionId, in the same order.`;
       child.stdout.on('data', (chunk: Buffer) => {
         out += chunk.toString();
       });
-      // Cap at 3 minutes — synthesis is post-competition, blocking COMPLETE
+      // Timeout scales with team count: 5 min base + 2 min per team
+      const timeoutMs = (5 + teamCount * 2) * 60_000;
+      const timeoutMins = Math.round(timeoutMs / 60_000);
       const timeout = setTimeout(() => {
         child.kill();
-        reject(new Error('Synthesis timed out after 3 minutes'));
-      }, 180_000);
+        reject(new Error(`Synthesis timed out after ${timeoutMins} minutes`));
+      }, timeoutMs);
 
       child.on('close', (code) => {
         clearTimeout(timeout);
