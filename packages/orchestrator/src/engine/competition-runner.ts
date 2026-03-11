@@ -29,7 +29,6 @@ import { scoreDeliverable } from '../judging/rubric-scorer.js';
 import { aiJudge, JUDGE_IDS } from '../judging/ai-judge.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { printResults } from '../judging/results-reporter.js';
-import { synthesizeDeliverables } from '../synthesis/merge-engine.js';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
 import { CommentaryAgent } from '../commentary/commentary-agent.js';
@@ -52,8 +51,6 @@ export interface RunOptions {
    * Adapters still run in a local temp directory.
    */
   skipSandbox?: boolean;
-  /** Skip synthesis phase (useful in tests or when Claude is unavailable). */
-  skipSynthesis?: boolean;
   /** Number of AI judges per deliverable. Default 1. Max 2. */
   aiJudgeCount?: 1 | 2;
   /** Enable live AI commentary during the competition. Default false. */
@@ -78,7 +75,7 @@ export interface CompetitionResult {
  * Orchestrates the full competition lifecycle:
  *
  *   DRAFT → CONFIGURED → LAUNCHING → RUNNING → TIME_UP
- *         → COLLECTING → PRESENTING → JUDGING → SCORED → SYNTHESIZING → COMPLETE
+ *         → COLLECTING → PRESENTING → JUDGING → SCORED → COMPLETE
  *
  * Events emitted (extends EventEmitter):
  *   'stateChange'  (state: CompetitionState)
@@ -112,7 +109,6 @@ export class CompetitionRunner extends EventEmitter {
       geminiBin: options.geminiBin ?? 'gemini',
       printResults: options.printResults ?? true,
       skipSandbox: options.skipSandbox ?? false,
-      skipSynthesis: options.skipSynthesis ?? false,
       aiJudgeCount: options.aiJudgeCount ?? 1,
       commentary: options.commentary ?? false,
     };
@@ -350,17 +346,8 @@ export class CompetitionRunner extends EventEmitter {
       // ── SCORED ───────────────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);
 
-      // ── SYNTHESIZING ─────────────────────────────────────────────────────
-      this.advance(CompetitionState.SYNTHESIZING);
-      let synthesis: SynthesisResult | null = null;
-      if (!this.options.skipSynthesis) {
-        console.log('[arena] synthesizing deliverables...');
-        synthesis = await synthesizeDeliverables(brief, deliverables, {
-          claudeBin: this.options.claudeBin,
-        }, presentations);
-      }
-
       // ── COMPLETE ──────────────────────────────────────────────────────────
+      const synthesis: SynthesisResult | null = null; // synthesis is now on-demand via POST /synthesis
       this.advance(CompetitionState.COMPLETE);
       this.competition.completedAt = new Date().toISOString();
 

@@ -68,15 +68,6 @@ vi.mock('../adapters/claude/claude-personas.js', () => ({
   resolvePersona: vi.fn().mockReturnValue({ systemPrompt: 'Be helpful.' }),
 }));
 
-// Mock synthesizeDeliverables
-vi.mock('../synthesis/merge-engine.js', () => ({
-  synthesizeDeliverables: vi.fn().mockResolvedValue({
-    synthesis: '# Synthesis\n\nBest of both.',
-    overallRationale: 'Combines the best of both approaches.',
-    perCriterion: [],
-  }),
-}));
-
 // Mock presentation-generator
 vi.mock('../presentation/presentation-generator.js', () => ({
   generateAllPresentations: vi.fn().mockResolvedValue([]),
@@ -131,7 +122,6 @@ vi.mock('../adapters/gemini/gemini-adapter.js', () => ({
 // ── Import the real runner (after mocks) ─────────────────────────────────────
 
 import { CompetitionRunner } from './competition-runner.js';
-import { synthesizeDeliverables } from '../synthesis/merge-engine.js';
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -163,7 +153,6 @@ describe('CompetitionRunner', () => {
     runner = new CompetitionRunner(testBrief, testTeams, {
       skipSandbox: true,
       printResults: false,
-      skipSynthesis: true, // avoid real Claude call in most tests
     });
   });
 
@@ -181,45 +170,14 @@ describe('CompetitionRunner', () => {
       CompetitionState.PRESENTING,
       CompetitionState.JUDGING,
       CompetitionState.SCORED,
-      CompetitionState.SYNTHESIZING,
       CompetitionState.COMPLETE,
     ]);
   });
 
-  it('emits SYNTHESIZING state between SCORED and COMPLETE', async () => {
-    const states: string[] = [];
-    runner.on('stateChange', (s: string) => states.push(s));
-    await runner.run();
-
-    const synthesizingIdx = states.indexOf('SYNTHESIZING');
-    const completeIdx = states.indexOf('COMPLETE');
-    expect(synthesizingIdx).toBeGreaterThan(-1);
-    expect(completeIdx).toBeGreaterThan(synthesizingIdx);
-  });
-
-  it('includes synthesis in the emitted result', async () => {
+  it('includes synthesis (null) in the emitted result', async () => {
     const result = await runner.run();
     expect('synthesis' in result).toBe(true);
-  });
-
-  it('returns synthesis: null when skipSynthesis is true', async () => {
-    const result = await runner.run();
     expect(result.synthesis).toBeNull();
-  });
-
-  it('calls synthesizeDeliverables and returns its value when skipSynthesis is false', async () => {
-    const synthRunner = new CompetitionRunner(testBrief, testTeams, {
-      skipSandbox: true,
-      printResults: false,
-      skipSynthesis: false,
-    });
-    const result = await synthRunner.run();
-    expect(synthesizeDeliverables).toHaveBeenCalledOnce();
-    expect(result.synthesis).toEqual({
-      synthesis: '# Synthesis\n\nBest of both.',
-      overallRationale: 'Combines the best of both approaches.',
-      perCriterion: [],
-    });
   });
 
   it('emits a result event with the final CompetitionResult', async () => {

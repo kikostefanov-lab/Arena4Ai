@@ -12,7 +12,7 @@ const program = new Command();
 
 program
   .name('arena')
-  .description('Agent Arena — pit AI models against each other in structured competitions')
+  .description('Arena4Ai — pit AI models against each other in structured competitions')
   .version('0.1.0');
 
 // ── run ──────────────────────────────────────────────────────────────────────
@@ -190,14 +190,12 @@ tournamentRunCmd
   .argument('<brief>', 'path to brief YAML file')
   .option('--teams <teams>', 'comma-separated team list', 'claude:architect,claude:speedrunner,codex:standard')
   .option('--skip-sandbox', 'skip Docker sandbox')
-  .option('--skip-synthesis', 'skip synthesis (recommended for tournaments)')
   .option('--commentary', 'enable AI commentary per match')
   .option('--log-dir <dir>', 'directory for event logs')
   .option('--time-limit <ms>', 'time limit per match in ms', (v: string) => parseInt(v, 10))
   .action(async (briefPath: string, opts: {
     teams: string;
     skipSandbox?: boolean;
-    skipSynthesis?: boolean;
     commentary?: boolean;
     logDir?: string;
     timeLimit?: number;
@@ -220,7 +218,6 @@ tournamentRunCmd
 
       const runner = new TournamentRunner(brief, teams, {
         skipSandbox: opts.skipSandbox ?? false,
-        skipSynthesis: opts.skipSynthesis ?? true,
         commentary: opts.commentary ?? false,
         logDir: opts.logDir,
         printResults: false,

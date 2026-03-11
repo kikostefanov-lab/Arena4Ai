@@ -33,7 +33,7 @@ export const VALID_TRANSITIONS: Record<CompetitionState, CompetitionState[]> = {
   [CompetitionState.COLLECTING]: [CompetitionState.PRESENTING],
   [CompetitionState.PRESENTING]: [CompetitionState.JUDGING, CompetitionState.FAILED],
   [CompetitionState.JUDGING]: [CompetitionState.SCORED, CompetitionState.FAILED],
-  [CompetitionState.SCORED]: [CompetitionState.SYNTHESIZING],
+  [CompetitionState.SCORED]: [CompetitionState.COMPLETE, CompetitionState.SYNTHESIZING],
   [CompetitionState.SYNTHESIZING]: [CompetitionState.COMPLETE],
   [CompetitionState.COMPLETE]: [CompetitionState.FORGING],
   [CompetitionState.FORGING]: [CompetitionState.FORGE_COMPLETE, CompetitionState.FAILED],

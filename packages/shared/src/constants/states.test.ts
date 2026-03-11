@@ -20,7 +20,11 @@ describe('CompetitionState transitions', () => {
     expect(VALID_TRANSITIONS[CompetitionState.PRESENTING]).toContain(CompetitionState.JUDGING);
   });
 
-  it('allows SCORED → SYNTHESIZING → COMPLETE', () => {
+  it('allows SCORED → COMPLETE directly (synthesis is now on-demand)', () => {
+    expect(VALID_TRANSITIONS[CompetitionState.SCORED]).toContain(CompetitionState.COMPLETE);
+  });
+
+  it('still allows SCORED → SYNTHESIZING → COMPLETE for legacy compatibility', () => {
     expect(VALID_TRANSITIONS[CompetitionState.SCORED]).toContain(CompetitionState.SYNTHESIZING);
     expect(VALID_TRANSITIONS[CompetitionState.SYNTHESIZING]).toContain(CompetitionState.COMPLETE);
   });
@@ -28,9 +32,5 @@ describe('CompetitionState transitions', () => {
   it('allows COMPLETE → FORGING → FORGE_COMPLETE', () => {
     expect(VALID_TRANSITIONS[CompetitionState.COMPLETE]).toContain(CompetitionState.FORGING);
     expect(VALID_TRANSITIONS[CompetitionState.FORGING]).toContain(CompetitionState.FORGE_COMPLETE);
-  });
-
-  it('does not allow SCORED → COMPLETE directly', () => {
-    expect(VALID_TRANSITIONS[CompetitionState.SCORED]).not.toContain(CompetitionState.COMPLETE);
   });
 });

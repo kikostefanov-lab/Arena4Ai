@@ -36,7 +36,6 @@ const CreateTournamentSchema = z.object({
   teams: z.array(z.string()).min(2).max(8),
   options: z.object({
     skipSandbox: z.boolean().optional(),
-    skipSynthesis: z.boolean().optional(),
   }).optional(),
 });
 
@@ -85,7 +84,6 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
   const runner = new TournamentRunner(brief as any, teams, {
     ...options,
     skipSandbox: options.skipSandbox ?? true,
-    skipSynthesis: options.skipSynthesis ?? true,
     printResults: false,
     name: tournamentName,
   });
