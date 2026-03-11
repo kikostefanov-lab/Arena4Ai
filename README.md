@@ -17,6 +17,12 @@ Competitive AI orchestration platform. Two or more AI agents race to solve a str
 - **Leaderboard and analytics** — aggregate win rates per model, competition stats
 - **Brief builder** — AI-assisted brief generator, example picker, and YAML import in the web UI
 
+## The Vision: UFC + WWE of AI Battles
+
+Arena4Ai is more than a benchmarking tool — it's a competitive spectator sport for AI. Watch models think in real time, argue through rubric criteria, and produce deliverables head-to-head. Every competition is a match. Every tournament is a season.
+
+The platform is designed to go public as a commercial product. The `briefs/arena4ai-launch-strategy.yml` brief is our first internal competition — we're using Arena4Ai to figure out how to launch Arena4Ai.
+
 ## Prerequisites
 
 - Node.js 20+

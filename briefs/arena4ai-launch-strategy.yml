@@ -1,0 +1,292 @@
+id: arena4ai-launch-strategy-001
+title: Arena4Ai — Commercial Launch Strategy
+format: HACKATHON
+tags: ["Strategy", "Product", "Launch"]
+
+problem: |
+  You are a founding-team-level strategist tasked with producing a complete,
+  commercially-viable launch plan for Arena4Ai — a competitive AI orchestration
+  platform going public for the first time.
+
+  THE PLATFORM — WHAT EXISTS TODAY
+
+  Arena4Ai is a competitive AI battleground. Two or more AI agents (Claude,
+  Codex, Gemini) race simultaneously to solve a structured brief. A cross-judge
+  (Claude) scores their deliverables against a rubric. The result is a ranked
+  scorecard, winner declaration, and — optionally — a synthesized "best of both"
+  output. The platform is TRON-themed: electric cyan (#00f0ff), near-black
+  backgrounds, Orbitron display font, live WebSocket event streams showing agents
+  thinking and writing in real time.
+
+  Current feature set (all built and working):
+  - Head-to-head and round-robin/Swiss tournaments across Claude, Codex, Gemini
+  - AI cross-judge with rubric-based scoring; heuristic fallback scorer
+  - Presentation layer: deliverables mapped to criteria in human-readable summaries
+  - Files tab: inline file preview, syntax tinting, per-team ZIP download
+  - On-demand synthesis: AI blends the best ideas from competing teams
+  - The Forge: post-completion artifact generation (roadmap, task graph, repo
+    blueprint, API contracts, risk register, decision log) — stacked, downloadable
+  - Live event stream: tool calls, file writes, reasoning blocks per agent per team
+  - Commentary agent: optional live AI play-by-play batched from the event stream
+  - Replay viewer: scrub any competition at 1x–10x speed
+  - Leaderboard and analytics: win rates per model, competition stats
+  - Brief builder: AI-assisted brief generator, example picker, YAML import
+  - HTTP API + WebSocket server (Express, port 3000)
+  - Next.js 15 App Router UI (port 3001)
+  - PostgreSQL (Drizzle ORM) for competition state, events, results, tournaments
+
+  THE VISION — "UFC + WWE OF AI BATTLES FOR KNOWLEDGE"
+
+  Arena4Ai is more than a benchmarking tool. It is a competitive spectator sport
+  for AI. The design language is deliberately theatrical: every competition is a
+  match, every tournament is a season, every forge run is a post-fight breakdown.
+  The live event stream lets spectators watch models think in real time. The
+  commentary agent provides play-by-play narration. The platform is designed for
+  an audience — not just the person who launched the competition.
+
+  The public launch must capture this energy and translate it into a product that
+  developers, AI researchers, enterprise teams, and curious spectators can all
+  find value in — with a monetization model that sustains the infrastructure and
+  the team building it.
+
+  WHAT YOU MUST PRODUCE
+
+  Your task is to design the complete commercial launch strategy across six domains:
+
+  1. PRODUCT AND MONETIZATION
+
+  The current platform requires users to have their own agent CLIs installed
+  (claude, codex, gemini) and their own API keys set as environment variables.
+  This is a developer-only experience. For public launch, we need BYOM (Bring
+  Your Own Model): users should be able to connect their own Anthropic, OpenAI,
+  and Google AI API keys via a secure web UI, and the platform runs competitions
+  on their behalf.
+
+  Design a complete monetization architecture:
+  - Freemium tier: what is free forever? (suggested: 5 competitions per month,
+    no forge, no tournaments, 30-minute time limit, 2-agent only)
+  - Paid tiers: at least three distinct tiers (e.g. Hobbyist, Pro, Team) with
+    specific feature gates and suggested USD pricing. Include what unlocks at
+    each tier: forge access, synthesis, tournaments, longer time limits,
+    N-agent competitions, API access, webhooks, white-label
+  - Enterprise tier: custom pricing, SSO, dedicated infrastructure, SLA,
+    audit logs, bring-your-own-cloud deployment option
+  - "Arena Credits" metered usage concept: how do credits map to compute?
+    What operations consume credits? How are credits bundled in each tier?
+  - Revenue model mix: subscriptions vs usage-based vs team seats vs enterprise
+    contract. What is the primary motion? What is the upsell path?
+  - Projected unit economics: estimated COGS per competition (LLM API costs
+    vary by model and task; estimate ranges), target gross margin at scale
+
+  2. SECURITY AND AUTHENTICATION
+
+  API key management is the most security-critical component. Users will store
+  their Anthropic, OpenAI, and Google API keys in the platform. These must never
+  appear in logs, never be transmitted in plaintext beyond the initial HTTPS
+  submission, and be retrievable only for competition execution — not by the user
+  or admin after storage.
+
+  Design:
+  - Authentication system recommendation: OAuth (which providers?), magic link,
+    or JWT with refresh tokens — choose one primary approach, justify it, and
+    describe the session management strategy
+  - API key vault: encryption at rest (which cipher, key management approach —
+    KMS, HashiCorp Vault, envelope encryption?), how keys are scoped per user,
+    how keys are rotated or revoked
+  - Multi-tenancy isolation: competition data, events, and results must be
+    strictly isolated per user/organization. Describe the data isolation model
+    (row-level security, schema-per-tenant, or separate DB?)
+  - Rate limiting beyond the current per-IP model: per-user limits, per-tier
+    limits, burst allowances, and how limits are enforced (Redis token bucket?
+    sliding window? which library?)
+  - SOC2 Type II considerations: which trust service criteria matter most for
+    this product? What is the path to certification? Which controls are
+    table-stakes for enterprise deals?
+  - Incident response: what is the breach response plan if an API key vault is
+    compromised?
+
+  3. INFRASTRUCTURE AND SCALING
+
+  The current stack (Express + Next.js + PostgreSQL + WebSockets) is designed
+  for a single developer running locally. It will not survive 1,000 concurrent
+  competitions. Each competition spawns two or more agent CLI processes, each
+  consuming LLM API quota, writing files to disk, and streaming events over
+  WebSocket. The orchestrator is currently a single-process Node.js server.
+
+  Design:
+  - Competition execution queue: move from synchronous in-process execution to
+    a queue-based model. Recommend a specific technology (Bull/BullMQ, Temporal,
+    AWS SQS + Lambda, etc.) and justify. How are jobs distributed across worker
+    nodes? How are WebSocket streams routed back to the originating client?
+  - Horizontal scaling strategy: how do you scale the orchestrator to N workers?
+    What state must be shared? What can be worker-local?
+  - WebSocket fanout at scale: when a competition runs on worker-3 and the
+    browser is connected to load-balancer node-1, how does the event stream reach
+    the client? (Redis Pub/Sub? Socket.IO cluster adapter? SSE?)
+  - Database scaling: PostgreSQL will handle moderate load well. At what point
+    does it become the bottleneck? What read replicas, connection pooling
+    (PgBouncer), or CQRS patterns apply?
+  - File storage: deliverable files are currently written to disk. At scale they
+    must move to object storage (S3 or equivalent). Describe the migration path
+    and how the ZIP download API changes.
+  - CDN and static asset strategy for the Next.js UI: which CDN, how is
+    cache invalidation handled, what are the ISR/SSR tradeoffs for the
+    competition gallery and leaderboard pages?
+  - Cost model: estimate monthly infrastructure cost at 100, 1,000, and 10,000
+    active users (include compute, storage, egress, LLM API pass-through if any)
+
+  4. GO-TO-MARKET STRATEGY
+
+  The positioning is "UFC + WWE of AI Battles for Knowledge." This is not a
+  benchmarking spreadsheet. It is a sport. The launch must feel like a cultural
+  moment, not a product announcement.
+
+  Design:
+  - Target audience segmentation: rank and describe at least four distinct
+    segments (e.g. AI developers evaluating models, ML researchers, enterprise
+    teams running LLM vendor selection, AI-curious spectators/consumers,
+    educators). For each: size estimate, acquisition channel, willingness to pay,
+    and what feature resonates most
+  - Positioning and messaging: write the actual hero headline, subheadline, and
+    three supporting value propositions for the launch landing page. Capture the
+    sport-and-spectacle angle. Include a tagline.
+  - Launch channel plan: specific, sequenced actions for Product Hunt, Hacker
+    News Show HN, X/Twitter, LinkedIn, YouTube (demo video strategy), AI
+    newsletters (e.g. The Batch, Import AI, Latent Space). Include timing,
+    content format, and success metrics for each
+  - Viral mechanics: what makes Arena4Ai shareable? Design at least three
+    specific viral loops (e.g. shareable battle result cards with OG metadata,
+    embeddable live stream widget, public leaderboard with challenge links)
+  - Community strategy: Discord server structure, public leaderboard design,
+    user-submitted brief library, "Seasons" concept (monthly themed tournaments)
+  - Partnership opportunities: which developer programs (Anthropic, OpenAI,
+    Google) offer co-marketing or credits? What does a partnership pitch look
+    like? What is the ask and what do we offer in return?
+
+  5. DEVELOPER EXPERIENCE
+
+  Developers are the primary acquisition channel. They must be able to launch
+  a competition programmatically, subscribe to events via webhook, and build
+  integrations on top of Arena4Ai without ever touching the web UI.
+
+  Design:
+  - Public REST API: extend the existing HTTP API with authentication (API key
+    header), versioning (v1), and pagination. Define the key endpoints and their
+    request/response schemas for: creating a competition, listing competitions,
+    streaming events, getting results, triggering forge, triggering synthesis
+  - Webhooks: define the webhook event types, payload schema, delivery
+    guarantees (at-least-once? exactly-once?), retry logic, and signature
+    verification (HMAC-SHA256 shared secret)
+  - Node.js SDK: design the public API surface of an @arena4ai/sdk package.
+    Show the key method signatures and a complete "hello world" example that
+    creates a competition, subscribes to events, and retrieves the result
+  - CLI improvements for self-hosting: what flags, config file format, and
+    documentation would make it easy for a developer to self-host Arena4Ai on
+    their own infrastructure? What is the minimal viable self-hosting guide?
+  - API documentation strategy: OpenAPI spec, interactive playground (Swagger UI
+    or Scalar), changelog, versioning policy
+
+  6. OPEN SOURCE VERSUS HOSTED SAAS
+
+  Arena4Ai has a compelling open-source story — the core competition engine is
+  MIT-licensable, the brief format is a clear protocol, and open-sourcing creates
+  a developer community that drives hosted product adoption.
+
+  Design:
+  - Recommended model: open core (engine open, platform closed), fully open
+    source with hosted convenience layer, or fully proprietary? Justify with
+    reference to comparable developer tools (e.g. Supabase, Posthog, Airbyte)
+  - What to open source: which packages/modules should be MIT-licensed and why?
+    (Candidate: @arena/orchestrator engine, @arena/shared types, brief YAML
+    schema, adapter interface, judge protocol)
+  - What to keep proprietary: which features are the commercial moat?
+    (Candidate: forge, synthesis, multi-tenant auth, analytics, managed
+    infrastructure)
+  - Self-hosting documentation: outline the structure of a docs site that
+    covers self-hosting, brief authoring, custom adapter development, and the
+    API reference
+  - Community governance: if open-sourced, who reviews PRs? What is the
+    contribution guide? How do you prevent the project from being forked into a
+    direct competitor?
+
+constraints:
+  - All pricing must be specific USD amounts — no ranges like "$20–$50/month"; commit to a number and justify it
+  - Security recommendations must name actual technologies (e.g. AWS KMS, HashiCorp Vault, Argon2, AES-256-GCM) — no generic "use encryption"
+  - Infrastructure recommendations must reference the existing stack (Express, Next.js 15, PostgreSQL, Node.js, WebSockets) and explain migration paths, not greenfield rewrites
+  - Go-to-market copy must be written out in full — hero headline, tagline, value props — not described ("write a headline about X")
+  - SDK design must include actual TypeScript method signatures and a working code example, not pseudocode
+  - Every section must include at least one specific numeric estimate or benchmark (cost, user count, conversion rate, timeline) with a stated assumption
+  - The open source recommendation must take a clear position — no "it depends" without a final recommendation
+  - Deliverable filenames must match the list exactly — the judge will check for each file by name
+
+deliverables:
+  - pricing-tiers.md         # Feature matrix, tier names, USD prices, Arena Credits definition, unit economics
+  - security-architecture.md # Auth system recommendation, API key vault design, multi-tenancy model, SOC2 controls
+  - infrastructure-plan.md   # Queue strategy, horizontal scaling, WebSocket fanout, DB scaling, file storage, CDN, cost model
+  - gtm-strategy.md          # Audience segmentation, launch copy (written in full), channel plan, viral mechanics, community, partnerships
+  - developer-experience.md  # REST API design, webhook spec, SDK TypeScript signatures + example, CLI self-hosting guide, docs strategy
+  - open-source-strategy.md  # Open core vs hosted recommendation, what to open/close, community governance
+  - launch-checklist.md      # Sequenced 90-day pre-launch checklist: legal, infra, security, marketing, community — with owners and success criteria
+  - executive-summary.md     # 1-page synthesis: top 5 decisions, biggest risks, recommended launch date, and the one thing that must go right
+
+timeLimitMs: 3600000  # 60 minutes
+
+rubric:
+  criteria:
+    - id: monetization-viability
+      description: >
+        Pricing tiers are specific (named prices, named features), Arena Credits
+        model is coherent, unit economics are estimated with stated assumptions,
+        and the freemium-to-paid conversion funnel is clearly designed. A reader
+        could implement this pricing model tomorrow without further decisions.
+      maxScore: 10
+      weight: 0.20
+
+    - id: security-architecture
+      description: >
+        Authentication choice is justified with tradeoffs acknowledged. API key
+        vault design names actual encryption standards and key management
+        infrastructure. Multi-tenancy isolation model is specified. Rate limiting
+        strategy is concrete. SOC2 controls are mapped to actual product features.
+        No hand-waving: every recommendation names the technology.
+      maxScore: 10
+      weight: 0.20
+
+    - id: gtm-strategy
+      description: >
+        Launch copy is written in full (hero headline, tagline, value props —
+        not described, actually written). Channel plan includes specific sequenced
+        actions with timing. Viral mechanics are specific product features, not
+        platitudes. The "UFC + WWE" positioning is executed, not just mentioned.
+      maxScore: 10
+      weight: 0.20
+
+    - id: technical-feasibility
+      description: >
+        Infrastructure plan is grounded in the existing stack and describes
+        migration paths (not greenfield rewrites). Queue technology choice is
+        justified. WebSocket fanout solution is specific. Cost estimates are
+        provided at multiple scale points with stated assumptions. The plan
+        could be handed to a senior engineer who would know what to build.
+      maxScore: 10
+      weight: 0.15
+
+    - id: developer-experience
+      description: >
+        REST API design includes actual endpoint paths, verbs, and
+        request/response shapes. Webhook payload schema is defined. SDK includes
+        real TypeScript method signatures and a complete working example (not
+        pseudocode). CLI self-hosting guide is actionable. A developer could
+        start integrating with this design without further clarification.
+      maxScore: 10
+      weight: 0.15
+
+    - id: vision-and-differentiation
+      description: >
+        The strategy captures and extends the "UFC + WWE of AI Battles" energy —
+        not just described but embedded in the product decisions, naming,
+        community design, and launch narrative. The executive summary reads like
+        something a founder would actually send to investors. The open source
+        recommendation takes a clear position with conviction.
+      maxScore: 10
+      weight: 0.10
