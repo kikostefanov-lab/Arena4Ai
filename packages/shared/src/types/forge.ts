@@ -54,3 +54,21 @@ export interface ForgeOutput {
   domain?: ForgeDomain;    // detected domain
   selectedTypes?: ForgeArtifactType[];  // which domain artifacts were selected
 }
+
+/** Source for a forge run — which team's work (or the synthesis) to base artifacts on. */
+export type ForgeSource = 'winner' | 'loser' | 'synthesis';
+
+/**
+ * A single forge run. Multiple runs can exist per competition (stacked).
+ * Replaces the single ForgeOutput stored in results.forge.
+ */
+export interface ForgeRun {
+  id: string;                        // uuid generated at run time
+  source: ForgeSource;
+  sourceTeamId?: string;             // set when source is 'winner' or 'loser'
+  forgeModel: string;
+  artifacts: ForgeArtifact[];
+  generatedAt: string;               // ISO 8601
+  domain?: ForgeDomain;
+  selectedTypes?: ForgeArtifactType[];
+}
