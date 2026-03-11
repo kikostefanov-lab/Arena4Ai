@@ -203,11 +203,7 @@ export default function NewTournamentPage() {
             </div>
             <Link
               href="/"
-              style={{
-                fontSize: '0.6rem', color: '#4a8fa8', padding: '0.4rem 0.8rem',
-                border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
-                letterSpacing: '1px', fontWeight: 600,
-              }}
+              className="arena-btn"
             >
               ← BACK
             </Link>
@@ -643,14 +639,12 @@ export default function NewTournamentPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="submit-btn"
+            className="arena-btn arena-btn-primary submit-btn"
             style={{
               width: '100%', padding: '0.85rem',
-              background: submitting ? '#003a4a' : '#00f0ff',
-              color: '#000408', border: 'none', borderRadius: '6px',
-              fontSize: '0.72rem', fontWeight: 800, letterSpacing: '2px',
-              textTransform: 'uppercase', cursor: submitting ? 'not-allowed' : 'pointer',
-              fontFamily: MONOSPACE_FONT,
+              background: submitting ? '#003a4a' : undefined,
+              color: submitting ? '#1e4a5a' : undefined,
+              cursor: submitting ? 'not-allowed' : 'pointer',
             }}
           >
             {submitting ? 'Creating Tournament…' : '🏆 Launch Tournament'}

@@ -1461,7 +1461,7 @@ export default function NewCompetitionPage() {
 
           {/* ── Launch Button ── */}
           <button
-            className="launch-btn"
+            className="launch-btn arena-btn-primary"
             type="submit"
             disabled={submitting || hasErrors}
             style={{

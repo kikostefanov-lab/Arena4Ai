@@ -138,11 +138,7 @@ export default async function AnalyticsPage() {
           borderBottom: '1px solid #0a2235',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <a href="/" style={{
-              fontSize: '0.62rem', color: '#4a8fa8', textDecoration: 'none',
-              letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
-              border: '1px solid #0a2235', borderRadius: '4px',
-            }}>
+            <a href="/" className="arena-btn" style={{ textDecoration: 'none' }}>
               ← Gallery
             </a>
             <span style={{ color: '#0a2235' }}>│</span>
@@ -156,20 +152,10 @@ export default async function AnalyticsPage() {
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <a href="/analytics/criteria" style={{
-              fontSize: '0.62rem', color: '#4a8fa8', textDecoration: 'none',
-              letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
-              border: '1px solid #0a2235', borderRadius: '4px',
-              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-            }}>
+            <a href="/analytics/criteria" className="arena-btn" style={{ textDecoration: 'none' }}>
               📊 Criteria →
             </a>
-            <a href="/compare" style={{
-              fontSize: '0.62rem', color: '#4a8fa8', textDecoration: 'none',
-              letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
-              border: '1px solid #0a2235', borderRadius: '4px',
-              display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-            }}>
+            <a href="/compare" className="arena-btn" style={{ textDecoration: 'none' }}>
               ⚔ Compare →
             </a>
           </div>
