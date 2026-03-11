@@ -1092,102 +1092,141 @@ function ScoreDrawer({
 
             {/* SCORES TAB */}
             {activeTab === 'scores' && (
-              <>
+              <div style={{ padding: '0' }}>
+                {/* Total score header row */}
                 <div style={{
                   display: 'grid',
-                  gridTemplateColumns: `repeat(${Math.min(teamDisplays.length, 4)}, 1fr)`,
-                  gap: '1rem', maxWidth: '700px', margin: '0 auto',
+                  gridTemplateColumns: `200px repeat(${teamDisplays.length}, 1fr) 120px`,
+                  background: '#020b14',
+                  borderBottom: '2px solid #0e3050',
+                  padding: '0.5rem 1rem',
+                  position: 'sticky', top: 0, zIndex: 2,
                 }}>
-                  {teamDisplays.map(({ result: tr, label, color, isWinner }, cardIdx) => (
-                    <div
-                      key={tr.teamId}
-                      className={`arena-score-card ${isWinner ? 'arena-winner-card' : ''}`}
-                      style={{
-                        background: isWinner
-                          ? 'linear-gradient(135deg, rgba(234,179,8,0.08) 0%, rgba(234,179,8,0.02) 100%)'
-                          : 'linear-gradient(135deg, #050f1e 0%, #020b14 100%)',
-                        border: `1px solid ${isWinner ? 'rgba(234,179,8,0.4)' : '#0a2235'}`,
-                        borderRadius: '10px', padding: '1rem',
-                        animationDelay: `${cardIdx * 0.15}s`,
-                      }}
-                    >
-                      <div style={{
-                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                        marginBottom: '0.75rem', paddingBottom: '0.6rem',
-                        borderBottom: `1px solid ${isWinner ? 'rgba(234,179,8,0.2)' : '#0a2235'}`,
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
-                          {isWinner && <span style={{ fontSize: '0.95rem' }}>🏆</span>}
-                          <ModelBadge model={label.split(':')[0]} />
-                        </div>
-                        <span style={{
-                          fontSize: '1.4rem', fontWeight: 900,
-                          color: isWinner ? '#eab308' : '#c8eef8',
-                          flexShrink: 0, fontFamily: 'monospace',
-                        }}>
-                          {Math.round(tr.totalScore * 100 * scoreProgress)}%
-                        </span>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', display: 'flex', alignItems: 'center' }}>
+                    CRITERION
+                  </div>
+                  {teamDisplays.map(({ result: tr, label, color, isWinner }) => (
+                    <div key={tr.teamId} style={{ textAlign: 'center' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem', marginBottom: '0.2rem' }}>
+                        {isWinner && <span style={{ fontSize: '0.8rem' }}>🏆</span>}
+                        <ModelBadge model={label.split(':')[0]} />
                       </div>
-
-                      <div style={{
-                        fontSize: '0.72rem', fontWeight: 700, color,
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        marginBottom: '0.65rem',
-                      }}>
+                      <div style={{ fontSize: '0.65rem', color, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {label}
                       </div>
-
-                      {tr.criteriaScores.map((cs, csIdx) => {
-                        const maxScore = cs.maxScore ?? 10;
-                        const pct = maxScore > 0 ? (cs.score / maxScore) * 100 : 0;
-                        return (
-                          <div key={cs.criterionId} style={{ marginBottom: '0.5rem' }}>
-                            <div style={{
-                              display: 'flex', justifyContent: 'space-between',
-                              fontSize: '0.68rem', marginBottom: '0.22rem',
-                            }}>
-                              <span style={{ color: '#4a8fa8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
-                                {cs.criterionId}
-                              </span>
-                              <span style={{ color: isWinner ? '#eab308' : '#c8eef8', fontWeight: 700, marginLeft: '0.4rem', flexShrink: 0, fontFamily: 'monospace' }}>
-                                {Math.round((cs.score / maxScore) * 100 * scoreProgress)}%
-                              </span>
-                            </div>
-                            <div style={{ height: '4px', background: 'rgba(10,34,53,0.6)', borderRadius: '2px', overflow: 'hidden' }}>
-                              <div
-                                className="arena-progress-bar"
-                                style={{
-                                  height: '100%', width: `${pct * scoreProgress}%`,
-                                  background: isWinner
-                                    ? 'linear-gradient(90deg, #eab308, #f59e0b)'
-                                    : `linear-gradient(90deg, ${color}, ${color}88)`,
-                                  borderRadius: '2px',
-                                  animationDelay: `${(cardIdx * 0.15) + (csIdx * 0.1) + 0.3}s`,
-                                }}
-                              />
-                            </div>
-                            {cs.commentary && (
-                              <div style={{ fontSize: '0.62rem', color: '#1e4a5a', fontStyle: 'italic', marginTop: '0.18rem', lineHeight: 1.4 }}>
-                                {cs.commentary}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                      <div style={{ fontSize: '1.1rem', fontWeight: 900, color: isWinner ? '#eab308' : '#c8eef8', fontFamily: 'monospace', marginTop: '0.1rem' }}>
+                        {Math.round(tr.totalScore * 100 * scoreProgress)}%
+                      </div>
                     </div>
                   ))}
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    WINNER
+                  </div>
                 </div>
 
+                {/* Criterion rows */}
+                {(() => {
+                  const criteria = teamDisplays[0]?.result.criteriaScores ?? [];
+                  return criteria.map((cs) => {
+                    const isOpen = selectedCriterionId === cs.criterionId;
+                    const scoresForCrit = teamDisplays.map((td) => ({
+                      ...td,
+                      cs: td.result.criteriaScores.find(c => c.criterionId === cs.criterionId),
+                    }));
+                    const winnerForCrit = scoresForCrit.reduce((best, cur) =>
+                      (cur.cs?.score ?? 0) > (best.cs?.score ?? 0) ? cur : best
+                    );
+                    return (
+                      <div key={cs.criterionId}>
+                        {/* Criterion row */}
+                        <div
+                          onClick={() => setSelectedCriterionId(isOpen ? null : cs.criterionId)}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: `200px repeat(${teamDisplays.length}, 1fr) 120px`,
+                            padding: '0.55rem 1rem',
+                            borderBottom: '1px solid rgba(10,34,53,0.5)',
+                            cursor: 'pointer',
+                            background: isOpen ? 'rgba(0,240,255,0.05)' : 'transparent',
+                            transition: 'background 0.1s',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{ fontSize: '0.62rem', color: isOpen ? '#00f0ff' : '#3d7d94', flexShrink: 0 }}>
+                              {isOpen ? '▼' : '▶'}
+                            </span>
+                            <span style={{ fontSize: '0.72rem', color: isOpen ? '#7cc6db' : '#4a8fa8', fontWeight: isOpen ? 700 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {cs.criterionId}
+                            </span>
+                          </div>
+                          {scoresForCrit.map(({ result: tr, color, isWinner, cs: crit }) => {
+                            const maxScore = crit?.maxScore ?? 10;
+                            const pct = maxScore > 0 && crit ? (crit.score / maxScore) * 100 : 0;
+                            return (
+                              <div key={tr.teamId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                                <div style={{ width: '50px', height: '4px', background: '#0a2235', borderRadius: '2px', overflow: 'hidden' }}>
+                                  <div
+                                    className="arena-progress-bar"
+                                    style={{ height: '100%', width: `${pct * scoreProgress}%`, background: isWinner ? '#eab308' : color, borderRadius: '2px' }}
+                                  />
+                                </div>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, fontFamily: 'monospace', color: isWinner ? '#eab308' : '#c8eef8', flexShrink: 0 }}>
+                                  {crit ? Math.round((crit.score / maxScore) * 100 * scoreProgress) : 0}%
+                                </span>
+                              </div>
+                            );
+                          })}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <span style={{
+                              fontSize: '0.65rem', fontWeight: 800, padding: '0.15rem 0.5rem', borderRadius: '3px',
+                              letterSpacing: '0.5px', color: winnerForCrit.color,
+                              background: `rgba(${hexToRgb(winnerForCrit.color)},0.12)`,
+                              border: `1px solid rgba(${hexToRgb(winnerForCrit.color)},0.3)`,
+                            }}>
+                              {winnerForCrit.label.split(':')[0].toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Expandable commentary row */}
+                        {isOpen && (
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: `repeat(${teamDisplays.length}, 1fr)`,
+                            gap: 0,
+                            background: '#020b14',
+                            borderBottom: '1px solid #0a2235',
+                          }}>
+                            {scoresForCrit.map(({ result: tr, label, color, cs: crit }, colIdx) => (
+                              <div
+                                key={tr.teamId}
+                                style={{
+                                  padding: '0.75rem 1rem',
+                                  borderRight: colIdx < teamDisplays.length - 1 ? '1px solid #0a2235' : 'none',
+                                  borderLeft: `2px solid rgba(${hexToRgb(color)},0.4)`,
+                                }}
+                              >
+                                <div style={{ fontSize: '0.65rem', fontWeight: 800, color, letterSpacing: '0.5px', marginBottom: '0.35rem' }}>
+                                  {label}
+                                </div>
+                                <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6, fontStyle: 'italic' }}>
+                                  {crit?.commentary || <span style={{ color: '#1e4a5a' }}>No commentary</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+
                 {result.summary && (
-                  <p style={{
-                    fontSize: '0.78rem', color: '#4a8fa8', textAlign: 'center',
-                    fontFamily: "-apple-system, 'Segoe UI', sans-serif",
-                    lineHeight: 1.7, maxWidth: '600px', margin: '1rem auto 0',
-                  }}>
+                  <div style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: '#4a8fa8', lineHeight: 1.7, borderTop: '1px solid #0a2235' }}>
                     {result.summary}
-                  </p>
+                  </div>
                 )}
-              </>
+              </div>
             )}
 
             {/* PRESENTATIONS TAB — human-readable summaries of each team's work */}
