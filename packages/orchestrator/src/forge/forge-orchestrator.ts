@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeDomain } from '@arena/shared';
+import { randomUUID } from 'crypto';
+import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { extractJson } from '../utils/extract-json.js';
 
@@ -19,6 +20,8 @@ export interface ForgeInput {
   synthesis: { synthesis: string; perCriterion: Array<{ criterionId: string; teamId: string; rationale: string }> } | null;
   winner: { teamId: string; model: string };
   deliverables: Array<{ teamId: string; files: { path: string; content: string }[] }>;
+  source: ForgeSource;          // 'winner' | 'loser' | 'synthesis'
+  sourceTeamId?: string;        // which team's deliverables to use
 }
 
 interface ArtifactSpec {
@@ -549,8 +552,8 @@ Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}`;
 
 // ─── User prompt builder ──────────────────────────────────────────────────────
 
-function buildForgeUserPrompt(input: ForgeInput): string {
-  const { brief, presentations, synthesis, winner, deliverables } = input;
+function buildForgeUserPrompt(input: ForgeInput, primaryDeliverables: Array<{ teamId: string; files: { path: string; content: string }[] }>, synthesisContext: string): string {
+  const { brief, presentations, synthesis, winner } = input;
   const sections: string[] = [];
 
   sections.push(`# Original Brief\n\n**Title:** ${brief.title}\n**Problem:** ${brief.problem}\n**Constraints:** ${brief.constraints.join(', ')}`);
@@ -572,31 +575,36 @@ function buildForgeUserPrompt(input: ForgeInput): string {
     sections.push(`# Other Team Presentations\n${otherPres.map((p) => `## ${p.teamId} (${p.model})\n**Approach:** ${p.approach}\n**Key Insight:** ${p.keyInsight}`).join('\n\n')}`);
   }
 
-  if (synthesis) {
+  if (synthesis && !synthesisContext) {
     sections.push(`# Synthesis (Best of All Teams)\n\n${synthesis.synthesis}`);
     if (synthesis.perCriterion.length > 0) {
       sections.push(`## Per-Criterion Winners\n${synthesis.perCriterion.map((pc) => `- **${pc.criterionId}**: ${pc.teamId} — ${pc.rationale}`).join('\n')}`);
     }
   }
 
-  const winnerDeliverables = deliverables.find((d) => d.teamId === winner.teamId);
-  if (winnerDeliverables && winnerDeliverables.files.length > 0) {
-    const MAX_TOTAL_BYTES = 40_000;
-    let totalBytes = 0;
-    const fileParts: string[] = [];
-    for (const f of winnerDeliverables.files) {
-      if (totalBytes >= MAX_TOTAL_BYTES) {
-        fileParts.push(`\n... (${winnerDeliverables.files.length - fileParts.length} more files omitted for size)`);
-        break;
+  if (synthesisContext) {
+    sections.push(`# Synthesis (Primary Context)${synthesisContext}`);
+  }
+
+  for (const teamDels of primaryDeliverables) {
+    if (teamDels.files.length > 0) {
+      const MAX_TOTAL_BYTES = 40_000;
+      let totalBytes = 0;
+      const fileParts: string[] = [];
+      for (const f of teamDels.files) {
+        if (totalBytes >= MAX_TOTAL_BYTES) {
+          fileParts.push(`\n... (${teamDels.files.length - fileParts.length} more files omitted for size)`);
+          break;
+        }
+        const budget = MAX_TOTAL_BYTES - totalBytes;
+        const content = f.content.length > Math.min(6000, budget)
+          ? f.content.slice(0, Math.min(6000, budget)) + '\n... [truncated]'
+          : f.content;
+        totalBytes += content.length;
+        fileParts.push(`### ${f.path}\n\`\`\`\n${content}\n\`\`\``);
       }
-      const budget = MAX_TOTAL_BYTES - totalBytes;
-      const content = f.content.length > Math.min(6000, budget)
-        ? f.content.slice(0, Math.min(6000, budget)) + '\n... [truncated]'
-        : f.content;
-      totalBytes += content.length;
-      fileParts.push(`### ${f.path}\n\`\`\`\n${content}\n\`\`\``);
+      sections.push(`# Deliverables (${teamDels.teamId})\n\n${fileParts.join('\n\n')}`);
     }
-    sections.push(`# Winning Team Deliverables\n\n${fileParts.join('\n\n')}`);
   }
 
   return sections.join('\n\n---\n\n');
@@ -645,8 +653,17 @@ function runClaude(prompt: string, systemPrompt: string, timeoutMs = 120_000): P
 
 // ─── Main forge orchestrator ──────────────────────────────────────────────────
 
-export async function runForge(input: ForgeInput, competitionId: string): Promise<ForgeOutput> {
-  const userPrompt = buildForgeUserPrompt(input);
+export async function runForge(input: ForgeInput, competitionId: string): Promise<ForgeRun> {
+  // Select primary deliverables based on source
+  const primaryDeliverables = input.source === 'synthesis'
+    ? input.deliverables  // all teams as background
+    : input.deliverables.filter(d => d.teamId === input.sourceTeamId);
+
+  const synthesisContext = input.source === 'synthesis' && input.synthesis
+    ? `\n\n## Synthesis\n${input.synthesis.synthesis}`
+    : '';
+
+  const userPrompt = buildForgeUserPrompt(input, primaryDeliverables, synthesisContext);
 
   // Step 1: select domain artifacts (short timeout — fallback available)
   const { domain, types: selectedTypes } = await selectDomainArtifacts(input.brief);
@@ -688,6 +705,9 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
   try {
     const artifacts = await Promise.all(allSpecs.map(generateArtifact));
     return {
+      id: randomUUID(),
+      source: input.source,
+      sourceTeamId: input.sourceTeamId,
       forgeModel: FORGE_MODEL_LABEL,
       artifacts,
       generatedAt: new Date().toISOString(),

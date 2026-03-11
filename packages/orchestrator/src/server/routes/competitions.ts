@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import archiver from 'archiver';
 import { briefSchema, CompetitionFormat, CompetitionState } from '@arena/shared';
-import type { Team, TeamPresentation, ForgeOutput, Brief, Deliverable } from '@arena/shared';
+import type { Team, TeamPresentation, ForgeOutput, ForgeRun, ForgeSource, Brief, Deliverable } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
@@ -154,95 +154,84 @@ const synthesisInProgress = new Set<string>();
 // POST /competitions/:id/forge — trigger forge generation
 competitionsRouter.post('/:id/forge', requireApiKey, async (req: Request, res: Response) => {
   const id = String(req.params.id);
+  const source: ForgeSource = req.body?.source ?? 'winner';
+
+  if (!['winner', 'loser', 'synthesis'].includes(source)) {
+    res.status(400).json({ error: 'source must be winner, loser, or synthesis' });
+    return;
+  }
 
   if (forgingInProgress.has(id)) {
-    res.status(409).json({ error: 'Forge is already in progress for this competition' });
+    res.status(409).json({ error: 'Forge already in progress' });
     return;
   }
 
   const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
-  if (!comp) {
-    res.status(404).json({ error: 'Competition not found' });
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
+  if (!result) { res.status(409).json({ error: 'No results found' }); return; }
+
+  // Allow forging from COMPLETE or FORGE_COMPLETE state
+  if (comp.state !== CompetitionState.COMPLETE && comp.state !== CompetitionState.FORGE_COMPLETE) {
+    res.status(409).json({ error: `Cannot forge in ${comp.state} state` });
     return;
   }
 
-  // If already forged, return existing (check before state gate)
-  if (result?.forge) {
-    res.json({ forge: result.forge, alreadyForged: true });
+  if (source === 'synthesis' && !result.synthesis) {
+    res.status(409).json({ error: 'No synthesis available — run synthesis first' });
     return;
   }
 
-  // Must be in COMPLETE state to forge
-  if (comp.state !== CompetitionState.COMPLETE) {
-    res.status(409).json({ error: `Cannot forge — competition is in ${comp.state} state (must be COMPLETE)` });
-    return;
-  }
-
-  if (!result) {
-    res.status(409).json({ error: 'No results found for this competition' });
-    return;
-  }
-
-  // Determine winning team
   const teams = (comp.teams as Team[]) ?? [];
+  // StoredResult has `winner: string | null` (not `winnerId`) — but getResult returns DB row with winnerId
   const winnerId = result.winnerId;
-  const winnerTeam = teams.find((t) => t.id === winnerId) ?? teams[0];
-  if (!winnerTeam) {
-    res.status(409).json({ error: 'No teams found in competition data' });
-    return;
-  }
+  const winnerTeam = teams.find(t => t.id === winnerId) ?? teams[0];
+  const loserTeam = teams.find(t => t.id !== winnerId) ?? teams[1];
 
-  // Mark as forging (in-memory + DB)
+  const sourceTeam = source === 'winner' ? winnerTeam
+    : source === 'loser' ? loserTeam
+    : undefined;
+
   forgingInProgress.add(id);
   await repo.updateState(id, CompetitionState.FORGING);
 
-  // Build forge input
   const forgeInput: ForgeInput = {
     brief: comp.brief as ForgeInput['brief'],
     presentations: (result.presentations as TeamPresentation[]) ?? [],
     synthesis: result.synthesis as ForgeInput['synthesis'],
     winner: { teamId: winnerTeam.id, model: winnerTeam.model },
     deliverables: (result.deliverables as ForgeInput['deliverables']) ?? [],
+    source,
+    sourceTeamId: sourceTeam?.id,
   };
 
-  // Run forge asynchronously — return immediately
   runForge(forgeInput, id)
-    .then(async (forgeOutput) => {
-      await repo.saveForge(id, forgeOutput);
+    .then(async (forgeRun) => {
+      await repo.appendForgeRun(id, forgeRun);
       await repo.updateState(id, CompetitionState.FORGE_COMPLETE);
-      console.log(`[arena] forge complete for ${id} — ${forgeOutput.artifacts.length} artifacts`);
+      console.log(`[arena] forge run complete for ${id} — source: ${source}`);
     })
     .catch(async (err: Error) => {
       console.error(`[arena] forge failed for ${id}:`, err.message);
       await repo.updateState(id, CompetitionState.COMPLETE).catch(console.error);
     })
-    .finally(() => {
-      forgingInProgress.delete(id);
-    });
+    .finally(() => forgingInProgress.delete(id));
 
-  res.status(202).json({ ok: true, message: 'Forge started' });
+  res.status(202).json({ ok: true, message: 'Forge started', source });
 });
 
 // GET /competitions/:id/forge — get forge results
 competitionsRouter.get('/:id/forge', async (req: Request, res: Response) => {
   const id = String(req.params.id);
-
   const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
-  if (!comp) {
-    res.status(404).json({ error: 'Competition not found' });
-    return;
-  }
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
 
-  if (!result?.forge) {
-    if (comp.state === CompetitionState.FORGING) {
-      res.json({ status: 'forging', forge: null });
-      return;
-    }
-    res.status(404).json({ error: 'No forge results found' });
-    return;
-  }
+  const runs = (result?.forge as ForgeRun[] | null) ?? [];
+  const inProgress = forgingInProgress.has(id);
 
-  res.json({ status: 'complete', forge: result.forge as unknown });
+  res.json({
+    status: inProgress ? 'forging' : runs.length > 0 ? 'complete' : 'idle',
+    runs,
+  });
 });
 
 // GET /competitions/:id/forge/progress — per-artifact progress during forging
