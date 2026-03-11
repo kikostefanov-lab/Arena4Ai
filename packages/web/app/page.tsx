@@ -211,46 +211,32 @@ export default function GalleryPage() {
 
         {/* Hero Header */}
         <div style={{
-          marginBottom: '2.5rem',
-          padding: '1.75rem 0',
+          marginBottom: '2rem',
+          padding: '1.5rem 0',
           borderBottom: '1px solid #0a2235',
         }}>
-          {/* Top label */}
-          <div style={{
-            fontSize: '0.58rem',
-            color: '#00f0ff',
-            letterSpacing: '4px',
-            textTransform: 'uppercase',
-            marginBottom: '1rem',
-            fontWeight: 700,
-          }}>
-            ◆ Tournament Lobby
-          </div>
+          {/* Single flex row: [label+title+stats] [nav] */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '2rem' }}>
 
-          {/* Title row + nav */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1.5rem' }}>
-            {/* Left: title + subtitle */}
-            <div style={{ flexShrink: 0 }}>
+            {/* Left: label, title, stats */}
+            <div>
+              <div style={{
+                fontSize: '0.55rem', color: '#00f0ff', letterSpacing: '4px',
+                textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem',
+              }}>
+                ◆ Tournament Lobby
+              </div>
               <h1 style={{
-                fontSize: '2.2rem',
-                fontWeight: 800,
-                lineHeight: 1,
-                margin: 0,
+                fontSize: '2rem', fontWeight: 800, lineHeight: 1, margin: 0,
                 background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                 fontFamily: "var(--font-orbitron), 'SF Mono', monospace",
               }}>
                 Arena4Ai
               </h1>
               <div style={{
-                marginTop: '0.5rem',
-                fontSize: '0.68rem',
-                color: '#4a8fa8',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                flexWrap: 'wrap',
+                marginTop: '0.4rem', fontSize: '0.65rem', color: '#4a8fa8',
+                display: 'flex', alignItems: 'center', gap: '0.45rem',
               }}>
                 {!loading && !error && competitions.length > 0 ? (
                   <>
@@ -271,20 +257,19 @@ export default function GalleryPage() {
                   <>
                     <span style={{ color: '#0e3050' }}>·</span>
                     <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-                      color: apiOnline ? '#22c55e' : '#ef4444',
-                      fontSize: '0.62rem', fontWeight: 600,
+                      display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                      color: apiOnline ? '#22c55e' : '#ef4444', fontWeight: 600,
                     }}>
-                      <span style={{ fontSize: '0.55rem' }}>●</span>
-                      {apiOnline ? 'API' : 'API offline'}
+                      <span>●</span>
+                      {apiOnline ? 'API online' : 'API offline'}
                     </span>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Right: nav buttons */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+            {/* Right: nav */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
               {([
                 { href: '/briefs', label: 'Briefs' },
                 { href: '/analytics', label: 'Analytics' },
@@ -296,9 +281,9 @@ export default function GalleryPage() {
                   href={href}
                   className="nav-link"
                   style={{
-                    fontSize: '0.65rem', color: '#7cc6db', padding: '0.5rem 1rem',
+                    fontSize: '0.65rem', color: '#7cc6db', padding: '0.45rem 0.85rem',
                     border: '1px solid #0a2235', borderRadius: '5px', textDecoration: 'none',
-                    letterSpacing: '0.5px', fontWeight: 600, whiteSpace: 'nowrap',
+                    fontWeight: 600, whiteSpace: 'nowrap',
                     display: 'inline-flex', alignItems: 'center',
                   }}
                 >
@@ -309,11 +294,10 @@ export default function GalleryPage() {
                 href="/competitions/new"
                 className="new-comp-btn"
                 style={{
-                  fontSize: '0.7rem', fontWeight: 700, padding: '0.5rem 1.25rem',
+                  fontSize: '0.7rem', fontWeight: 700, padding: '0.45rem 1.1rem',
                   background: '#00f0ff', color: '#000408', borderRadius: '5px',
-                  textDecoration: 'none', letterSpacing: '0.5px',
-                  display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                  whiteSpace: 'nowrap',
+                  textDecoration: 'none', display: 'inline-flex', alignItems: 'center',
+                  gap: '0.3rem', whiteSpace: 'nowrap',
                 }}
               >
                 ⚔ New Battle
