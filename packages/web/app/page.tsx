@@ -159,55 +159,6 @@ export default function GalleryPage() {
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
       color: '#c8eef8',
     }}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        @keyframes liveBorder {
-          0%, 100% { border-color: rgba(0,240,255,0.6); }
-          50% { border-color: rgba(0,240,255,0.25); }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .arena-card {
-          transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-        }
-        .arena-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 24px rgba(0,240,255,0.15);
-        }
-        .delete-btn {
-          transition: color 0.15s ease, background 0.15s ease;
-        }
-        .delete-btn:hover {
-          color: #ef4444 !important;
-          background: rgba(239,68,68,0.1) !important;
-        }
-        .replay-link {
-          transition: color 0.15s ease;
-        }
-        .replay-link:hover {
-          color: #00f0ff !important;
-        }
-        .nav-link {
-          transition: color 0.15s ease, border-color 0.15s ease;
-        }
-        .nav-link:hover {
-          color: #c8eef8 !important;
-          border-color: #0e3050 !important;
-        }
-        .new-comp-btn {
-          transition: background 0.15s ease, transform 0.1s ease;
-        }
-        .new-comp-btn:hover {
-          background: #33f5ff !important;
-          transform: translateY(-1px);
-        }
-      `}</style>
-
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Hero Header */}

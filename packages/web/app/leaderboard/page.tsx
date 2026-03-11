@@ -103,38 +103,6 @@ export default function LeaderboardPage() {
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
       color: '#c8eef8',
     }}>
-      <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.5; }
-        }
-        .lb-row {
-          transition: background 0.15s ease, border-color 0.15s ease;
-        }
-        .lb-row:hover {
-          background: rgba(10,34,53,0.6) !important;
-          border-color: #0e3050 !important;
-        }
-        .nav-link {
-          transition: color 0.15s ease, border-color 0.15s ease;
-        }
-        .nav-link:hover {
-          color: #c8eef8 !important;
-          border-color: #0e3050 !important;
-        }
-        .new-comp-btn {
-          transition: background 0.15s ease, transform 0.1s ease;
-        }
-        .new-comp-btn:hover {
-          background: #33f5ff !important;
-          transform: translateY(-1px);
-        }
-      `}</style>
-
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Hero Header */}
