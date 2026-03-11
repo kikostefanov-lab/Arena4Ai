@@ -10,7 +10,7 @@ export const briefsRouter = Router();
 // Resolve repo root: go up from src/server/routes/ → src/server/ → src/ → packages/orchestrator/ → packages/ → repo root
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..', '..', '..');
+const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..', '..');
 const BRIEFS_DIR = join(REPO_ROOT, 'briefs');
 
 interface BriefYaml {
