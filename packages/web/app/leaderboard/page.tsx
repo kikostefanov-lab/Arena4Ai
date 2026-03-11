@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getModelColor } from '../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, ACCENT_GOLD, ACCENT_SILVER, ACCENT_BRONZE, KICKER_STYLE, TEXT_MUTED } from '../../lib/design-tokens';
 
 interface LeaderboardEntry {
   rank: number;
@@ -58,10 +58,11 @@ function WinRateBar({ winRate, color }: { winRate: number; color: string }) {
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  const gold   = rank === 1 ? { bg: 'rgba(234,179,8,0.15)',  color: '#eab308', border: 'rgba(234,179,8,0.4)' }   : null;
-  const silver = rank === 2 ? { bg: 'rgba(148,163,184,0.15)', color: '#94a3b8', border: 'rgba(148,163,184,0.4)' } : null;
-  const bronze = rank === 3 ? { bg: 'rgba(180,120,60,0.15)', color: '#b47c3c', border: 'rgba(180,120,60,0.4)' }  : null;
-  const style  = gold ?? silver ?? bronze ?? { bg: 'rgba(10,34,53,0.5)', color: '#1e4a5a', border: '#0a2235' };
+  const gold   = rank === 1 ? { bg: `${ACCENT_GOLD}26`,   color: ACCENT_GOLD,   border: `${ACCENT_GOLD}66` }   : null;
+  const silver = rank === 2 ? { bg: `${ACCENT_SILVER}26`, color: ACCENT_SILVER, border: `${ACCENT_SILVER}66` } : null;
+  const bronze = rank === 3 ? { bg: `${ACCENT_BRONZE}26`, color: ACCENT_BRONZE, border: `${ACCENT_BRONZE}66` }  : null;
+  const rankColor = rank === 1 ? ACCENT_GOLD : rank === 2 ? ACCENT_SILVER : rank === 3 ? ACCENT_BRONZE : TEXT_MUTED;
+  const style  = gold ?? silver ?? bronze ?? { bg: 'rgba(10,34,53,0.5)', color: rankColor, border: '#0a2235' };
   const medal  = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
 
   return (
@@ -100,7 +101,7 @@ export default function LeaderboardPage() {
     <div style={{
       minHeight: '100vh',
       background: '#000408',
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
@@ -113,14 +114,7 @@ export default function LeaderboardPage() {
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
-              <div style={{
-                fontSize: '0.6rem',
-                color: '#00f0ff',
-                letterSpacing: '4px',
-                textTransform: 'uppercase',
-                marginBottom: '0.6rem',
-                fontWeight: 700,
-              }}>
+              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.6rem' }}>
                 ◆ Model Rankings
               </div>
               <h1 style={{
@@ -128,6 +122,7 @@ export default function LeaderboardPage() {
                 fontWeight: 800,
                 lineHeight: 1.05,
                 margin: 0,
+                fontFamily: MONOSPACE_FONT,
                 background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #00f0ff 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',

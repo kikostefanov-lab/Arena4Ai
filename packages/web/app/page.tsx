@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getModelColor, getStateStyle, FORMAT_BADGES } from '../lib/design-tokens';
+import { getModelColor, getStateStyle, FORMAT_BADGES, MONOSPACE_FONT, HOVER_DARK, HOVER_TEXT, KICKER_STYLE } from '../lib/design-tokens';
 import { formatTimeLimit } from '../lib/format';
 
 interface TournamentSummary {
@@ -156,7 +156,7 @@ export default function GalleryPage() {
     <div style={{
       minHeight: '100vh',
       background: '#000408',
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
@@ -172,17 +172,14 @@ export default function GalleryPage() {
 
             {/* Left: label, title, stats */}
             <div>
-              <div style={{
-                fontSize: '0.55rem', color: '#00f0ff', letterSpacing: '4px',
-                textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.35rem',
-              }}>
+              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.35rem' }}>
                 ◆ Tournament Lobby
               </div>
               <h1 style={{
                 fontSize: '2rem', fontWeight: 800, lineHeight: 1, margin: 0,
                 background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                fontFamily: "var(--font-orbitron), 'SF Mono', monospace",
+                fontFamily: MONOSPACE_FONT,
               }}>
                 Arena4Ai
               </h1>
@@ -545,7 +542,7 @@ export default function GalleryPage() {
                         {isRunning && (
                           <span style={{
                             fontSize: '0.5rem', fontWeight: 800, padding: '0.1rem 0.45rem',
-                            borderRadius: '3px', letterSpacing: '2px',
+                            borderRadius: '3px', letterSpacing: '2px', textTransform: 'uppercase',
                             background: 'rgba(0,240,255,0.2)', color: '#00f0ff',
                             animation: 'pulse 1.5s ease-in-out infinite',
                             display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
@@ -697,7 +694,7 @@ export default function GalleryPage() {
         <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid #0a2235' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ fontSize: '0.58rem', color: '#00f0ff', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.3rem' }}>
+              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.3rem' }}>
                 ◆ Tournaments
               </div>
               <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#c8eef8' }}>
