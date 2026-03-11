@@ -1,6 +1,6 @@
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 20px rgba(249,115,22,0.3), 0 0 40px rgba(249,115,22,0.1); }
-  50% { box-shadow: 0 0 30px rgba(249,115,22,0.5), 0 0 60px rgba(249,115,22,0.2); }
+  0%, 100% { box-shadow: 0 0 20px rgba(0,240,255,0.3), 0 0 40px rgba(0,240,255,0.1); }
+  50% { box-shadow: 0 0 30px rgba(0,240,255,0.5), 0 0 60px rgba(0,240,255,0.2); }
 }
 @keyframes spin {
   from { transform: rotate(0deg); }
@@ -17,35 +17,35 @@
 .arena-input {
   width: 100%;
   box-sizing: border-box;
-  background: #0d1520;
-  border: 1px solid #1e2d45;
+  background: #010810;
+  border: 1px solid #0a2235;
   border-radius: 6px;
   padding: 0.55rem 0.85rem;
-  color: #e2e8f0;
+  color: #c8eef8;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
   font-size: 0.72rem;
   outline: none;
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .arena-input:focus {
-  border-color: #f97316;
-  box-shadow: 0 0 0 3px rgba(249,115,22,0.15), 0 0 12px rgba(249,115,22,0.1);
+  border-color: #00f0ff;
+  box-shadow: 0 0 0 3px rgba(0,240,255,0.15), 0 0 12px rgba(0,240,255,0.1);
 }
 .arena-input::placeholder {
-  color: #2d4060;
+  color: #0e3050;
 }
 .format-card {
   cursor: pointer;
   border-radius: 10px;
   padding: 1rem 1.1rem;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1.5px solid #1e2d45;
-  background: #111827;
+  border: 1.5px solid #0a2235;
+  background: #050f1e;
   position: relative;
   overflow: hidden;
 }
 .format-card:hover {
-  border-color: #2d4060;
+  border-color: #0e3050;
   transform: translateY(-1px);
 }
 .format-card.active {
@@ -56,13 +56,13 @@
   border-radius: 10px;
   padding: 1rem;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1.5px solid #1e2d45;
-  background: #111827;
+  border: 1.5px solid #0a2235;
+  background: #050f1e;
   text-align: center;
   position: relative;
 }
 .model-card:hover {
-  border-color: #2d4060;
+  border-color: #0e3050;
   transform: translateY(-1px);
 }
 .model-card.active {
@@ -81,15 +81,15 @@
   opacity: 0.85;
 }
 .criterion-card {
-  background: #111827;
-  border: 1px solid #1e2d45;
+  background: #050f1e;
+  border: 1px solid #0a2235;
   border-radius: 8px;
   padding: 1rem;
   transition: border-color 0.2s, box-shadow 0.2s;
   position: relative;
 }
 .criterion-card:hover {
-  border-color: #2d4060;
+  border-color: #0e3050;
 }
 .launch-btn {
   width: 100%;
@@ -117,34 +117,34 @@
   font-size: 0.6rem;
   padding: 0.25rem 0.6rem;
   border-radius: 20px;
-  border: 1px solid #1e2d45;
+  border: 1px solid #0a2235;
   background: transparent;
-  color: #8896ab;
+  color: #4a8fa8;
   cursor: pointer;
   font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
   transition: all 0.2s;
   white-space: nowrap;
 }
 .persona-chip:hover {
-  border-color: #2d4060;
-  color: #e2e8f0;
+  border-color: #0e3050;
+  color: #c8eef8;
 }
 .persona-chip.active {
-  background: rgba(249,115,22,0.12);
-  border-color: #f97316;
-  color: #f97316;
+  background: rgba(0,240,255,0.12);
+  border-color: #00f0ff;
+  color: #00f0ff;
 }
 .example-card {
   cursor: pointer;
-  background: #0d1520;
-  border: 1px solid #1e2d45;
+  background: #010810;
+  border: 1px solid #0a2235;
   border-radius: 8px;
   padding: 0.75rem;
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
   text-align: left;
 }
 .example-card:hover {
-  border-color: #f97316;
-  box-shadow: 0 0 12px rgba(249,115,22,0.2);
+  border-color: #00f0ff;
+  box-shadow: 0 0 12px rgba(0,240,255,0.2);
   transform: translateY(-1px);
 }

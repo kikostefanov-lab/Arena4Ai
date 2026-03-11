@@ -134,11 +134,13 @@ describe('CodexNormalizer', () => {
     expect(ev?.type).toBe(EventType.REASONING);
   });
 
-  it('suppresses tokens-used line', () => {
+  it('emits DONE event on tokens-used line', () => {
     const n = new CodexNormalizer(BASE);
     skipHeader(n);
     n.addLine('codex'); n.addLine('done');
-    expect(n.addLine('tokens used')).toBeNull();
+    const ev = n.addLine('tokens used');
+    expect(ev).not.toBeNull();
+    expect(ev?.type).toBe('REASONING');
     expect(n.addLine('9,065')).toBeNull();
   });
 

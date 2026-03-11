@@ -32,7 +32,7 @@ function WinRateBar({ winRate, color }: { winRate: number; color: string }) {
       <div style={{
         flex: 1,
         height: '6px',
-        background: '#1e2d45',
+        background: '#0a2235',
         borderRadius: '3px',
         overflow: 'hidden',
       }}>
@@ -61,7 +61,7 @@ function RankBadge({ rank }: { rank: number }) {
   const gold   = rank === 1 ? { bg: 'rgba(234,179,8,0.15)',  color: '#eab308', border: 'rgba(234,179,8,0.4)' }   : null;
   const silver = rank === 2 ? { bg: 'rgba(148,163,184,0.15)', color: '#94a3b8', border: 'rgba(148,163,184,0.4)' } : null;
   const bronze = rank === 3 ? { bg: 'rgba(180,120,60,0.15)', color: '#b47c3c', border: 'rgba(180,120,60,0.4)' }  : null;
-  const style  = gold ?? silver ?? bronze ?? { bg: 'rgba(30,45,69,0.5)', color: '#4a5568', border: '#1e2d45' };
+  const style  = gold ?? silver ?? bronze ?? { bg: 'rgba(10,34,53,0.5)', color: '#1e4a5a', border: '#0a2235' };
   const medal  = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
 
   return (
@@ -99,9 +99,9 @@ export default function LeaderboardPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0e17',
+      background: '#000408',
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-      color: '#e2e8f0',
+      color: '#c8eef8',
     }}>
       <style>{`
         @keyframes fadeIn {
@@ -116,21 +116,21 @@ export default function LeaderboardPage() {
           transition: background 0.15s ease, border-color 0.15s ease;
         }
         .lb-row:hover {
-          background: rgba(30,45,69,0.6) !important;
-          border-color: #2d4060 !important;
+          background: rgba(10,34,53,0.6) !important;
+          border-color: #0e3050 !important;
         }
         .nav-link {
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .nav-link:hover {
-          color: #e2e8f0 !important;
-          border-color: #2d4060 !important;
+          color: #c8eef8 !important;
+          border-color: #0e3050 !important;
         }
         .new-comp-btn {
           transition: background 0.15s ease, transform 0.1s ease;
         }
         .new-comp-btn:hover {
-          background: #fb923c !important;
+          background: #33f5ff !important;
           transform: translateY(-1px);
         }
       `}</style>
@@ -141,13 +141,13 @@ export default function LeaderboardPage() {
         <div style={{
           marginBottom: '2.5rem',
           padding: '2rem 0',
-          borderBottom: '1px solid #1e2d45',
+          borderBottom: '1px solid #0a2235',
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
               <div style={{
                 fontSize: '0.6rem',
-                color: '#f97316',
+                color: '#00f0ff',
                 letterSpacing: '4px',
                 textTransform: 'uppercase',
                 marginBottom: '0.6rem',
@@ -160,7 +160,7 @@ export default function LeaderboardPage() {
                 fontWeight: 800,
                 lineHeight: 1.05,
                 margin: 0,
-                background: 'linear-gradient(135deg, #e2e8f0 0%, #f97316 50%, #a855f7 100%)',
+                background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #00f0ff 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}>
@@ -169,7 +169,7 @@ export default function LeaderboardPage() {
               {!loading && !error && (
                 <p style={{
                   fontSize: '0.72rem',
-                  color: '#8896ab',
+                  color: '#4a8fa8',
                   marginTop: '0.6rem',
                 }}>
                   {entries.length > 0
@@ -183,8 +183,8 @@ export default function LeaderboardPage() {
                 href="/"
                 className="nav-link"
                 style={{
-                  fontSize: '0.62rem', color: '#8896ab', padding: '0.45rem 0.85rem',
-                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
+                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
                   letterSpacing: '1px', fontWeight: 600,
                 }}
               >
@@ -195,7 +195,7 @@ export default function LeaderboardPage() {
                 className="new-comp-btn"
                 style={{
                   fontSize: '0.62rem', fontWeight: 700, padding: '0.45rem 1.1rem',
-                  background: '#f97316', color: '#0a0e17', borderRadius: '4px',
+                  background: '#00f0ff', color: '#000408', borderRadius: '4px',
                   textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
                   display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
                 }}
@@ -210,7 +210,7 @@ export default function LeaderboardPage() {
         {loading && (
           <div style={{ textAlign: 'center', padding: '4rem 0' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem', animation: 'pulse 1.5s ease-in-out infinite' }}>🏆</div>
-            <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>Loading leaderboard…</p>
+            <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>Loading leaderboard…</p>
           </div>
         )}
 
@@ -231,15 +231,15 @@ export default function LeaderboardPage() {
           <div style={{
             textAlign: 'center',
             padding: '5rem 2rem',
-            background: '#111827',
-            border: '1px dashed #1e2d45',
+            background: '#050f1e',
+            border: '1px dashed #0a2235',
             borderRadius: '12px',
           }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏆</div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '0.5rem' }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
               No rankings yet
             </h2>
-            <p style={{ fontSize: '0.75rem', color: '#8896ab', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
               Rankings appear after competitions complete. Run a battle to get the first result on the board.
             </p>
             <Link
@@ -248,7 +248,7 @@ export default function LeaderboardPage() {
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
                 fontSize: '0.72rem', fontWeight: 700, padding: '0.6rem 1.5rem',
-                background: '#f97316', color: '#0a0e17', borderRadius: '6px',
+                background: '#00f0ff', color: '#000408', borderRadius: '6px',
                 textDecoration: 'none', letterSpacing: '0.5px',
               }}
             >
@@ -260,8 +260,8 @@ export default function LeaderboardPage() {
         {/* Leaderboard Table */}
         {!loading && !error && entries.length > 0 && (
           <div style={{
-            background: '#111827',
-            border: '1px solid #1e2d45',
+            background: '#050f1e',
+            border: '1px solid #0a2235',
             borderRadius: '10px',
             overflow: 'hidden',
             animation: 'fadeIn 0.3s ease both',
@@ -272,12 +272,12 @@ export default function LeaderboardPage() {
               gridTemplateColumns: '3.5rem 1fr 4rem 4rem 4rem 6rem 6rem 10rem',
               gap: '0',
               padding: '0.65rem 1.25rem',
-              background: '#0f1724',
-              borderBottom: '1px solid #1e2d45',
+              background: '#020b14',
+              borderBottom: '1px solid #0a2235',
               fontSize: '0.5rem',
               fontWeight: 700,
               letterSpacing: '1.5px',
-              color: '#4a5568',
+              color: '#1e4a5a',
               textTransform: 'uppercase',
               alignItems: 'center',
             }}>
@@ -305,7 +305,7 @@ export default function LeaderboardPage() {
                     gridTemplateColumns: '3.5rem 1fr 4rem 4rem 4rem 6rem 6rem 10rem',
                     gap: '0',
                     padding: '0.9rem 1.25rem',
-                    borderBottom: i < entries.length - 1 ? '1px solid #1a2440' : 'none',
+                    borderBottom: i < entries.length - 1 ? '1px solid #081520' : 'none',
                     background: 'transparent',
                     alignItems: 'center',
                     animation: `fadeIn 0.3s ease ${i * 0.06}s both`,
@@ -337,7 +337,7 @@ export default function LeaderboardPage() {
                       </div>
                       <div style={{
                         fontSize: '0.55rem',
-                        color: '#4a5568',
+                        color: '#1e4a5a',
                         marginTop: '0.1rem',
                         letterSpacing: '0.5px',
                       }}>
@@ -351,7 +351,7 @@ export default function LeaderboardPage() {
                     textAlign: 'center',
                     fontSize: '0.82rem',
                     fontWeight: 700,
-                    color: entry.wins > 0 ? '#22c55e' : '#2d4060',
+                    color: entry.wins > 0 ? '#0066ff' : '#0e3050',
                   }}>
                     {entry.wins}
                   </div>
@@ -361,7 +361,7 @@ export default function LeaderboardPage() {
                     textAlign: 'center',
                     fontSize: '0.82rem',
                     fontWeight: 700,
-                    color: entry.losses > 0 ? '#ef4444' : '#2d4060',
+                    color: entry.losses > 0 ? '#ef4444' : '#0e3050',
                   }}>
                     {entry.losses}
                   </div>
@@ -371,7 +371,7 @@ export default function LeaderboardPage() {
                     textAlign: 'center',
                     fontSize: '0.82rem',
                     fontWeight: 700,
-                    color: entry.ties > 0 ? '#eab308' : '#2d4060',
+                    color: entry.ties > 0 ? '#eab308' : '#0e3050',
                   }}>
                     {entry.ties}
                   </div>
@@ -380,7 +380,7 @@ export default function LeaderboardPage() {
                   <div style={{
                     textAlign: 'center',
                     fontSize: '0.78rem',
-                    color: '#8896ab',
+                    color: '#4a8fa8',
                     fontWeight: 600,
                   }}>
                     {entry.totalCompetitions}
@@ -391,7 +391,7 @@ export default function LeaderboardPage() {
                     textAlign: 'right',
                     fontSize: '0.78rem',
                     fontWeight: 600,
-                    color: '#e2e8f0',
+                    color: '#c8eef8',
                   }}>
                     {Math.round(entry.avgScore * 100)}%
                   </div>
@@ -411,7 +411,7 @@ export default function LeaderboardPage() {
           <p style={{
             marginTop: '1rem',
             fontSize: '0.58rem',
-            color: '#2d4060',
+            color: '#0e3050',
             textAlign: 'center',
             letterSpacing: '0.5px',
           }}>

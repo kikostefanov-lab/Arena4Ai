@@ -75,15 +75,15 @@ const FORMAT_PRESETS: Record<Format, {
 
 const FORMAT_META: Record<Format, { emoji: string; label: string; subtitle: string; color: string; glowColor: string }> = {
   SPRINT:      { emoji: '⚡', label: 'Sprint',       subtitle: 'Quick 15-min challenge',   color: '#06b6d4', glowColor: 'rgba(6,182,212,0.35)'   },
-  HACKATHON:   { emoji: '🔨', label: 'Hackathon',    subtitle: 'Deep 2-hour build',        color: '#a855f7', glowColor: 'rgba(168,85,247,0.35)'  },
-  RELAY_RACE:  { emoji: '🔄', label: 'Relay Race',   subtitle: 'Pass the baton',           color: '#22c55e', glowColor: 'rgba(34,197,94,0.35)'   },
+  HACKATHON:   { emoji: '🔨', label: 'Hackathon',    subtitle: 'Deep 2-hour build',        color: '#00f0ff', glowColor: 'rgba(168,85,247,0.35)'  },
+  RELAY_RACE:  { emoji: '🔄', label: 'Relay Race',   subtitle: 'Pass the baton',           color: '#0066ff', glowColor: 'rgba(34,197,94,0.35)'   },
   RED_VS_BLUE: { emoji: '⚔️', label: 'Red vs Blue',  subtitle: 'Attack & Defend',           color: '#ef4444', glowColor: 'rgba(239,68,68,0.35)'   },
 };
 
 const MODEL_META: Record<Model, { emoji: string; label: string; color: string; glowColor: string }> = {
-  claude: { emoji: '🟠', label: 'Claude', color: '#f97316', glowColor: 'rgba(249,115,22,0.4)'  },
-  codex:  { emoji: '🟢', label: 'Codex',  color: '#22c55e', glowColor: 'rgba(34,197,94,0.4)'   },
-  gemini: { emoji: '🟣', label: 'Gemini', color: '#a855f7', glowColor: 'rgba(168,85,247,0.4)'  },
+  claude: { emoji: '🟠', label: 'Claude', color: '#ff6600', glowColor: 'rgba(255,102,0,0.4)'  },
+  codex:  { emoji: '🟢', label: 'Codex',  color: '#0066ff', glowColor: 'rgba(0,102,255,0.4)'   },
+  gemini: { emoji: '🟣', label: 'Gemini', color: '#00f0ff', glowColor: 'rgba(0,240,255,0.4)'  },
 };
 
 const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'researcher', 'adversarial', 'defender', 'pioneer'];
@@ -110,7 +110,7 @@ function ExampleChips({
 
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem', marginTop: '0.4rem' }}>
-      <span style={{ fontSize: '0.5rem', color: '#4a5568', alignSelf: 'center', flexShrink: 0 }}>e.g.</span>
+      <span style={{ fontSize: '0.5rem', color: '#1e4a5a', alignSelf: 'center', flexShrink: 0 }}>e.g.</span>
       {available.map((ex) => (
         <button
           key={ex}
@@ -118,20 +118,20 @@ function ExampleChips({
           onClick={() => add(ex)}
           style={{
             fontSize: '0.5rem', padding: '0.15rem 0.45rem',
-            background: 'rgba(30,45,69,0.6)', color: '#8896ab',
-            border: '1px solid #1e2d45', borderRadius: '4px',
+            background: 'rgba(30,45,69,0.6)', color: '#4a8fa8',
+            border: '1px solid #0a2235', borderRadius: '4px',
             cursor: 'pointer', fontFamily: FONT,
             transition: 'all 0.15s',
           }}
           onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(249,115,22,0.1)';
-            (e.currentTarget as HTMLButtonElement).style.color = '#f97316';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(249,115,22,0.4)';
+            (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,240,255,0.1)';
+            (e.currentTarget as HTMLButtonElement).style.color = '#00f0ff';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = 'rgba(0,240,255,0.4)';
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLButtonElement).style.background = 'rgba(30,45,69,0.6)';
-            (e.currentTarget as HTMLButtonElement).style.color = '#8896ab';
-            (e.currentTarget as HTMLButtonElement).style.borderColor = '#1e2d45';
+            (e.currentTarget as HTMLButtonElement).style.color = '#4a8fa8';
+            (e.currentTarget as HTMLButtonElement).style.borderColor = '#0a2235';
           }}
         >
           + {ex}
@@ -542,8 +542,8 @@ export default function NewCompetitionPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0e17',
-      color: '#e2e8f0',
+      background: '#000408',
+      color: '#c8eef8',
       fontFamily: FONT,
     }}>
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 1.5rem 4rem' }}>
@@ -551,16 +551,16 @@ export default function NewCompetitionPage() {
         {/* Header */}
         <div style={{ marginBottom: '2.5rem', animation: 'fadeInUp 0.4s ease-out' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.2rem' }}>
-            <a href="/" style={{ fontSize: '0.6rem', color: '#f97316', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}>
+            <a href="/" style={{ fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}>
               {'◆'} ARENA
             </a>
-            <span style={{ color: '#1e2d45' }}>{'│'}</span>
-            <span style={{ fontSize: '0.6rem', color: '#8896ab', letterSpacing: '1px' }}>NEW COMPETITION</span>
+            <span style={{ color: '#0a2235' }}>{'│'}</span>
+            <span style={{ fontSize: '0.6rem', color: '#4a8fa8', letterSpacing: '1px' }}>NEW COMPETITION</span>
           </div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#e2e8f0', margin: 0, lineHeight: 1.2 }}>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8eef8', margin: 0, lineHeight: 1.2 }}>
             Launch a Competition
           </h1>
-          <p style={{ fontSize: '0.72rem', color: '#8896ab', marginTop: '0.5rem', lineHeight: 1.6 }}>
+          <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.5rem', lineHeight: 1.6 }}>
             Configure your brief, set scoring criteria, and choose your fighters.
           </p>
         </div>
@@ -589,7 +589,7 @@ export default function NewCompetitionPage() {
                 ? 'rgba(34,197,94,0.1)'
                 : 'rgba(239,68,68,0.1)',
               border: `1px solid ${importToast.type === 'success' ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.35)'}`,
-              color: importToast.type === 'success' ? '#22c55e' : '#ef4444',
+              color: importToast.type === 'success' ? '#0066ff' : '#ef4444',
             }}>
               {importToast.type === 'success' ? '✓' : '✗'} {importToast.message}
             </div>
@@ -600,8 +600,8 @@ export default function NewCompetitionPage() {
           ──────────────────────────────────────────────────────────────────── */}
           <div style={{
             marginBottom: '1rem',
-            background: '#111827',
-            border: examplePanelOpen ? '1px solid #2d4060' : '1px solid #1e2d45',
+            background: '#050f1e',
+            border: examplePanelOpen ? '1px solid #0e3050' : '1px solid #0a2235',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
@@ -620,22 +620,22 @@ export default function NewCompetitionPage() {
               onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
             >
               <span style={{
-                fontSize: '0.6rem', fontWeight: 700, color: '#f97316',
-                background: 'rgba(249,115,22,0.12)', border: '1px solid rgba(249,115,22,0.3)',
+                fontSize: '0.6rem', fontWeight: 700, color: '#00f0ff',
+                background: 'rgba(0,240,255,0.12)', border: '1px solid rgba(0,240,255,0.3)',
                 borderRadius: '4px', padding: '0.15rem 0.45rem', letterSpacing: '0.5px',
                 flexShrink: 0,
               }}>
                 QUICK START
               </span>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#e2e8f0' }}>
+                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#c8eef8' }}>
                   Quick start from example
                 </span>
-                <span style={{ fontSize: '0.6rem', color: '#4a5568', marginLeft: '0.5rem' }}>
+                <span style={{ fontSize: '0.6rem', color: '#1e4a5a', marginLeft: '0.5rem' }}>
                   load a pre-built brief as your starting point
                 </span>
               </div>
-              <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.7rem', color: '#1e4a5a', flexShrink: 0 }}>
                 {examplePanelOpen ? '▲' : '▾'}
               </span>
             </button>
@@ -650,20 +650,20 @@ export default function NewCompetitionPage() {
                   fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.5px',
                   padding: '0.3rem 0.75rem', borderRadius: '6px', cursor: 'pointer',
                   fontFamily: FONT, transition: 'all 0.2s',
-                  background: 'rgba(30,45,69,0.6)', color: '#8896ab',
-                  border: '1px solid #1e2d45',
+                  background: 'rgba(30,45,69,0.6)', color: '#4a8fa8',
+                  border: '1px solid #0a2235',
                 }}
                 onMouseEnter={(e) => {
                   const btn = e.currentTarget as HTMLButtonElement;
-                  btn.style.background = 'rgba(249,115,22,0.1)';
-                  btn.style.color = '#f97316';
-                  btn.style.borderColor = 'rgba(249,115,22,0.4)';
+                  btn.style.background = 'rgba(0,240,255,0.1)';
+                  btn.style.color = '#00f0ff';
+                  btn.style.borderColor = 'rgba(0,240,255,0.4)';
                 }}
                 onMouseLeave={(e) => {
                   const btn = e.currentTarget as HTMLButtonElement;
                   btn.style.background = 'rgba(30,45,69,0.6)';
-                  btn.style.color = '#8896ab';
-                  btn.style.borderColor = '#1e2d45';
+                  btn.style.color = '#4a8fa8';
+                  btn.style.borderColor = '#0a2235';
                 }}
               >
                 <span>📂</span>
@@ -694,17 +694,17 @@ export default function NewCompetitionPage() {
                         <span style={{
                           fontSize: '0.45rem', fontWeight: 800, letterSpacing: '0.05em',
                           padding: '0.15rem 0.35rem', borderRadius: '3px',
-                          background: brief.difficulty === 'SAVAGE' ? 'rgba(239,68,68,0.15)' : brief.difficulty === 'EXTREME' ? 'rgba(249,115,22,0.15)' : 'rgba(234,179,8,0.15)',
-                          color: brief.difficulty === 'SAVAGE' ? '#ef4444' : brief.difficulty === 'EXTREME' ? '#f97316' : '#eab308',
+                          background: brief.difficulty === 'SAVAGE' ? 'rgba(239,68,68,0.15)' : brief.difficulty === 'EXTREME' ? 'rgba(0,240,255,0.15)' : 'rgba(234,179,8,0.15)',
+                          color: brief.difficulty === 'SAVAGE' ? '#ef4444' : brief.difficulty === 'EXTREME' ? '#00f0ff' : '#eab308',
                         }}>{brief.difficulty}</span>
                       </div>
                       <div style={{
-                        fontSize: '0.65rem', fontWeight: 700, color: '#e2e8f0',
+                        fontSize: '0.65rem', fontWeight: 700, color: '#c8eef8',
                         marginBottom: '0.2rem', lineHeight: 1.2,
                       }}>
                         {brief.title}
                       </div>
-                      <div style={{ fontSize: '0.52rem', color: '#4a5568' }}>
+                      <div style={{ fontSize: '0.52rem', color: '#1e4a5a' }}>
                         {brief.category}
                       </div>
                     </button>
@@ -719,8 +719,8 @@ export default function NewCompetitionPage() {
           ──────────────────────────────────────────────────────────────────── */}
           <div style={{
             marginBottom: '1rem',
-            background: '#111827',
-            border: expandedStep === 1 ? '1px solid #2d4060' : '1px solid #1e2d45',
+            background: '#050f1e',
+            border: expandedStep === 1 ? '1px solid #0e3050' : '1px solid #0a2235',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
@@ -735,21 +735,21 @@ export default function NewCompetitionPage() {
                 width: '28px', height: '28px', borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.7rem', fontWeight: 800, flexShrink: 0,
-                background: step1Done ? 'rgba(34,197,94,0.15)' : 'rgba(249,115,22,0.15)',
-                color: step1Done ? '#22c55e' : '#f97316',
-                border: `1.5px solid ${step1Done ? '#22c55e' : '#f97316'}`,
+                background: step1Done ? 'rgba(34,197,94,0.15)' : 'rgba(0,240,255,0.15)',
+                color: step1Done ? '#0066ff' : '#00f0ff',
+                border: `1.5px solid ${step1Done ? '#0066ff' : '#00f0ff'}`,
               }}>
                 {step1Done ? '✓' : '1'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#c8eef8' }}>
                   {'📋'} Brief
                 </div>
-                <div style={{ fontSize: '0.6rem', color: '#8896ab', marginTop: '0.15rem' }}>
+                <div style={{ fontSize: '0.6rem', color: '#4a8fa8', marginTop: '0.15rem' }}>
                   Define the challenge
                 </div>
               </div>
-              <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.7rem', color: '#1e4a5a', flexShrink: 0 }}>
                 {expandedStep === 1 ? '▲' : '▼'}
               </span>
             </div>
@@ -764,7 +764,7 @@ export default function NewCompetitionPage() {
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{
                     display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.65rem',
+                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.65rem',
                   }}>
                     Format
                   </label>
@@ -782,22 +782,22 @@ export default function NewCompetitionPage() {
                           className={`format-card ${active ? 'active' : ''}`}
                           onClick={() => applyPreset(f)}
                           style={{
-                            border: `1.5px solid ${active ? meta.color : '#1e2d45'}`,
-                            background: active ? `linear-gradient(135deg, ${meta.color}10, ${meta.color}05)` : '#111827',
+                            border: `1.5px solid ${active ? meta.color : '#0a2235'}`,
+                            background: active ? `linear-gradient(135deg, ${meta.color}10, ${meta.color}05)` : '#050f1e',
                             boxShadow: active ? `0 0 20px ${meta.glowColor}, 0 4px 12px rgba(0,0,0,0.3)` : '0 2px 8px rgba(0,0,0,0.2)',
                           }}
                         >
                           <div style={{ fontSize: '1.4rem', marginBottom: '0.5rem' }}>{meta.emoji}</div>
                           <div style={{
                             fontSize: '0.68rem', fontWeight: 700,
-                            color: active ? meta.color : '#e2e8f0',
+                            color: active ? meta.color : '#c8eef8',
                             marginBottom: '0.25rem',
                           }}>
                             {meta.label}
                           </div>
                           <div style={{
                             fontSize: '0.55rem',
-                            color: active ? meta.color : '#4a5568',
+                            color: active ? meta.color : '#1e4a5a',
                             opacity: active ? 0.8 : 1,
                           }}>
                             {meta.subtitle}
@@ -812,7 +812,7 @@ export default function NewCompetitionPage() {
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{
                     display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                   }}>
                     Competition title
                   </label>
@@ -838,7 +838,7 @@ export default function NewCompetitionPage() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showGenerator ? '0.65rem' : 0 }}>
                       <label style={{
                         display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                        color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px',
+                        color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px',
                       }}>
                         Problem statement
                       </label>
@@ -847,14 +847,14 @@ export default function NewCompetitionPage() {
                         onClick={() => { setShowGenerator((v) => !v); setGenerateError(''); }}
                         style={{
                           fontSize: '0.58rem', fontWeight: 700, padding: '0.25rem 0.65rem',
-                          background: showGenerator ? 'rgba(249,115,22,0.2)' : 'rgba(249,115,22,0.08)',
-                          color: '#f97316',
-                          border: '1px solid rgba(249,115,22,0.5)',
+                          background: showGenerator ? 'rgba(0,240,255,0.2)' : 'rgba(0,240,255,0.08)',
+                          color: '#00f0ff',
+                          border: '1px solid rgba(0,240,255,0.5)',
                           borderRadius: '6px', cursor: 'pointer', fontFamily: FONT,
                           letterSpacing: '0.5px', transition: 'all 0.2s',
                         }}
-                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(249,115,22,0.2)'; }}
-                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = showGenerator ? 'rgba(249,115,22,0.2)' : 'rgba(249,115,22,0.08)'; }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = 'rgba(0,240,255,0.2)'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = showGenerator ? 'rgba(0,240,255,0.2)' : 'rgba(0,240,255,0.08)'; }}
                       >
                         {showGenerator ? '✕ Close' : '✨ Generate from idea'}
                       </button>
@@ -862,13 +862,13 @@ export default function NewCompetitionPage() {
 
                     {showGenerator && (
                       <div style={{
-                        background: '#0d1520',
-                        border: '1px solid rgba(249,115,22,0.35)',
+                        background: '#010810',
+                        border: '1px solid rgba(0,240,255,0.35)',
                         borderRadius: '8px',
                         padding: '0.85rem 1rem',
                         animation: 'slideDown 0.25s ease-out',
                       }}>
-                        <p style={{ fontSize: '0.6rem', color: '#8896ab', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
+                        <p style={{ fontSize: '0.6rem', color: '#4a8fa8', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
                           Describe your idea in plain English and AI will expand it into a full brief.
                         </p>
                         <textarea
@@ -887,17 +887,17 @@ export default function NewCompetitionPage() {
                             style={{
                               fontSize: '0.62rem', fontWeight: 800, padding: '0.4rem 1rem',
                               background: generating || ideaText.trim().length < 10
-                                ? 'rgba(249,115,22,0.2)'
-                                : 'rgba(249,115,22,0.85)',
-                              color: generating || ideaText.trim().length < 10 ? 'rgba(249,115,22,0.5)' : '#fff',
-                              border: '1px solid rgba(249,115,22,0.6)',
+                                ? 'rgba(0,240,255,0.2)'
+                                : 'rgba(0,240,255,0.85)',
+                              color: generating || ideaText.trim().length < 10 ? 'rgba(0,240,255,0.5)' : '#fff',
+                              border: '1px solid rgba(0,240,255,0.6)',
                               borderRadius: '6px', cursor: generating || ideaText.trim().length < 10 ? 'not-allowed' : 'pointer',
                               fontFamily: FONT, letterSpacing: '1px', transition: 'all 0.2s',
                             }}
                           >
                             {generating ? (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(249,115,22,0.4)', borderTopColor: '#f97316', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                                <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(0,240,255,0.4)', borderTopColor: '#00f0ff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
                                 Generating...
                               </span>
                             ) : 'Generate ✨'}
@@ -930,7 +930,7 @@ export default function NewCompetitionPage() {
                   <div>
                     <label style={{
                       display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                      color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                      color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                     }}>
                       Constraints (one per line)
                     </label>
@@ -957,7 +957,7 @@ export default function NewCompetitionPage() {
                   <div>
                     <label style={{
                       display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                      color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                      color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                     }}>
                       Deliverables (one per line)
                     </label>
@@ -987,7 +987,7 @@ export default function NewCompetitionPage() {
                 <div>
                   <label style={{
                     display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                   }}>
                     Time limit (minutes)
                   </label>
@@ -1006,8 +1006,8 @@ export default function NewCompetitionPage() {
                     onClick={() => toggleStep(2)}
                     style={{
                       fontSize: '0.62rem', fontWeight: 700, padding: '0.4rem 1rem',
-                      background: 'rgba(249,115,22,0.12)', color: '#f97316',
-                      border: '1px solid #f97316', borderRadius: '6px',
+                      background: 'rgba(0,240,255,0.12)', color: '#00f0ff',
+                      border: '1px solid #00f0ff', borderRadius: '6px',
                       cursor: 'pointer', fontFamily: FONT, letterSpacing: '1px',
                       transition: 'all 0.2s',
                     }}
@@ -1024,8 +1024,8 @@ export default function NewCompetitionPage() {
           ──────────────────────────────────────────────────────────────────── */}
           <div style={{
             marginBottom: '1rem',
-            background: '#111827',
-            border: expandedStep === 2 ? '1px solid #2d4060' : '1px solid #1e2d45',
+            background: '#050f1e',
+            border: expandedStep === 2 ? '1px solid #0e3050' : '1px solid #0a2235',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
@@ -1041,20 +1041,20 @@ export default function NewCompetitionPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.7rem', fontWeight: 800, flexShrink: 0,
                 background: step2Done ? 'rgba(34,197,94,0.15)' : 'rgba(234,179,8,0.12)',
-                color: step2Done ? '#22c55e' : '#eab308',
-                border: `1.5px solid ${step2Done ? '#22c55e' : '#eab308'}`,
+                color: step2Done ? '#0066ff' : '#eab308',
+                border: `1.5px solid ${step2Done ? '#0066ff' : '#eab308'}`,
               }}>
                 {step2Done ? '✓' : '2'}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#c8eef8' }}>
                   {'⚖️'} Rubric
                 </div>
-                <div style={{ fontSize: '0.6rem', color: '#8896ab', marginTop: '0.15rem' }}>
+                <div style={{ fontSize: '0.6rem', color: '#4a8fa8', marginTop: '0.15rem' }}>
                   Set scoring criteria
                 </div>
               </div>
-              <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.7rem', color: '#1e4a5a', flexShrink: 0 }}>
                 {expandedStep === 2 ? '▲' : '▼'}
               </span>
             </div>
@@ -1071,12 +1071,12 @@ export default function NewCompetitionPage() {
                       <div style={{
                         position: 'absolute', top: '0.65rem', left: '-0.5px',
                         width: '3px', height: '24px', borderRadius: '0 3px 3px 0',
-                        background: '#f97316', opacity: 0.6,
+                        background: '#00f0ff', opacity: 0.6,
                       }} />
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
                         <span style={{
-                          fontSize: '0.58rem', fontWeight: 800, color: '#f97316',
-                          background: 'rgba(249,115,22,0.12)', borderRadius: '4px',
+                          fontSize: '0.58rem', fontWeight: 800, color: '#00f0ff',
+                          background: 'rgba(0,240,255,0.12)', borderRadius: '4px',
                           padding: '0.15rem 0.45rem', letterSpacing: '0.5px',
                         }}>
                           #{idx + 1}
@@ -1085,13 +1085,13 @@ export default function NewCompetitionPage() {
                           <button
                             type="button" onClick={() => removeCriterion(idx)}
                             style={{
-                              marginLeft: 'auto', fontSize: '0.58rem', color: '#4a5568',
+                              marginLeft: 'auto', fontSize: '0.58rem', color: '#1e4a5a',
                               background: 'none', border: 'none', cursor: 'pointer',
                               padding: '0.25rem 0.4rem', fontFamily: FONT,
                               transition: 'color 0.15s', borderRadius: '4px',
                             }}
                             onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#ef4444'; }}
-                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#4a5568'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#1e4a5a'; }}
                           >
                             {'✕'} remove
                           </button>
@@ -1101,7 +1101,7 @@ export default function NewCompetitionPage() {
                         <div>
                           <label style={{
                             display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                            color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
+                            color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
                           }}>ID</label>
                           <input
                             className="arena-input"
@@ -1114,7 +1114,7 @@ export default function NewCompetitionPage() {
                         <div>
                           <label style={{
                             display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                            color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
+                            color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
                           }}>Max</label>
                           <input
                             className="arena-input"
@@ -1125,7 +1125,7 @@ export default function NewCompetitionPage() {
                         <div>
                           <label style={{
                             display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                            color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
+                            color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
                           }}>Weight %</label>
                           <input
                             className="arena-input"
@@ -1137,7 +1137,7 @@ export default function NewCompetitionPage() {
                       <div>
                         <label style={{
                           display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                          color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
+                          color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.3rem',
                         }}>Description</label>
                         <input
                           className="arena-input"
@@ -1159,14 +1159,14 @@ export default function NewCompetitionPage() {
                 <button
                   type="button" onClick={addCriterion}
                   style={{
-                    fontSize: '0.62rem', fontWeight: 600, color: '#8896ab', background: 'none',
-                    border: '1px dashed #1e2d45', borderRadius: '8px',
+                    fontSize: '0.62rem', fontWeight: 600, color: '#4a8fa8', background: 'none',
+                    border: '1px dashed #0a2235', borderRadius: '8px',
                     padding: '0.5rem 0.85rem', cursor: 'pointer', fontFamily: FONT,
                     transition: 'border-color 0.15s, color 0.15s', marginBottom: '1.25rem',
                     width: '100%',
                   }}
-                  onMouseEnter={(e) => { const b = e.currentTarget; b.style.borderColor = '#f97316'; b.style.color = '#f97316'; }}
-                  onMouseLeave={(e) => { const b = e.currentTarget; b.style.borderColor = '#1e2d45'; b.style.color = '#8896ab'; }}
+                  onMouseEnter={(e) => { const b = e.currentTarget; b.style.borderColor = '#00f0ff'; b.style.color = '#00f0ff'; }}
+                  onMouseLeave={(e) => { const b = e.currentTarget; b.style.borderColor = '#0a2235'; b.style.color = '#4a8fa8'; }}
                 >
                   + Add criterion
                 </button>
@@ -1175,10 +1175,10 @@ export default function NewCompetitionPage() {
                 <div style={{ marginBottom: '1rem' }}>
                   <label style={{
                     display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                   }}>
                     Expected output
-                    <span style={{ color: '#4a5568', fontWeight: 400, marginLeft: '0.5rem', textTransform: 'none', letterSpacing: '0' }}>
+                    <span style={{ color: '#1e4a5a', fontWeight: 400, marginLeft: '0.5rem', textTransform: 'none', letterSpacing: '0' }}>
                       optional -- enables automated correctness scoring
                     </span>
                   </label>
@@ -1197,8 +1197,8 @@ export default function NewCompetitionPage() {
                     onClick={() => toggleStep(3)}
                     style={{
                       fontSize: '0.62rem', fontWeight: 700, padding: '0.4rem 1rem',
-                      background: 'rgba(249,115,22,0.12)', color: '#f97316',
-                      border: '1px solid #f97316', borderRadius: '6px',
+                      background: 'rgba(0,240,255,0.12)', color: '#00f0ff',
+                      border: '1px solid #00f0ff', borderRadius: '6px',
                       cursor: 'pointer', fontFamily: FONT, letterSpacing: '1px',
                       transition: 'all 0.2s',
                     }}
@@ -1215,8 +1215,8 @@ export default function NewCompetitionPage() {
           ──────────────────────────────────────────────────────────────────── */}
           <div style={{
             marginBottom: '2rem',
-            background: '#111827',
-            border: expandedStep === 3 ? '1px solid #2d4060' : '1px solid #1e2d45',
+            background: '#050f1e',
+            border: expandedStep === 3 ? '1px solid #0e3050' : '1px solid #0a2235',
             borderRadius: '12px',
             overflow: 'hidden',
             transition: 'border-color 0.2s',
@@ -1232,20 +1232,20 @@ export default function NewCompetitionPage() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: '0.7rem', fontWeight: 800, flexShrink: 0,
                 background: 'rgba(168,85,247,0.12)',
-                color: '#a855f7',
-                border: '1.5px solid #a855f7',
+                color: '#00f0ff',
+                border: '1.5px solid #00f0ff',
               }}>
                 3
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0' }}>
+                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#c8eef8' }}>
                   {'🤖'} Agents
                 </div>
-                <div style={{ fontSize: '0.6rem', color: '#8896ab', marginTop: '0.15rem' }}>
+                <div style={{ fontSize: '0.6rem', color: '#4a8fa8', marginTop: '0.15rem' }}>
                   Choose your fighters
                 </div>
               </div>
-              <span style={{ fontSize: '0.7rem', color: '#4a5568', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.7rem', color: '#1e4a5a', flexShrink: 0 }}>
                 {expandedStep === 3 ? '▲' : '▼'}
               </span>
             </div>
@@ -1258,8 +1258,8 @@ export default function NewCompetitionPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1rem' }}>
                   {teams.map((team, i) => {
                     const agentLabel = String.fromCharCode(65 + i);
-                    const agentColors = ['#3b82f6', '#a855f7', '#22c55e', '#f97316'];
-                    const agentColor = agentColors[i] ?? '#8896ab';
+                    const agentColors = ['#3b82f6', '#00f0ff', '#0066ff', '#00f0ff'];
+                    const agentColor = agentColors[i] ?? '#4a8fa8';
                     return (
                       <div key={team.id} style={{ position: 'relative' }}>
                         <div style={{
@@ -1279,7 +1279,7 @@ export default function NewCompetitionPage() {
                               type="button"
                               onClick={() => setTeams((prev) => prev.filter((_, idx) => idx !== i))}
                               style={{
-                                background: 'none', border: 'none', color: '#4a5568',
+                                background: 'none', border: 'none', color: '#1e4a5a',
                                 cursor: 'pointer', fontSize: '0.75rem', padding: '0.1rem 0.3rem',
                                 lineHeight: 1,
                               }}
@@ -1301,15 +1301,15 @@ export default function NewCompetitionPage() {
                                 className={`model-card ${active ? 'active' : ''}`}
                                 onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, model: m } : t))}
                                 style={{
-                                  border: `1px solid ${active ? meta.color : '#1e2d45'}`,
+                                  border: `1px solid ${active ? meta.color : '#0a2235'}`,
                                   boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
-                                  background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#111827',
+                                  background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#050f1e',
                                 }}
                               >
                                 <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{meta.emoji}</div>
                                 <div style={{
                                   fontSize: '0.62rem', fontWeight: 700,
-                                  color: active ? meta.color : '#8896ab',
+                                  color: active ? meta.color : '#4a8fa8',
                                 }}>
                                   {meta.label}
                                 </div>
@@ -1321,7 +1321,7 @@ export default function NewCompetitionPage() {
                         {/* Persona */}
                         <label style={{
                           display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                          color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                          color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                         }}>
                           Persona
                         </label>
@@ -1361,9 +1361,9 @@ export default function NewCompetitionPage() {
                       fontSize: '0.6rem', fontWeight: 700, letterSpacing: '1px',
                       padding: '0.4rem 0.85rem',
                       background: 'none',
-                      border: '1px dashed #1e2d45',
+                      border: '1px dashed #0a2235',
                       borderRadius: '6px',
-                      color: teams.length >= 4 ? '#1e2d45' : '#8896ab',
+                      color: teams.length >= 4 ? '#0a2235' : '#4a8fa8',
                       cursor: teams.length >= 4 ? 'not-allowed' : 'pointer',
                       fontFamily: FONT,
                     }}
@@ -1375,14 +1375,14 @@ export default function NewCompetitionPage() {
                 {/* Matchup preview */}
                 <div style={{
                   marginTop: '0.5rem', padding: '0.85rem 1rem',
-                  background: '#0d1520', borderRadius: '8px',
-                  border: '1px solid #1e2d45',
+                  background: '#010810', borderRadius: '8px',
+                  border: '1px solid #0a2235',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   gap: '0.75rem', flexWrap: 'wrap',
                 }}>
                   {teams.map((team, i) => (
                     <>
-                      {i > 0 && <span key={`vs-${i}`} style={{ fontSize: '0.8rem', color: '#4a5568', fontWeight: 800 }}>vs</span>}
+                      {i > 0 && <span key={`vs-${i}`} style={{ fontSize: '0.8rem', color: '#1e4a5a', fontWeight: 800 }}>vs</span>}
                       <span key={team.id} style={{ fontSize: '0.72rem', fontWeight: 700, color: MODEL_META[team.model].color }}>
                         {MODEL_META[team.model].emoji} {team.model}:{team.persona}
                       </span>
@@ -1414,12 +1414,12 @@ export default function NewCompetitionPage() {
             disabled={submitting || hasErrors}
             style={{
               background: submitting
-                ? '#1a2234'
-                : 'linear-gradient(135deg, #f97316, #ea580c, #f97316)',
-              color: submitting ? '#4a5568' : '#0a0e17',
+                ? '#081520'
+                : 'linear-gradient(135deg, #00f0ff, #ea580c, #00f0ff)',
+              color: submitting ? '#1e4a5a' : '#000408',
               boxShadow: submitting
                 ? 'none'
-                : '0 0 20px rgba(249,115,22,0.3), 0 4px 12px rgba(0,0,0,0.3)',
+                : '0 0 20px rgba(0,240,255,0.3), 0 4px 12px rgba(0,0,0,0.3)',
               opacity: hasErrors ? 0.5 : 1,
             }}
           >
@@ -1427,7 +1427,7 @@ export default function NewCompetitionPage() {
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}>
                 <span style={{
                   display: 'inline-block', width: '14px', height: '14px',
-                  border: '2px solid #4a5568', borderTopColor: 'transparent',
+                  border: '2px solid #1e4a5a', borderTopColor: 'transparent',
                   borderRadius: '50%', animation: 'spin 0.8s linear infinite',
                 }} />
                 Launching...

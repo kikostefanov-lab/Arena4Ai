@@ -147,9 +147,9 @@ export default function GalleryPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0e17',
+      background: '#000408',
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-      color: '#e2e8f0',
+      color: '#c8eef8',
     }}>
       <style>{`
         @keyframes pulse {
@@ -157,8 +157,8 @@ export default function GalleryPage() {
           50% { opacity: 0.5; }
         }
         @keyframes liveBorder {
-          0%, 100% { border-color: rgba(249,115,22,0.6); }
-          50% { border-color: rgba(249,115,22,0.25); }
+          0%, 100% { border-color: rgba(0,240,255,0.6); }
+          50% { border-color: rgba(0,240,255,0.25); }
         }
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(8px); }
@@ -169,7 +169,7 @@ export default function GalleryPage() {
         }
         .arena-card:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+          box-shadow: 0 4px 24px rgba(0,240,255,0.15);
         }
         .delete-btn {
           transition: color 0.15s ease, background 0.15s ease;
@@ -182,20 +182,20 @@ export default function GalleryPage() {
           transition: color 0.15s ease;
         }
         .replay-link:hover {
-          color: #f97316 !important;
+          color: #00f0ff !important;
         }
         .nav-link {
           transition: color 0.15s ease, border-color 0.15s ease;
         }
         .nav-link:hover {
-          color: #e2e8f0 !important;
-          border-color: #2d4060 !important;
+          color: #c8eef8 !important;
+          border-color: #0e3050 !important;
         }
         .new-comp-btn {
           transition: background 0.15s ease, transform 0.1s ease;
         }
         .new-comp-btn:hover {
-          background: #fb923c !important;
+          background: #33f5ff !important;
           transform: translateY(-1px);
         }
       `}</style>
@@ -206,13 +206,13 @@ export default function GalleryPage() {
         <div style={{
           marginBottom: '2.5rem',
           padding: '2rem 0',
-          borderBottom: '1px solid #1e2d45',
+          borderBottom: '1px solid #0a2235',
         }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div>
               <div style={{
                 fontSize: '0.6rem',
-                color: '#f97316',
+                color: '#00f0ff',
                 letterSpacing: '4px',
                 textTransform: 'uppercase',
                 marginBottom: '0.6rem',
@@ -225,35 +225,36 @@ export default function GalleryPage() {
                 fontWeight: 800,
                 lineHeight: 1.05,
                 margin: 0,
-                background: 'linear-gradient(135deg, #e2e8f0 0%, #f97316 50%, #a855f7 100%)',
+                background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
+                fontFamily: "var(--font-orbitron), 'SF Mono', monospace",
               }}>
-                Agent Arena
+                Arena4Ai
               </h1>
               {!loading && !error && competitions.length > 0 && (
                 <p style={{
                   fontSize: '0.72rem',
-                  color: '#8896ab',
+                  color: '#4a8fa8',
                   marginTop: '0.6rem',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.6rem',
                 }}>
                   <span>{completedCount} battle{completedCount !== 1 ? 's' : ''} completed</span>
-                  <span style={{ color: '#1e2d45' }}>·</span>
+                  <span style={{ color: '#0a2235' }}>·</span>
                   <span>{uniqueModels.size} agent{uniqueModels.size !== 1 ? 's' : ''} competing</span>
                   {runningCount > 0 && (
                     <>
-                      <span style={{ color: '#1e2d45' }}>·</span>
-                      <span style={{ color: '#f97316', fontWeight: 700 }}>{runningCount} live now</span>
+                      <span style={{ color: '#0a2235' }}>·</span>
+                      <span style={{ color: '#00f0ff', fontWeight: 700 }}>{runningCount} live now</span>
                     </>
                   )}
                 </p>
               )}
               {!loading && !error && competitions.length === 0 && (
-                <p style={{ fontSize: '0.72rem', color: '#8896ab', marginTop: '0.6rem' }}>
-                  AI agent head-to-head competitions
+                <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.6rem' }}>
+                  AI agent competitions — powered by Arena4Ai
                 </p>
               )}
             </div>
@@ -273,8 +274,8 @@ export default function GalleryPage() {
                 href="/analytics"
                 className="nav-link"
                 style={{
-                  fontSize: '0.62rem', color: '#8896ab', padding: '0.45rem 0.85rem',
-                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
+                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
                   letterSpacing: '1px', fontWeight: 600,
                 }}
               >
@@ -284,8 +285,8 @@ export default function GalleryPage() {
                 href="/leaderboard"
                 className="nav-link"
                 style={{
-                  fontSize: '0.62rem', color: '#8896ab', padding: '0.45rem 0.85rem',
-                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
+                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
                   letterSpacing: '1px', fontWeight: 600,
                 }}
               >
@@ -295,8 +296,8 @@ export default function GalleryPage() {
                 href="/tournaments/new"
                 className="nav-link"
                 style={{
-                  fontSize: '0.62rem', color: '#8896ab', padding: '0.45rem 0.85rem',
-                  border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
+                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
                   letterSpacing: '1px', fontWeight: 600,
                 }}
               >
@@ -307,7 +308,7 @@ export default function GalleryPage() {
                 className="new-comp-btn"
                 style={{
                   fontSize: '0.62rem', fontWeight: 700, padding: '0.45rem 1.1rem',
-                  background: '#f97316', color: '#0a0e17', borderRadius: '4px',
+                  background: '#00f0ff', color: '#000408', borderRadius: '4px',
                   textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
                   display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
                 }}
@@ -339,10 +340,10 @@ export default function GalleryPage() {
                 placeholder="Search competitions..."
                 style={{
                   width: '100%',
-                  background: '#0a1628',
-                  border: '1px solid #1e2d45',
+                  background: '#010810',
+                  border: '1px solid #0a2235',
                   borderRadius: '6px',
-                  color: '#e2e8f0',
+                  color: '#c8eef8',
                   fontSize: '0.72rem',
                   fontFamily: 'monospace',
                   padding: '0.5rem 2rem 0.5rem 2rem',
@@ -360,7 +361,7 @@ export default function GalleryPage() {
                     transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
-                    color: '#8896ab',
+                    color: '#4a8fa8',
                     cursor: 'pointer',
                     fontSize: '0.75rem',
                     lineHeight: 1,
@@ -373,15 +374,15 @@ export default function GalleryPage() {
               )}
             </div>
             {searchQuery.trim() && (
-              <p style={{ fontSize: '0.62rem', color: '#4a5568', margin: '0 0 0.15rem', fontFamily: 'monospace' }}>
+              <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: '0 0 0.15rem', fontFamily: 'monospace' }}>
                 Showing {filteredCompetitions.length} of {competitions.length} competition{competitions.length !== 1 ? 's' : ''}
               </p>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.55rem', color: '#4a5568', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>State</span>
+              <span style={{ fontSize: '0.55rem', color: '#1e4a5a', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>State</span>
               {(['ALL', 'LIVE', 'COMPLETE', 'FAILED', 'CANCELLED'] as const).map((s) => {
                 const active = stateFilter === s;
-                const style = s === 'ALL' ? { bg: '#1e2d45', color: '#8896ab' } : s === 'LIVE' ? { bg: 'rgba(249,115,22,0.2)', color: '#f97316' } : getStateStyle(s);
+                const style = s === 'ALL' ? { bg: '#0a2235', color: '#4a8fa8' } : s === 'LIVE' ? { bg: 'rgba(0,240,255,0.2)', color: '#00f0ff' } : getStateStyle(s);
                 return (
                   <button
                     key={s}
@@ -389,9 +390,9 @@ export default function GalleryPage() {
                     style={{
                       fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
                       borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
-                      border: `1px solid ${active ? 'transparent' : '#1e2d45'}`,
+                      border: `1px solid ${active ? 'transparent' : '#0a2235'}`,
                       background: active ? style.bg : 'transparent',
-                      color: active ? style.color : '#4a5568',
+                      color: active ? style.color : '#1e4a5a',
                       transition: 'all 0.15s ease',
                     }}
                   >
@@ -401,10 +402,10 @@ export default function GalleryPage() {
               })}
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.55rem', color: '#4a5568', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>Model</span>
+              <span style={{ fontSize: '0.55rem', color: '#1e4a5a', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>Model</span>
               {(['ALL', 'claude', 'codex', 'gemini'] as const).map((m) => {
                 const active = modelFilter === m;
-                const color = m === 'ALL' ? '#8896ab' : getModelColor(m);
+                const color = m === 'ALL' ? '#4a8fa8' : getModelColor(m);
                 return (
                   <button
                     key={m}
@@ -412,9 +413,9 @@ export default function GalleryPage() {
                     style={{
                       fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
                       borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
-                      border: `1px solid ${active ? 'transparent' : '#1e2d45'}`,
-                      background: active ? (m === 'ALL' ? '#1e2d45' : `${color}22`) : 'transparent',
-                      color: active ? color : '#4a5568',
+                      border: `1px solid ${active ? 'transparent' : '#0a2235'}`,
+                      background: active ? (m === 'ALL' ? '#0a2235' : `${color}22`) : 'transparent',
+                      color: active ? color : '#1e4a5a',
                       transition: 'all 0.15s ease',
                     }}
                   >
@@ -430,7 +431,7 @@ export default function GalleryPage() {
         {loading && (
           <div style={{ textAlign: 'center', padding: '4rem 0' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚔️</div>
-            <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>Loading competitions…</p>
+            <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>Loading competitions…</p>
           </div>
         )}
 
@@ -451,12 +452,12 @@ export default function GalleryPage() {
           <div style={{
             textAlign: 'center',
             padding: '3rem 2rem',
-            background: '#111827',
-            border: '1px dashed #1e2d45',
+            background: '#050f1e',
+            border: '1px dashed #0a2235',
             borderRadius: '8px',
             marginBottom: '0.65rem',
           }}>
-            <p style={{ fontSize: '0.75rem', color: '#8896ab' }}>No competitions match your filters.</p>
+            <p style={{ fontSize: '0.75rem', color: '#4a8fa8' }}>No competitions match your filters.</p>
           </div>
         )}
 
@@ -465,15 +466,15 @@ export default function GalleryPage() {
           <div style={{
             textAlign: 'center',
             padding: '5rem 2rem',
-            background: '#111827',
-            border: '1px dashed #1e2d45',
+            background: '#050f1e',
+            border: '1px dashed #0a2235',
             borderRadius: '12px',
           }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚔️</div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#e2e8f0', marginBottom: '0.5rem' }}>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
               No battles yet
             </h2>
-            <p style={{ fontSize: '0.75rem', color: '#8896ab', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
+            <p style={{ fontSize: '0.75rem', color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
               Pit two AI agents against each other in a head-to-head coding competition.
               Create your first battle to see who comes out on top.
             </p>
@@ -483,7 +484,7 @@ export default function GalleryPage() {
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
                 fontSize: '0.72rem', fontWeight: 700, padding: '0.6rem 1.5rem',
-                background: '#f97316', color: '#0a0e17', borderRadius: '6px',
+                background: '#00f0ff', color: '#000408', borderRadius: '6px',
                 textDecoration: 'none', letterSpacing: '0.5px',
               }}
             >
@@ -513,9 +514,9 @@ export default function GalleryPage() {
                   onMouseLeave={() => setHoveredId(null)}
                   style={{
                     background: isRunning
-                      ? 'linear-gradient(135deg, rgba(249,115,22,0.04) 0%, #111827 100%)'
-                      : '#111827',
-                    border: `1px solid ${isRunning ? 'rgba(249,115,22,0.5)' : isHovered ? '#2d4060' : '#1e2d45'}`,
+                      ? 'linear-gradient(135deg, rgba(0,240,255,0.04) 0%, #050f1e 100%)'
+                      : '#050f1e',
+                    border: `1px solid ${isRunning ? 'rgba(0,240,255,0.5)' : isHovered ? '#0e3050' : '#0a2235'}`,
                     borderRadius: '8px',
                     padding: '1rem 1.25rem',
                     cursor: 'pointer',
@@ -534,7 +535,7 @@ export default function GalleryPage() {
                       top: 0,
                       bottom: 0,
                       width: '3px',
-                      background: 'linear-gradient(180deg, #eab308, #f97316)',
+                      background: 'linear-gradient(180deg, #00f0ff, #0080ff)',
                     }} />
                   )}
 
@@ -546,7 +547,7 @@ export default function GalleryPage() {
                         <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>
                           {isRunning ? '⚔️' : isComplete ? '🏆' : isFailed ? '💥' : isCancelled ? '🚫' : '📋'}
                         </span>
-                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>
+                        <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c8eef8' }}>
                           {comp.brief?.title ?? comp.id}
                         </span>
                         {fmt && (
@@ -563,7 +564,7 @@ export default function GalleryPage() {
                           <span style={{
                             fontSize: '0.5rem', fontWeight: 800, padding: '0.1rem 0.45rem',
                             borderRadius: '3px', letterSpacing: '2px',
-                            background: 'rgba(249,115,22,0.2)', color: '#f97316',
+                            background: 'rgba(0,240,255,0.2)', color: '#00f0ff',
                             animation: 'pulse 1.5s ease-in-out infinite',
                             display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                           }}>
@@ -572,7 +573,7 @@ export default function GalleryPage() {
                               width: '5px',
                               height: '5px',
                               borderRadius: '50%',
-                              background: '#f97316',
+                              background: '#00f0ff',
                               animation: 'pulse 1s ease-in-out infinite',
                             }} />
                             LIVE
@@ -594,7 +595,7 @@ export default function GalleryPage() {
                           </span>
                         )}
                         {teamA && teamB && (
-                          <span style={{ color: '#4a5568', fontSize: '0.6rem', fontWeight: 700 }}>VS</span>
+                          <span style={{ color: '#1e4a5a', fontSize: '0.6rem', fontWeight: 700 }}>VS</span>
                         )}
                         {teamB && (
                           <span style={{
@@ -609,9 +610,9 @@ export default function GalleryPage() {
                         )}
                         {winnerTeam && (
                           <>
-                            <span style={{ color: '#2d3748' }}>·</span>
+                            <span style={{ color: '#0a2235' }}>·</span>
                             <span style={{
-                              color: '#eab308', fontSize: '0.6rem', fontWeight: 700,
+                              color: '#00f0ff', fontSize: '0.6rem', fontWeight: 700,
                               display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                             }}>
                               🏆 {teamLabel(winnerTeam)} wins
@@ -620,8 +621,8 @@ export default function GalleryPage() {
                         )}
                         {comp.brief?.timeLimitMs != null && (
                           <>
-                            <span style={{ color: '#2d3748' }}>·</span>
-                            <span style={{ color: '#4a5568', fontSize: '0.6rem' }}>
+                            <span style={{ color: '#0a2235' }}>·</span>
+                            <span style={{ color: '#1e4a5a', fontSize: '0.6rem' }}>
                               ⏱ {formatTimeLimit(comp.brief.timeLimitMs)}
                             </span>
                           </>
@@ -632,7 +633,7 @@ export default function GalleryPage() {
                     {/* Right section */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexShrink: 0 }}>
                       {(comp.startedAt || comp.completedAt) && (
-                        <span style={{ fontSize: '0.58rem', color: '#4a5568', whiteSpace: 'nowrap' }}>
+                        <span style={{ fontSize: '0.58rem', color: '#1e4a5a', whiteSpace: 'nowrap' }}>
                           {timeAgo(comp.completedAt ?? comp.startedAt)}
                         </span>
                       )}
@@ -657,7 +658,7 @@ export default function GalleryPage() {
                           onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.location.href = `/competitions/${comp.id}/replay`; }}
                           className="replay-link"
                           style={{
-                            fontSize: '0.58rem', color: '#8896ab', background: 'none', border: 'none',
+                            fontSize: '0.58rem', color: '#4a8fa8', background: 'none', border: 'none',
                             cursor: 'pointer', padding: 0, letterSpacing: '0.5px', whiteSpace: 'nowrap',
                             fontFamily: 'inherit',
                           }}
@@ -672,7 +673,7 @@ export default function GalleryPage() {
                           disabled={deleting === comp.id}
                           className="delete-btn"
                           style={{
-                            fontSize: '0.65rem', color: '#2d4060', background: 'none', border: 'none',
+                            fontSize: '0.65rem', color: '#0e3050', background: 'none', border: 'none',
                             cursor: 'pointer', padding: '0.15rem 0.3rem', borderRadius: '3px',
                             opacity: deleting === comp.id ? 0.4 : 1,
                           }}
@@ -689,13 +690,13 @@ export default function GalleryPage() {
         </div>
 
         {/* Tournaments Section */}
-        <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid #1e2d45' }}>
+        <div style={{ marginTop: '3rem', paddingTop: '2rem', borderTop: '1px solid #0a2235' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
             <div>
-              <div style={{ fontSize: '0.58rem', color: '#f97316', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.3rem' }}>
+              <div style={{ fontSize: '0.58rem', color: '#00f0ff', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.3rem' }}>
                 ◆ Tournaments
               </div>
-              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#e2e8f0' }}>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: '#c8eef8' }}>
                 Round-Robin Tournaments
               </h2>
             </div>
@@ -704,7 +705,7 @@ export default function GalleryPage() {
               className="new-comp-btn"
               style={{
                 fontSize: '0.6rem', fontWeight: 700, padding: '0.4rem 0.9rem',
-                background: '#f97316', color: '#0a0e17', borderRadius: '4px',
+                background: '#00f0ff', color: '#000408', borderRadius: '4px',
                 textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
                 display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
               }}
@@ -714,15 +715,15 @@ export default function GalleryPage() {
           </div>
 
           {tournamentsLoading && (
-            <p style={{ fontSize: '0.72rem', color: '#8896ab' }}>Loading tournaments…</p>
+            <p style={{ fontSize: '0.72rem', color: '#4a8fa8' }}>Loading tournaments…</p>
           )}
 
           {!tournamentsLoading && tournaments.length === 0 && (
             <div style={{
               padding: '2.5rem', textAlign: 'center',
-              background: '#111827', border: '1px dashed #1e2d45', borderRadius: '8px',
+              background: '#050f1e', border: '1px dashed #0a2235', borderRadius: '8px',
             }}>
-              <p style={{ fontSize: '0.72rem', color: '#4a5568', margin: 0 }}>
+              <p style={{ fontSize: '0.72rem', color: '#1e4a5a', margin: 0 }}>
                 No tournaments yet — start a round-robin to compare multiple agents head-to-head.
               </p>
             </div>
@@ -738,8 +739,8 @@ export default function GalleryPage() {
                     <div
                       className="arena-card"
                       style={{
-                        background: '#111827',
-                        border: `1px solid ${isRunning ? 'rgba(249,115,22,0.4)' : '#1e2d45'}`,
+                        background: '#050f1e',
+                        border: `1px solid ${isRunning ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
                         borderRadius: '8px',
                         padding: '0.85rem 1.1rem',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
@@ -747,14 +748,14 @@ export default function GalleryPage() {
                       }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#e2e8f0', marginBottom: '0.3rem' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#c8eef8', marginBottom: '0.3rem' }}>
                           {t.name || t.brief?.title || t.id}
                         </div>
-                        <div style={{ fontSize: '0.62rem', color: '#8896ab', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: '0.62rem', color: '#4a8fa8', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <span>{t.teams.length} teams</span>
-                          <span style={{ color: '#1e2d45' }}>·</span>
+                          <span style={{ color: '#0a2235' }}>·</span>
                           <span>{t.matchIds.length} match{t.matchIds.length !== 1 ? 'es' : ''}</span>
-                          <span style={{ color: '#1e2d45' }}>·</span>
+                          <span style={{ color: '#0a2235' }}>·</span>
                           <span>{t.teams.slice(0, 3).join(', ')}{t.teams.length > 3 ? ` +${t.teams.length - 3}` : ''}</span>
                         </div>
                       </div>
@@ -766,7 +767,7 @@ export default function GalleryPage() {
                         }}>
                           {t.state}
                         </span>
-                        <span style={{ fontSize: '0.6rem', color: '#8896ab' }}>View →</span>
+                        <span style={{ fontSize: '0.6rem', color: '#4a8fa8' }}>View →</span>
                       </div>
                     </div>
                   </Link>

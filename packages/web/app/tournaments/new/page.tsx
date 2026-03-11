@@ -149,11 +149,11 @@ export default function NewTournamentPage() {
 
   const inputStyle: React.CSSProperties = {
     width: '100%',
-    background: '#111827',
-    border: '1px solid #1e2d45',
+    background: '#050f1e',
+    border: '1px solid #0a2235',
     borderRadius: '6px',
     padding: '0.6rem 0.75rem',
-    color: '#e2e8f0',
+    color: '#c8eef8',
     fontSize: '0.78rem',
     fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
     outline: 'none',
@@ -163,7 +163,7 @@ export default function NewTournamentPage() {
   const labelStyle: React.CSSProperties = {
     display: 'block',
     fontSize: '0.6rem',
-    color: '#8896ab',
+    color: '#4a8fa8',
     letterSpacing: '1.5px',
     textTransform: 'uppercase',
     fontWeight: 700,
@@ -177,39 +177,39 @@ export default function NewTournamentPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0e17',
+      background: '#000408',
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-      color: '#e2e8f0',
+      color: '#c8eef8',
     }}>
       <style>{`
-        input:focus, textarea:focus, select:focus { border-color: #f97316 !important; }
+        input:focus, textarea:focus, select:focus { border-color: #00f0ff !important; }
         .team-card { transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease; }
         .team-card:hover { transform: translateY(-1px); }
         .submit-btn { transition: background 0.15s ease, transform 0.1s ease; }
-        .submit-btn:hover:not(:disabled) { background: #fb923c !important; transform: translateY(-1px); }
+        .submit-btn:hover:not(:disabled) { background: #33f5ff !important; transform: translateY(-1px); }
       `}</style>
 
       <div style={{ maxWidth: '680px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #1e2d45' }}>
+        <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: '0.6rem', color: '#f97316', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.4rem', fontWeight: 700 }}>
+              <div style={{ fontSize: '0.6rem', color: '#00f0ff', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.4rem', fontWeight: 700 }}>
                 ◆ New Tournament
               </div>
-              <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#e2e8f0' }}>
+              <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#c8eef8' }}>
                 Create Tournament
               </h1>
-              <p style={{ fontSize: '0.7rem', color: '#8896ab', marginTop: '0.35rem' }}>
+              <p style={{ fontSize: '0.7rem', color: '#4a8fa8', marginTop: '0.35rem' }}>
                 Round-robin: every selected team faces every other team once.
               </p>
             </div>
             <Link
               href="/"
               style={{
-                fontSize: '0.6rem', color: '#8896ab', padding: '0.4rem 0.8rem',
-                border: '1px solid #1e2d45', borderRadius: '4px', textDecoration: 'none',
+                fontSize: '0.6rem', color: '#4a8fa8', padding: '0.4rem 0.8rem',
+                border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
                 letterSpacing: '1px', fontWeight: 600,
               }}
             >
@@ -236,7 +236,7 @@ export default function NewTournamentPage() {
           <div style={sectionStyle}>
             <label style={labelStyle}>
               Teams{' '}
-              <span style={{ color: selectedTeams.length >= 2 && selectedTeams.length <= 8 ? '#22c55e' : '#ef4444' }}>
+              <span style={{ color: selectedTeams.length >= 2 && selectedTeams.length <= 8 ? '#0066ff' : '#ef4444' }}>
                 ({selectedTeams.length} selected — need 2–8)
               </span>
             </label>
@@ -254,9 +254,9 @@ export default function NewTournamentPage() {
                     style={{
                       padding: '0.65rem 0.85rem',
                       borderRadius: '6px',
-                      border: `2px solid ${selected ? color : '#1e2d45'}`,
-                      background: selected ? `${color}14` : '#111827',
-                      color: selected ? color : '#8896ab',
+                      border: `2px solid ${selected ? color : '#0a2235'}`,
+                      background: selected ? `${color}14` : '#050f1e',
+                      color: selected ? color : '#4a8fa8',
                       fontSize: '0.72rem',
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -282,9 +282,9 @@ export default function NewTournamentPage() {
                   style={{
                     padding: '0.65rem 0.85rem',
                     borderRadius: '6px',
-                    border: '2px dashed #1e2d45',
-                    background: '#111827',
-                    color: '#4a5568',
+                    border: '2px dashed #0a2235',
+                    background: '#050f1e',
+                    color: '#1e4a5a',
                     fontSize: '0.72rem',
                     fontWeight: 700,
                     cursor: 'pointer',
@@ -302,10 +302,10 @@ export default function NewTournamentPage() {
                 <div style={{
                   padding: '0.65rem 0.85rem',
                   borderRadius: '6px',
-                  border: '2px dashed #f97316',
-                  background: '#111827',
+                  border: '2px dashed #00f0ff',
+                  background: '#050f1e',
                 }}>
-                  <div style={{ fontSize: '0.55rem', color: '#f97316', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+                  <div style={{ fontSize: '0.55rem', color: '#00f0ff', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
                     custom team
                   </div>
                   <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.4rem' }}>
@@ -316,9 +316,9 @@ export default function NewTournamentPage() {
                         onClick={() => setCustomModel(m)}
                         style={{
                           fontSize: '0.55rem', padding: '0.2rem 0.4rem',
-                          border: `1px solid ${customModel === m ? getModelColor(m) : '#1e2d45'}`,
+                          border: `1px solid ${customModel === m ? getModelColor(m) : '#0a2235'}`,
                           background: customModel === m ? `${getModelColor(m)}20` : 'none',
-                          color: customModel === m ? getModelColor(m) : '#8896ab',
+                          color: customModel === m ? getModelColor(m) : '#4a8fa8',
                           borderRadius: '4px', cursor: 'pointer',
                           fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                           fontWeight: 700,
@@ -334,9 +334,9 @@ export default function NewTournamentPage() {
                     onChange={(e) => setCustomPersona(e.target.value)}
                     placeholder="persona..."
                     style={{
-                      width: '100%', background: '#0a0e17',
-                      border: '1px solid #1e2d45', borderRadius: '4px',
-                      padding: '0.25rem 0.4rem', color: '#e2e8f0',
+                      width: '100%', background: '#000408',
+                      border: '1px solid #0a2235', borderRadius: '4px',
+                      padding: '0.25rem 0.4rem', color: '#c8eef8',
                       fontSize: '0.65rem', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                       outline: 'none', boxSizing: 'border-box', marginBottom: '0.4rem',
                     }}
@@ -355,8 +355,8 @@ export default function NewTournamentPage() {
                       }}
                       style={{
                         fontSize: '0.55rem', padding: '0.25rem 0.6rem',
-                        background: customPersona.trim() ? '#f97316' : '#1e2d45',
-                        color: customPersona.trim() ? '#0a0e17' : '#4a5568',
+                        background: customPersona.trim() ? '#00f0ff' : '#0a2235',
+                        color: customPersona.trim() ? '#000408' : '#1e4a5a',
                         border: 'none', borderRadius: '4px',
                         cursor: customPersona.trim() ? 'pointer' : 'not-allowed',
                         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
@@ -370,8 +370,8 @@ export default function NewTournamentPage() {
                       onClick={() => { setShowCustomForm(false); setCustomPersona(''); setCustomModel('claude'); }}
                       style={{
                         fontSize: '0.55rem', padding: '0.25rem 0.6rem',
-                        background: 'none', color: '#4a5568',
-                        border: '1px solid #1e2d45', borderRadius: '4px',
+                        background: 'none', color: '#1e4a5a',
+                        border: '1px solid #0a2235', borderRadius: '4px',
                         cursor: 'pointer',
                         fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                       }}
@@ -387,9 +387,9 @@ export default function NewTournamentPage() {
           {/* Brief section header */}
           <div style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #1e2d45',
+            marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #0a2235',
           }}>
-            <span style={{ fontSize: '0.6rem', color: '#f97316', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700 }}>
+            <span style={{ fontSize: '0.6rem', color: '#00f0ff', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700 }}>
               Brief
             </span>
             <div style={{ position: 'relative' }}>
@@ -397,8 +397,8 @@ export default function NewTournamentPage() {
                 type="button"
                 onClick={() => setShowExamples((v) => !v)}
                 style={{
-                  fontSize: '0.6rem', color: '#8896ab', padding: '0.3rem 0.7rem',
-                  border: '1px solid #1e2d45', borderRadius: '4px', background: 'none',
+                  fontSize: '0.6rem', color: '#4a8fa8', padding: '0.3rem 0.7rem',
+                  border: '1px solid #0a2235', borderRadius: '4px', background: 'none',
                   cursor: 'pointer', fontFamily: "'SF Mono', 'Fira Code', monospace",
                   letterSpacing: '1px',
                 }}
@@ -408,7 +408,7 @@ export default function NewTournamentPage() {
               {showExamples && (
                 <div style={{
                   position: 'absolute', right: 0, top: '100%', marginTop: '4px',
-                  background: '#111827', border: '1px solid #2d4060', borderRadius: '6px',
+                  background: '#050f1e', border: '1px solid #0e3050', borderRadius: '6px',
                   zIndex: 10, minWidth: '180px', overflow: 'hidden',
                 }}>
                   {EXAMPLE_OPTIONS.map((b) => (
@@ -419,9 +419,9 @@ export default function NewTournamentPage() {
                       style={{
                         display: 'block', width: '100%', textAlign: 'left',
                         padding: '0.55rem 0.85rem', background: 'none', border: 'none',
-                        color: '#e2e8f0', fontSize: '0.72rem', cursor: 'pointer',
+                        color: '#c8eef8', fontSize: '0.72rem', cursor: 'pointer',
                         fontFamily: "'SF Mono', 'Fira Code', monospace",
-                        borderBottom: '1px solid #1e2d45',
+                        borderBottom: '1px solid #0a2235',
                       }}
                     >
                       {b.emoji} {b.title}
@@ -512,7 +512,7 @@ export default function NewTournamentPage() {
             <label style={labelStyle}>Rubric criteria</label>
             {criteria.map((c, i) => (
               <div key={i} style={{
-                background: '#111827', border: '1px solid #1e2d45', borderRadius: '6px',
+                background: '#050f1e', border: '1px solid #0a2235', borderRadius: '6px',
                 padding: '0.75rem', marginBottom: '0.5rem',
               }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.5rem', alignItems: 'center' }}>
@@ -524,7 +524,7 @@ export default function NewTournamentPage() {
                     style={{ ...inputStyle, marginBottom: 0 }}
                   />
                   <div>
-                    <span style={{ fontSize: '0.55rem', color: '#4a5568', display: 'block', marginBottom: '0.2rem' }}>MAX</span>
+                    <span style={{ fontSize: '0.55rem', color: '#1e4a5a', display: 'block', marginBottom: '0.2rem' }}>MAX</span>
                     <input
                       type="number"
                       value={c.maxScore}
@@ -534,7 +534,7 @@ export default function NewTournamentPage() {
                     />
                   </div>
                   <div>
-                    <span style={{ fontSize: '0.55rem', color: '#4a5568', display: 'block', marginBottom: '0.2rem' }}>WEIGHT %</span>
+                    <span style={{ fontSize: '0.55rem', color: '#1e4a5a', display: 'block', marginBottom: '0.2rem' }}>WEIGHT %</span>
                     <input
                       type="number"
                       value={Math.round(c.weight * 100)}
@@ -550,7 +550,7 @@ export default function NewTournamentPage() {
                       type="button"
                       onClick={() => removeCriterion(i)}
                       style={{
-                        background: 'none', border: 'none', color: '#4a5568',
+                        background: 'none', border: 'none', color: '#1e4a5a',
                         cursor: 'pointer', fontSize: '0.85rem', padding: '0.2rem',
                         marginTop: '1.2rem',
                       }}
@@ -565,8 +565,8 @@ export default function NewTournamentPage() {
               type="button"
               onClick={addCriterion}
               style={{
-                fontSize: '0.6rem', color: '#8896ab', padding: '0.35rem 0.75rem',
-                border: '1px dashed #1e2d45', borderRadius: '4px', background: 'none',
+                fontSize: '0.6rem', color: '#4a8fa8', padding: '0.35rem 0.75rem',
+                border: '1px dashed #0a2235', borderRadius: '4px', background: 'none',
                 cursor: 'pointer', fontFamily: "'SF Mono', 'Fira Code', monospace",
               }}
             >
@@ -592,8 +592,8 @@ export default function NewTournamentPage() {
             className="submit-btn"
             style={{
               width: '100%', padding: '0.85rem',
-              background: submitting ? '#6b3d17' : '#f97316',
-              color: '#0a0e17', border: 'none', borderRadius: '6px',
+              background: submitting ? '#003a4a' : '#00f0ff',
+              color: '#000408', border: 'none', borderRadius: '6px',
               fontSize: '0.72rem', fontWeight: 800, letterSpacing: '2px',
               textTransform: 'uppercase', cursor: submitting ? 'not-allowed' : 'pointer',
               fontFamily: "'SF Mono', 'Fira Code', monospace",

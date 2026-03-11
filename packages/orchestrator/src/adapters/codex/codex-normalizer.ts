@@ -30,11 +30,14 @@ const SEP_RE = /^-{4,}$/;
 // If Codex doesn't emit the expected separators within this many lines, give up
 // waiting and transition to suppressing (prompt-echo suppression) anyway.
 const HEADER_LINE_LIMIT = 80;
+// Max lines of exec output to show before suppressing the rest
+const EXEC_OUTPUT_MAX_LINES = 3;
 
 export class CodexNormalizer {
   private mode: Mode = 'header';
   private separatorCount = 0;
   private headerLineCount = 0;
+  private execOutputLineCount = 0;
   private ctx: NormalizeContext;
 
   constructor(ctx: NormalizeContext) {
@@ -70,9 +73,12 @@ export class CodexNormalizer {
     const lower = line.toLowerCase();
 
     if (lower === 'codex') { this.mode = 'reasoning'; return null; }
-    if (lower === 'exec') { this.mode = 'exec_cmd'; return null; }
+    if (lower === 'exec') { this.mode = 'exec_cmd'; this.execOutputLineCount = 0; return null; }
     if (lower === 'file update') { this.mode = 'file_update'; return null; }
-    if (lower.startsWith('tokens used')) { this.mode = 'skip'; return null; }
+    if (lower.startsWith('tokens used')) {
+      this.mode = 'skip';
+      return makeEvent(EventType.REASONING, { raw: { type: 'result', result: 'Completed.' } }, this.ctx);
+    }
 
     // ── Mode-specific parsing ─────────────────────────────────────────────
     switch (this.mode) {
@@ -90,7 +96,8 @@ export class CodexNormalizer {
       }
 
       case 'exec_output':
-        // Exec output lines go as REASONING (visible in feed)
+        // Show only the first few lines of exec output; suppress the rest
+        if (++this.execOutputLineCount > EXEC_OUTPUT_MAX_LINES) return null;
         return makeEvent(EventType.REASONING, { text: line }, this.ctx);
 
       case 'file_update': {

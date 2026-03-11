@@ -36,9 +36,9 @@ function parseAgentKey(key: string): { model: string; persona: string | null } {
 }
 
 const MODEL_COLORS: Record<string, string> = {
-  claude: '#f97316',
-  codex: '#22c55e',
-  gemini: '#a855f7',
+  claude: '#00f0ff',
+  codex: '#0066ff',
+  gemini: '#00f0ff',
 };
 
 const MODEL_ICONS: Record<string, string> = {
@@ -49,15 +49,15 @@ const MODEL_ICONS: Record<string, string> = {
 
 const FORMAT_BADGE_CONFIG: Record<string, { color: string; icon: string; label: string }> = {
   SPRINT:      { color: '#06b6d4', icon: '⚡',       label: 'SPRINT' },
-  HACKATHON:   { color: '#a855f7', icon: '🔨', label: 'HACKATHON' },
-  RELAY_RACE:  { color: '#22c55e', icon: '🔄', label: 'RELAY' },
+  HACKATHON:   { color: '#00f0ff', icon: '🔨', label: 'HACKATHON' },
+  RELAY_RACE:  { color: '#0066ff', icon: '🔄', label: 'RELAY' },
   RED_VS_BLUE: { color: '#ef4444', icon: '⚔️', label: 'RED×BLUE' },
 };
 
 function FormatBadge({ format }: { format: string | null }) {
-  if (!format) return <span style={{ color: '#2d4060' }}>—</span>;
+  if (!format) return <span style={{ color: '#0e3050' }}>—</span>;
   const cfg = FORMAT_BADGE_CONFIG[format];
-  const color = cfg?.color ?? '#8896ab';
+  const color = cfg?.color ?? '#4a8fa8';
   const icon = cfg?.icon ?? '';
   const label = cfg?.label ?? format;
   return (
@@ -82,7 +82,7 @@ function FormatBadge({ format }: { format: string | null }) {
 
 function getModelColorForKey(key: string): string {
   const base = key.split(':')[0]?.toLowerCase() ?? '';
-  return MODEL_COLORS[base] ?? '#8896ab';
+  return MODEL_COLORS[base] ?? '#4a8fa8';
 }
 
 function getModelIcon(key: string): string {
@@ -94,8 +94,8 @@ function h2hCellBg(wins: number, losses: number): string {
   const total = wins + losses;
   if (total === 0) return 'transparent';
   const ratio = wins / total;
-  if (ratio >= 0.7) return 'rgba(34,197,94,0.15)';
-  if (ratio >= 0.5) return 'rgba(34,197,94,0.07)';
+  if (ratio >= 0.7) return 'rgba(0,102,255,0.15)';
+  if (ratio >= 0.5) return 'rgba(0,102,255,0.07)';
   if (ratio >= 0.3) return 'rgba(239,68,68,0.07)';
   return 'rgba(239,68,68,0.15)';
 }
@@ -109,7 +109,7 @@ export default async function AnalyticsPage() {
     textAlign: 'left',
     padding: '0.6rem 1rem',
     fontSize: '0.55rem',
-    color: '#4a5568',
+    color: '#1e4a5a',
     textTransform: 'uppercase',
     letterSpacing: '1.5px',
     fontWeight: 700,
@@ -121,9 +121,9 @@ export default async function AnalyticsPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0a0e17',
+      background: '#000408',
       fontFamily: font,
-      color: '#e2e8f0',
+      color: '#c8eef8',
     }}>
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
@@ -134,25 +134,25 @@ export default async function AnalyticsPage() {
           justifyContent: 'space-between',
           marginBottom: '2.25rem',
           paddingBottom: '1.25rem',
-          borderBottom: '1px solid #1e2d45',
+          borderBottom: '1px solid #0a2235',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
             <a href="/" style={{
-              fontSize: '0.62rem', color: '#8896ab', textDecoration: 'none',
+              fontSize: '0.62rem', color: '#4a8fa8', textDecoration: 'none',
               letterSpacing: '0.5px', padding: '0.35rem 0.7rem',
-              border: '1px solid #1e2d45', borderRadius: '4px',
+              border: '1px solid #0a2235', borderRadius: '4px',
             }}>
               ← Gallery
             </a>
-            <span style={{ color: '#1e2d45' }}>│</span>
+            <span style={{ color: '#0a2235' }}>│</span>
             <div>
               <span style={{
-                fontSize: '0.6rem', color: '#f97316', fontWeight: 700,
+                fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700,
                 letterSpacing: '3px', textTransform: 'uppercase',
               }}>
                 📊 Analytics
               </span>
-              <div style={{ fontSize: '0.52rem', color: '#4a5568', marginTop: '0.15rem', letterSpacing: '1px' }}>
+              <div style={{ fontSize: '0.52rem', color: '#1e4a5a', marginTop: '0.15rem', letterSpacing: '1px' }}>
                 Performance dashboard
               </div>
             </div>
@@ -162,10 +162,10 @@ export default async function AnalyticsPage() {
         {!data ? (
           <div style={{
             textAlign: 'center', padding: '4rem 2rem',
-            background: '#111827', border: '1px solid #1e2d45', borderRadius: '8px',
+            background: '#050f1e', border: '1px solid #0a2235', borderRadius: '8px',
           }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
-            <p style={{ color: '#8896ab', fontSize: '0.75rem' }}>
+            <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>
               Could not reach orchestrator. Is it running?
             </p>
           </div>
@@ -180,13 +180,13 @@ export default async function AnalyticsPage() {
             }}>
               {[
                 { icon: '📊', label: 'Total Battles', value: data.totalCompetitions, accent: '#3b82f6' },
-                { icon: '✅', label: 'Completed', value: data.completedCompetitions, accent: '#22c55e' },
-                { icon: '⏱️', label: 'Avg Duration', value: formatDuration(data.avgDurationMs), accent: '#f97316' },
-                { icon: '🔬', label: 'Syntheses', value: data.synthesisCount, accent: '#a855f7' },
+                { icon: '✅', label: 'Completed', value: data.completedCompetitions, accent: '#0066ff' },
+                { icon: '⏱️', label: 'Avg Duration', value: formatDuration(data.avgDurationMs), accent: '#00f0ff' },
+                { icon: '🔬', label: 'Syntheses', value: data.synthesisCount, accent: '#00f0ff' },
               ].map(({ icon, label, value, accent }) => (
                 <div key={label} style={{
-                  background: '#111827',
-                  border: '1px solid #1e2d45',
+                  background: '#050f1e',
+                  border: '1px solid #0a2235',
                   borderLeft: `3px solid ${accent}`,
                   borderRadius: '6px',
                   padding: '1rem 1.1rem',
@@ -200,12 +200,12 @@ export default async function AnalyticsPage() {
                     {icon}
                   </div>
                   <div style={{
-                    fontSize: '0.52rem', color: '#8896ab', textTransform: 'uppercase',
+                    fontSize: '0.52rem', color: '#4a8fa8', textTransform: 'uppercase',
                     letterSpacing: '2px', marginBottom: '0.5rem', fontWeight: 700,
                   }}>
                     {label}
                   </div>
-                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#e2e8f0' }}>
+                  <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#c8eef8' }}>
                     {value}
                   </div>
                 </div>
@@ -214,33 +214,33 @@ export default async function AnalyticsPage() {
 
             {/* Section 2: Win Rate by Agent */}
             <div style={{
-              border: '1px solid #1e2d45',
+              border: '1px solid #0a2235',
               borderRadius: '8px',
               overflow: 'hidden',
               marginBottom: '2rem',
             }}>
               <div style={{
-                background: '#0d1520',
+                background: '#010810',
                 padding: '0.75rem 1rem',
-                borderBottom: '1px solid #1e2d45',
+                borderBottom: '1px solid #0a2235',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
               }}>
                 <span style={{
-                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  fontSize: '0.58rem', fontWeight: 700, color: '#4a8fa8',
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
                   🏆 Win Rate by Agent
                 </span>
-                <span style={{ fontSize: '0.5rem', color: '#4a5568', letterSpacing: '1px' }}>
+                <span style={{ fontSize: '0.5rem', color: '#1e4a5a', letterSpacing: '1px' }}>
                   model:persona
                 </span>
               </div>
 
               {data.byModel.length === 0 ? (
-                <div style={{ padding: '3rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
+                <div style={{ padding: '3rem', color: '#4a8fa8', fontSize: '0.75rem', textAlign: 'center' }}>
                   No completed competitions yet.
                 </div>
               ) : (() => {
@@ -249,7 +249,7 @@ export default async function AnalyticsPage() {
                 return (
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
                     <thead>
-                      <tr style={{ borderBottom: '1px solid #1e2d45' }}>
+                      <tr style={{ borderBottom: '1px solid #0a2235' }}>
                         <th style={{ ...thStyle, width: '2rem' }}>#</th>
                         <th style={thStyle}>Agent</th>
                         <th style={thRightStyle}>W</th>
@@ -266,10 +266,10 @@ export default async function AnalyticsPage() {
                         const isTop = stat.winRate === topWinRate && stat.winRate > 0;
                         return (
                           <tr key={stat.model} style={{
-                            borderBottom: '1px solid rgba(30,45,69,0.5)',
+                            borderBottom: '1px solid rgba(10,34,53,0.5)',
                             background: isTop ? 'rgba(234,179,8,0.04)' : 'transparent',
                           }}>
-                            <td style={{ padding: '0.65rem 1rem', color: '#4a5568', fontSize: '0.6rem', fontWeight: 700 }}>
+                            <td style={{ padding: '0.65rem 1rem', color: '#1e4a5a', fontSize: '0.6rem', fontWeight: 700 }}>
                               {isTop ? '🥇' : `${idx + 1}`}
                             </td>
                             <td style={{ padding: '0.65rem 1rem' }}>
@@ -277,32 +277,32 @@ export default async function AnalyticsPage() {
                                 <span style={{ fontSize: '0.7rem' }}>{modelIcon}</span>
                                 <span style={{ color: modelColor, fontWeight: 700 }}>{model}</span>
                                 {persona && (
-                                  <span style={{ color: '#8896ab', fontSize: '0.62rem' }}>:{persona}</span>
+                                  <span style={{ color: '#4a8fa8', fontSize: '0.62rem' }}>:{persona}</span>
                                 )}
                               </span>
                             </td>
-                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#e2e8f0', fontWeight: 600 }}>
+                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#c8eef8', fontWeight: 600 }}>
                               {stat.wins}
                             </td>
-                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#8896ab' }}>
+                            <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#4a8fa8' }}>
                               {stat.total}
                             </td>
                             <td style={{
                               padding: '0.65rem 1rem', textAlign: 'right',
-                              color: isTop ? '#eab308' : '#e2e8f0',
+                              color: isTop ? '#eab308' : '#c8eef8',
                               fontWeight: 700,
                             }}>
                               {(stat.winRate * 100).toFixed(0)}%
                             </td>
                             <td style={{ padding: '0.65rem 1rem' }}>
                               <div style={{
-                                height: '6px', background: '#1a2234', borderRadius: '3px',
+                                height: '6px', background: '#081520', borderRadius: '3px',
                                 overflow: 'hidden', width: '100%',
                               }}>
                                 <div style={{
                                   height: '100%',
                                   background: isTop
-                                    ? 'linear-gradient(90deg, #eab308, #f97316)'
+                                    ? 'linear-gradient(90deg, #eab308, #00f0ff)'
                                     : modelColor,
                                   borderRadius: '3px',
                                   width: `${stat.winRate * 100}%`,
@@ -321,18 +321,18 @@ export default async function AnalyticsPage() {
 
             {/* Section 3: Head-to-Head Matrix */}
             <div style={{
-              border: '1px solid #1e2d45',
+              border: '1px solid #0a2235',
               borderRadius: '8px',
               overflow: 'hidden',
               marginBottom: '2rem',
             }}>
               <div style={{
-                background: '#0d1520',
+                background: '#010810',
                 padding: '0.75rem 1rem',
-                borderBottom: '1px solid #1e2d45',
+                borderBottom: '1px solid #0a2235',
               }}>
                 <span style={{
-                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  fontSize: '0.58rem', fontWeight: 700, color: '#4a8fa8',
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
@@ -341,7 +341,7 @@ export default async function AnalyticsPage() {
               </div>
 
               {(!data.headToHead || Object.keys(data.headToHead).length === 0) ? (
-                <div style={{ padding: '3rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
+                <div style={{ padding: '3rem', color: '#4a8fa8', fontSize: '0.75rem', textAlign: 'center' }}>
                   Not enough data for head-to-head analysis.
                 </div>
               ) : (() => {
@@ -350,10 +350,10 @@ export default async function AnalyticsPage() {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.66rem' }}>
                       <thead>
-                        <tr style={{ borderBottom: '1px solid #1e2d45' }}>
+                        <tr style={{ borderBottom: '1px solid #0a2235' }}>
                           <th style={{
                             padding: '0.6rem 0.75rem', textAlign: 'left',
-                            fontSize: '0.52rem', color: '#4a5568', textTransform: 'uppercase',
+                            fontSize: '0.52rem', color: '#1e4a5a', textTransform: 'uppercase',
                             letterSpacing: '1.5px', fontWeight: 700, minWidth: '130px',
                           }}>
                             vs →
@@ -374,7 +374,7 @@ export default async function AnalyticsPage() {
                       </thead>
                       <tbody>
                         {personas.map((rowPersona) => (
-                          <tr key={rowPersona} style={{ borderBottom: '1px solid rgba(30,45,69,0.5)' }}>
+                          <tr key={rowPersona} style={{ borderBottom: '1px solid rgba(10,34,53,0.5)' }}>
                             <td style={{
                               padding: '0.65rem 0.75rem',
                               color: getModelColorForKey(rowPersona),
@@ -388,11 +388,11 @@ export default async function AnalyticsPage() {
                                 return (
                                   <td key={colPersona} style={{
                                     padding: '0.65rem 0.75rem', textAlign: 'center',
-                                    background: 'rgba(30,45,69,0.15)',
+                                    background: 'rgba(10,34,53,0.15)',
                                   }}>
                                     <span style={{
                                       display: 'inline-block', width: '18px', height: '2px',
-                                      background: '#2d4060', borderRadius: '1px',
+                                      background: '#0e3050', borderRadius: '1px',
                                     }} />
                                   </td>
                                 );
@@ -401,7 +401,7 @@ export default async function AnalyticsPage() {
                               if (!cell) {
                                 return (
                                   <td key={colPersona} style={{
-                                    padding: '0.65rem 0.75rem', textAlign: 'center', color: '#2d4060',
+                                    padding: '0.65rem 0.75rem', textAlign: 'center', color: '#0e3050',
                                   }}>
                                     —
                                   </td>
@@ -413,24 +413,24 @@ export default async function AnalyticsPage() {
                                   background: h2hCellBg(cell.wins, cell.losses),
                                 }}>
                                   {cell.wins > 0 && (
-                                    <span style={{ color: '#22c55e', fontWeight: 700 }}>{cell.wins}W</span>
+                                    <span style={{ color: '#0066ff', fontWeight: 700 }}>{cell.wins}W</span>
                                   )}
                                   {cell.wins > 0 && cell.losses > 0 && (
-                                    <span style={{ color: '#4a5568', margin: '0 0.2rem' }}>/</span>
+                                    <span style={{ color: '#1e4a5a', margin: '0 0.2rem' }}>/</span>
                                   )}
                                   {cell.losses > 0 && (
                                     <span style={{ color: '#ef4444', fontWeight: 700 }}>{cell.losses}L</span>
                                   )}
                                   {cell.draws > 0 && (
                                     <span style={{
-                                      color: '#8896ab', fontWeight: 700,
+                                      color: '#4a8fa8', fontWeight: 700,
                                       marginLeft: cell.wins > 0 || cell.losses > 0 ? '0.25rem' : '0',
                                     }}>
                                       {cell.draws}D
                                     </span>
                                   )}
                                   {cell.wins === 0 && cell.losses === 0 && cell.draws === 0 && (
-                                    <span style={{ color: '#2d4060' }}>—</span>
+                                    <span style={{ color: '#0e3050' }}>—</span>
                                   )}
                                 </td>
                               );
@@ -451,7 +451,7 @@ export default async function AnalyticsPage() {
                 marginBottom: '0.85rem',
               }}>
                 <span style={{
-                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  fontSize: '0.58rem', fontWeight: 700, color: '#4a8fa8',
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
@@ -461,9 +461,9 @@ export default async function AnalyticsPage() {
 
               {(!data.byFormat || data.byFormat.length === 0) ? (
                 <div style={{
-                  color: '#8896ab', fontSize: '0.75rem',
+                  color: '#4a8fa8', fontSize: '0.75rem',
                   padding: '2rem', textAlign: 'center',
-                  background: '#111827', border: '1px solid #1e2d45', borderRadius: '8px',
+                  background: '#050f1e', border: '1px solid #0a2235', borderRadius: '8px',
                 }}>
                   No format data available.
                 </div>
@@ -475,12 +475,12 @@ export default async function AnalyticsPage() {
                 }}>
                   {(data.byFormat ?? []).map((f) => {
                     const cfg = FORMAT_BADGE_CONFIG[f.format];
-                    const color = cfg?.color ?? '#8896ab';
+                    const color = cfg?.color ?? '#4a8fa8';
                     const icon = cfg?.icon ?? '📋';
                     const completionPct = f.total > 0 ? (f.completed / f.total) * 100 : 0;
                     return (
                       <div key={f.format} style={{
-                        background: '#111827',
+                        background: '#050f1e',
                         border: `1px solid ${color}33`,
                         borderTop: `3px solid ${color}`,
                         borderRadius: '8px',
@@ -499,16 +499,16 @@ export default async function AnalyticsPage() {
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
-                            <span style={{ color: '#8896ab' }}>Total</span>
-                            <span style={{ color: '#e2e8f0', fontWeight: 700 }}>{f.total}</span>
+                            <span style={{ color: '#4a8fa8' }}>Total</span>
+                            <span style={{ color: '#c8eef8', fontWeight: 700 }}>{f.total}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
-                            <span style={{ color: '#8896ab' }}>Completed</span>
-                            <span style={{ color: '#22c55e', fontWeight: 700 }}>{f.completed}</span>
+                            <span style={{ color: '#4a8fa8' }}>Completed</span>
+                            <span style={{ color: '#0066ff', fontWeight: 700 }}>{f.completed}</span>
                           </div>
                           {/* Completion progress bar */}
                           <div style={{
-                            height: '3px', background: '#1a2234', borderRadius: '2px',
+                            height: '3px', background: '#081520', borderRadius: '2px',
                             overflow: 'hidden', margin: '0.1rem 0',
                           }}>
                             <div style={{
@@ -517,8 +517,8 @@ export default async function AnalyticsPage() {
                             }} />
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
-                            <span style={{ color: '#8896ab' }}>Avg Duration</span>
-                            <span style={{ color: '#e2e8f0' }}>{formatDuration(f.avgDurationMs)}</span>
+                            <span style={{ color: '#4a8fa8' }}>Avg Duration</span>
+                            <span style={{ color: '#c8eef8' }}>{formatDuration(f.avgDurationMs)}</span>
                           </div>
                         </div>
                       </div>
@@ -530,18 +530,18 @@ export default async function AnalyticsPage() {
 
             {/* Section 5: Recent Competitions */}
             <div style={{
-              border: '1px solid #1e2d45',
+              border: '1px solid #0a2235',
               borderRadius: '8px',
               overflow: 'hidden',
               marginBottom: '2rem',
             }}>
               <div style={{
-                background: '#0d1520',
+                background: '#010810',
                 padding: '0.75rem 1rem',
-                borderBottom: '1px solid #1e2d45',
+                borderBottom: '1px solid #0a2235',
               }}>
                 <span style={{
-                  fontSize: '0.58rem', fontWeight: 700, color: '#8896ab',
+                  fontSize: '0.58rem', fontWeight: 700, color: '#4a8fa8',
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
@@ -550,13 +550,13 @@ export default async function AnalyticsPage() {
               </div>
 
               {(!data.recentCompetitions || data.recentCompetitions.length === 0) ? (
-                <div style={{ padding: '3rem', color: '#8896ab', fontSize: '0.75rem', textAlign: 'center' }}>
+                <div style={{ padding: '3rem', color: '#4a8fa8', fontSize: '0.75rem', textAlign: 'center' }}>
                   No completed competitions yet.
                 </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
                   <thead>
-                    <tr style={{ borderBottom: '1px solid #1e2d45' }}>
+                    <tr style={{ borderBottom: '1px solid #0a2235' }}>
                       <th style={thStyle}>Title</th>
                       <th style={thStyle}>Format</th>
                       <th style={thStyle}>Matchup</th>
@@ -566,9 +566,9 @@ export default async function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {(data.recentCompetitions ?? []).map((comp) => {
-                      const winnerColor = comp.winner ? getModelColorForKey(comp.winner) : '#8896ab';
+                      const winnerColor = comp.winner ? getModelColorForKey(comp.winner) : '#4a8fa8';
                       return (
-                        <tr key={comp.id} style={{ borderBottom: '1px solid rgba(30,45,69,0.5)' }}>
+                        <tr key={comp.id} style={{ borderBottom: '1px solid rgba(10,34,53,0.5)' }}>
                           <td style={{ padding: '0.65rem 1rem' }}>
                             <a
                               href={`/competitions/${comp.id}`}
@@ -584,13 +584,13 @@ export default async function AnalyticsPage() {
                           <td style={{ padding: '0.65rem 1rem' }}>
                             <FormatBadge format={comp.format} />
                           </td>
-                          <td style={{ padding: '0.65rem 1rem', color: '#8896ab' }}>
+                          <td style={{ padding: '0.65rem 1rem', color: '#4a8fa8' }}>
                             {comp.agents.length >= 2 ? (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
                                 <span style={{ color: getModelColorForKey(comp.agents[0]), fontWeight: 600 }}>
                                   {comp.agents[0]}
                                 </span>
-                                <span style={{ color: '#4a5568', fontSize: '0.58rem', fontWeight: 700 }}>VS</span>
+                                <span style={{ color: '#1e4a5a', fontSize: '0.58rem', fontWeight: 700 }}>VS</span>
                                 <span style={{ color: getModelColorForKey(comp.agents[1]), fontWeight: 600 }}>
                                   {comp.agents[1]}
                                 </span>
@@ -608,10 +608,10 @@ export default async function AnalyticsPage() {
                                 <span style={{ color: '#eab308' }}>★</span> {comp.winner}
                               </span>
                             ) : (
-                              <span style={{ color: '#2d4060' }}>—</span>
+                              <span style={{ color: '#0e3050' }}>—</span>
                             )}
                           </td>
-                          <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#8896ab' }}>
+                          <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#4a8fa8' }}>
                             {formatDuration(comp.durationMs)}
                           </td>
                         </tr>
