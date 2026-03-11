@@ -966,13 +966,14 @@ function ScoreDrawer({
     }
   }
 
-  const drawerHeight = maximized ? '100%' : `${height}px`;
-
   return (
     <div className="arena-celebration" style={{
       borderTop: '2px solid rgba(0,240,255,0.4)',
-      background: 'rgba(0,4,8,0.98)', flexShrink: 0,
-      height: drawerHeight, overflow: 'hidden',
+      background: 'rgba(0,4,8,0.98)',
+      ...(maximized
+        ? { flex: 1, minHeight: 0, flexShrink: 1 }
+        : { flexShrink: 0, height: `${height}px` }),
+      overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
       transition: 'none',
     }}>
@@ -2799,7 +2800,7 @@ export default function CompetitionPage() {
         <div style={{
           flexShrink: 0, borderTop: '1px solid #0a2235',
           background: '#010810', padding: '0.6rem 1.4rem',
-          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          display: bottomMaximized ? 'none' : 'flex', alignItems: 'center', gap: '0.75rem',
         }}>
           <span style={{ fontSize: '0.55rem', color: '#3d7d94', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 700, flexShrink: 0 }}>
             NOTES
