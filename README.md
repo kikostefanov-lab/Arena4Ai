@@ -1,4 +1,4 @@
-# Agent Arena
+# Arena4Ai
 
 Competitive AI orchestration platform. Two or more AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
@@ -7,7 +7,10 @@ Competitive AI orchestration platform. Two or more AI agents race to solve a str
 - **Head-to-head and round-robin competitions** — pit any combination of Claude, Codex, and Gemini personas against each other
 - **AI cross-judge** — Claude reads actual deliverables and scores them against rubric criteria; heuristic scorer used only as fallback
 - **Presentation layer** — before judging, each team's deliverables are mapped to rubric criteria in a human-readable summary
-- **The Forge** — post-completion artifact generation: roadmap, task graph, repo blueprint, API contracts, risk register, and decision log
+- **Presentation download & expand** — download each team's presentation as markdown or view it in a full modal
+- **Files tab** — inline file preview with syntax tinting, full-file modal, and per-team ZIP download
+- **On-demand synthesis** — manually trigger AI synthesis to blend the best ideas from all teams
+- **The Forge** — post-completion artifact generation with source picker (winner / loser / synthesis); stacked runs, each downloadable as ZIP
 - **Live event stream** — WebSocket-backed real-time view of agent actions (tool calls, file writes, reasoning) per team
 - **Commentary agent** — optional live AI commentary batched from the event stream
 - **Replay viewer** — scrub through any competition at 1x–10x speed
@@ -82,16 +85,27 @@ npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
 ```bash
 npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml \
   --teams claude:architect,claude:speedrunner,codex:standard \
-  --skip-sandbox --skip-synthesis
+  --skip-sandbox
 ```
 
 ### Trigger The Forge (after a competition completes)
 
 ```bash
-curl -X POST http://localhost:3000/competitions/<id>/forge
+# Forge using the winner's deliverables as context
+curl -X POST http://localhost:3000/competitions/<id>/forge \
+  -H 'Content-Type: application/json' \
+  -d '{"source":"winner"}'
 ```
 
-Requires `ANTHROPIC_API_KEY` and the competition must be in `COMPLETE` state.
+Requires `ANTHROPIC_API_KEY` and the competition must be in `COMPLETE` or `FORGE_COMPLETE` state. Multiple forge runs stack — each is preserved.
+
+### Trigger Synthesis (on demand)
+
+```bash
+curl -X POST http://localhost:3000/competitions/<id>/synthesis
+```
+
+Synthesis is not automatic — trigger it manually after a competition completes.
 
 ## Web UI
 
@@ -114,7 +128,7 @@ Requires `ANTHROPIC_API_KEY` and the competition must be in `COMPLETE` state.
 packages/
   shared/       @arena/shared       — types, Zod schemas, EventType/CompetitionState enums
   orchestrator/ @arena/orchestrator — engine, adapters, judging, HTTP API, CLI
-  web/          @arena/web          — Next.js 14 App Router UI (port 3001)
+  web/          @arena/web          — Next.js 15 App Router UI (port 3001)
 briefs/                             — YAML brief files
 ```
 
@@ -122,13 +136,14 @@ briefs/                             — YAML brief files
 
 ```
 DRAFT → CONFIGURED → LAUNCHING → RUNNING → TIME_UP → COLLECTING
-  → PRESENTING → JUDGING → SCORED → SYNTHESIZING → COMPLETE
+  → PRESENTING → JUDGING → SCORED → COMPLETE
 ```
 
 Human-triggered post-completion:
 
 ```
-COMPLETE → FORGING → FORGE_COMPLETE
+COMPLETE → FORGING → FORGE_COMPLETE   (forge, repeatable)
+COMPLETE → SYNTHESIZING → COMPLETE    (synthesis, on-demand)
 ```
 
 Terminal states: `FAILED`, `CANCELLED`
@@ -148,11 +163,17 @@ The prefix before `:` in a team argument determines the adapter:
 1. **AI cross-judge** (primary) — Claude reads deliverables and scores against rubric criteria
 2. **Automated scorer** (fallback) — heuristic execution-based scorer, used only when AI judge fails
 3. **Aggregation** — weighted average of AI judge scores with tie-breaking within 0.005 tolerance
-4. **Synthesis** — per-criterion winner attribution with a combined narrative
+4. **Synthesis** — per-criterion winner attribution with a combined narrative (on-demand)
 
 ## The Forge
 
-After a competition reaches `COMPLETE`, you can trigger The Forge via the web UI or API. It uses Claude to generate six build artifacts in parallel:
+After a competition reaches `COMPLETE`, trigger The Forge via the web UI or API. Select a source:
+
+- **Winner** — uses the winning team's deliverables as context
+- **Loser** — uses the losing team's deliverables as context
+- **Synthesis** — uses the synthesis result as context (requires synthesis to be run first)
+
+Each forge run generates six build artifacts in parallel using Claude:
 
 - **Roadmap** — phased development plan
 - **Task graph** — dependency-aware task breakdown
@@ -161,12 +182,12 @@ After a competition reaches `COMPLETE`, you can trigger The Forge via the web UI
 - **Risk register** — identified risks and mitigations
 - **Decision log** — key architectural decisions
 
-Results are stored in the `results.forge` column and displayed in the Forge tab on the competition page.
+Forge runs stack — each is stored and downloadable as a ZIP. Results are displayed in the Forge tab.
 
 ## Tests
 
 ```bash
-# Orchestrator tests (162 tests)
+# Orchestrator tests (159 tests)
 npm run test --workspace=packages/orchestrator
 
 # Type checking

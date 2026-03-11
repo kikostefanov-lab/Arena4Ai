@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-Agent Arena — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
+Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Phase 4 (The Forge) complete. 162 tests passing.**
+**Status: Post-Judging Redesign complete. 159 tests passing.**
 
 ## Running the Stack
 
@@ -45,13 +45,13 @@ npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
 # Round-robin tournament (all pairs compete)
 npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml \
   --teams claude:architect,claude:speedrunner,codex:standard \
-  --skip-sandbox --skip-synthesis
+  --skip-sandbox
 ```
 
 ## Tests
 
 ```bash
-npm run test --workspace=packages/orchestrator   # 162 tests
+npm run test --workspace=packages/orchestrator   # 159 tests
 npm run typecheck --workspace=packages/orchestrator
 npx tsc --noEmit -p packages/web/tsconfig.json
 ```
@@ -62,15 +62,16 @@ npx tsc --noEmit -p packages/web/tsconfig.json
 packages/
   shared/       @arena/shared       — types, Zod schemas, EventType/CompetitionState enums
   orchestrator/ @arena/orchestrator — engine, adapters, judging, HTTP API, CLI
-  web/          @arena/web          — Next.js 14 App Router UI (port 3001)
+  web/          @arena/web          — Next.js 15 App Router UI (port 3001)
 briefs/         — YAML brief files (fizzbuzz-cli.yml, roman-numerals.yml, etc.)
 ```
 
 ## Key Architecture
 
 ### Competition lifecycle
-`DRAFT → CONFIGURED → LAUNCHING → RUNNING → TIME_UP → COLLECTING → PRESENTING → JUDGING → SCORED → SYNTHESIZING → COMPLETE`
+`DRAFT → CONFIGURED → LAUNCHING → RUNNING → TIME_UP → COLLECTING → PRESENTING → JUDGING → SCORED → COMPLETE`
 Human-triggered post-completion: `COMPLETE → FORGING → FORGE_COMPLETE`
+Synthesis is no longer automatic — it is triggered manually via `POST /competitions/:id/synthesis`.
 Also terminal states: `FAILED`, `CANCELLED`
 
 ### Adapters
@@ -97,8 +98,11 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 - `GET /tournaments/:id` — tournament status + standings
 - `GET /leaderboard` — aggregate win rates per model
 - `GET /analytics/summary` — competition stats
-- `POST /competitions/:id/forge` — trigger forge (requires COMPLETE state, `ANTHROPIC_API_KEY`)
-- `GET /competitions/:id/forge` — get forge results
+- `POST /competitions/:id/forge` — trigger forge (requires COMPLETE/FORGE_COMPLETE state, `ANTHROPIC_API_KEY`); body: `{ source: 'winner'|'loser'|'synthesis' }`
+- `GET /competitions/:id/forge` — get forge runs → `{ status: 'forging'|'complete'|'idle', runs: ForgeRun[] }`
+- `POST /competitions/:id/synthesis` — trigger on-demand synthesis (202 async, requires COMPLETE state)
+- `GET /competitions/:id/synthesis` — synthesis status
+- `GET /competitions/:id/deliverables/:teamId/download` — ZIP of team deliverables
 - `POST /generate-brief` — Claude expands rough idea → structured brief JSON
 - `GET /health`
 
@@ -110,11 +114,26 @@ After collecting deliverables, `presentation-generator.ts` calls Claude (in para
 ### The Forge (post-completion)
 Human-triggered via `POST /competitions/:id/forge`. Uses `@anthropic-ai/sdk` directly to generate 6 build artifacts (roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log) in parallel. Requires `ANTHROPIC_API_KEY`.
 
+Forge runs are **stacked** — each trigger appends a new `ForgeRun` to `results.forge`. Source picker: `winner` | `loser` | `synthesis`. The `ForgeRun` type (in `@arena/shared`):
+```ts
+interface ForgeRun {
+  id: string;
+  source: 'winner' | 'loser' | 'synthesis';
+  sourceTeamId?: string;
+  forgeModel: string;
+  artifacts: ForgeArtifact[];
+  generatedAt: string;
+  domain?: ForgeDomain;
+  selectedTypes?: ForgeArtifactType[];
+}
+```
+Legacy single `ForgeOutput` records are wrapped into a 1-element array on read (backward-compat in `repository.ts`).
+
 ### Judging pipeline
 1. **AI cross-judge** (`ai-judge.ts`) — PRIMARY scorer. Claude reads actual deliverables and scores against rubric criteria with real analysis.
 2. **Automated scorer** (`rubric-scorer.ts`) — FALLBACK only. Used per-team when AI judge fails. Executes deliverables (`.py`/`.js`/`.rb`/`.sh` via stdin, `.ts` via tsx temp file); 100KB input / 512KB stdout / 10s timeout limits. Heuristic scoring when no `expectedOutput`.
 3. **Aggregation** (`score-aggregator.ts`) — weighted average; tie-breaking within 0.005 tolerance. Only AI judge scores are aggregated when AI judge succeeds.
-4. **Synthesis** (`merge-engine.ts`) — returns `SynthesisResult { synthesis: string, perCriterion[] }` with per-criterion winner attribution.
+4. **Synthesis** (`merge-engine.ts`) — returns `SynthesisResult { synthesis: string, perCriterion[] }` with per-criterion winner attribution. Now on-demand only.
 
 ### Commentary agent
 Enable with `--commentary` flag or `commentary: true` in RunOptions. Batches 5 events → Claude generates one witty sentence → emitted as `COMMENTARY` ArenaEvent (gold bar in UI).
@@ -132,13 +151,13 @@ Enable with `--commentary` flag or `commentary: true` in RunOptions. Batches 5 e
 ### DB schema (Drizzle + PostgreSQL)
 - `competitions`: id, brief (jsonb), teams (jsonb), state, startedAt, completedAt
 - `events`: id, competitionId, teamId, timestamp, type, payload, metadata, seq (serial)
-- `results`: competitionId, scorecards (jsonb), winnerId, synthesis (jsonb — SynthesisResult), presentations (jsonb), forge (jsonb), deliverables (jsonb)
+- `results`: competitionId, scorecards (jsonb), winnerId, synthesis (jsonb — SynthesisResult), presentations (jsonb), forge (jsonb — ForgeRun[]), deliverables (jsonb)
 - `tournaments`: id, name, brief (jsonb), teams (jsonb), type, state, matchIds (jsonb), rankings (jsonb), createdAt, completedAt
 
 Run migrations: `DATABASE_URL=postgresql://localhost/arena npm run db:migrate --workspace=packages/orchestrator`
 
 ### Design tokens & shared utilities
-- `packages/web/lib/design-tokens.ts` — model colors (claude `#f97316`, codex `#22c55e`, gemini `#a855f7`), STATE_STYLES, `hexToRgb()`. Use these everywhere — don't hardcode colors or redefine `hexToRgb`.
+- `packages/web/lib/design-tokens.ts` — TRON model colors (claude `#ff6600`, codex `#0066ff`, gemini `#00f0ff`), STATE_STYLES, `hexToRgb()`. Use these everywhere — don't hardcode colors or redefine `hexToRgb`.
 - `packages/web/lib/format.ts` — `formatDuration`, `formatElapsed`, `formatTimeLimit`, `resolveTeamLabel`. Don't inline team-label resolution in components.
 
 ### JSON extraction from LLM output
@@ -163,6 +182,15 @@ When `DATABASE_URL` is set, the CLI `run` command persists to DB:
 ### Live event display
 - Per-team event buffer capped at ~600 for performance; TOOL_CALL/FILE_CREATE/ERROR events are always kept, only REASONING is trimmed
 - Accurate event type counts tracked separately in `eventCountsRef` (never trimmed) — used for summary bar icons (⚡/📄/🧠)
+
+### Next.js 15 route handlers
+All `app/api/` route handlers use `Promise<{ param: string }>` for route params:
+```ts
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  ...
+}
+```
 
 ## Known Issues
 1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers)
