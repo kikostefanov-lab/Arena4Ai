@@ -1,6 +1,7 @@
 id: fizzbuzz-cli-001
 title: FizzBuzz CLI
 format: SPRINT
+tags: ["Algorithms", "CLI"]
 problem: |
   Write a command-line program in any language that prints FizzBuzz from 1 to 100.
   - Print "Fizz" for multiples of 3

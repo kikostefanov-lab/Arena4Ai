@@ -1,6 +1,7 @@
 id: churn-pipeline-001
 title: Churn Prediction Pipeline
 format: HACKATHON
+tags: ["ML / Data", "Python"]
 
 problem: |
   Build a complete ML pipeline in a single Python file that:

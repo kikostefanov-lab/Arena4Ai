@@ -1,6 +1,7 @@
 id: startup-autopsy-001
 title: Startup Autopsy
 format: HACKATHON
+tags: ["Writing", "Analysis"]
 
 problem: |
   You've been brought in to write a post-mortem for a failed B2B SaaS startup.

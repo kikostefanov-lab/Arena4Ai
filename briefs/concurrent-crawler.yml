@@ -1,6 +1,7 @@
 id: concurrent-crawler-001
 title: Concurrent Web Crawler
 format: HACKATHON
+tags: ["Systems", "Networking"]
 
 problem: |
   Build a concurrent web crawler in Python that:

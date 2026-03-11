@@ -1,6 +1,7 @@
 id: roman-numerals
 title: Roman Numeral Converter
 format: SPRINT
+tags: ["Algorithms", "CLI"]
 problem: |
   Write a Python script that reads a single integer from stdin and prints its
   Roman numeral representation to stdout.

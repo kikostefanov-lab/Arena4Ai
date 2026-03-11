@@ -30,6 +30,8 @@ export interface Brief {
   /** Expected stdout for automated correctness scoring. If set, the scorer
    *  executes runnable deliverable files and compares output line-by-line. */
   expectedOutput?: string;
+  /** Category tags for filtering and library display (e.g. ["Algorithms", "CLI"]) */
+  tags?: string[];
 }
 
 export interface Deliverable {

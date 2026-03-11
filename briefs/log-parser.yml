@@ -1,6 +1,7 @@
 id: log-parser
 title: Nginx Log Analyzer
 format: HACKATHON
+tags: ["Data", "CLI"]
 problem: |
   Write a Python script that parses nginx access log lines from stdin and
   prints a summary report to stdout.

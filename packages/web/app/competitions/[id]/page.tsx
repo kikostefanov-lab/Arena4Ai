@@ -167,6 +167,29 @@ const GLOBAL_STYLES = `
   100% { opacity: 0; transform: translateY(-12px) scale(1.1); }
 }
 
+@keyframes winnerFlash {
+  0%   { box-shadow: 0 0 0 0 rgba(0,240,255,0); }
+  30%  { box-shadow: 0 0 40px 12px rgba(0,240,255,0.6); }
+  70%  { box-shadow: 0 0 40px 12px rgba(0,240,255,0.4); }
+  100% { box-shadow: 0 0 0 0 rgba(0,240,255,0); }
+}
+
+@keyframes winnerBanner {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+  15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+}
+
+@media (max-width: 700px) {
+  .arena-tab-bar {
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+  }
+  .arena-tab-bar::-webkit-scrollbar { height: 3px; }
+  .arena-tab-bar::-webkit-scrollbar-thumb { background: #0a2235; border-radius: 2px; }
+}
+
 .arena-scrollbar::-webkit-scrollbar { width: 5px; }
 .arena-scrollbar::-webkit-scrollbar-track { background: transparent; }
 .arena-scrollbar::-webkit-scrollbar-thumb { background: #0a2235; border-radius: 3px; }
@@ -761,6 +784,60 @@ function ScoreDrawer({
   const [synthRunning, setSynthRunning] = useState(false);
   const [synthError, setSynthError] = useState<string | null>(null);
 
+  // E1: Score animation
+  const [scoreProgress, setScoreProgress] = useState(0);
+  useEffect(() => {
+    if (!result.teams?.length) return;
+    setScoreProgress(0);
+    const start = performance.now();
+    const duration = 1200;
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      setScoreProgress(1 - Math.pow(1 - t, 3));
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, [result.teams]);
+
+  // E2: Winner flash banner
+  const hasAnnouncedWinner = useRef(false);
+  const [showWinnerBanner, setShowWinnerBanner] = useState(false);
+  useEffect(() => {
+    if (
+      !hasAnnouncedWinner.current &&
+      (comp?.state === 'COMPLETE' || comp?.state === 'SCORED') &&
+      result.winnerId
+    ) {
+      hasAnnouncedWinner.current = true;
+      setShowWinnerBanner(true);
+      const t = setTimeout(() => setShowWinnerBanner(false), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [comp?.state, result.winnerId]);
+
+  // E3: Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      const tabMap: Record<string, 'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'> = {
+        '1': 'scores',
+        '2': 'presentations',
+        '3': 'files',
+        '4': 'synthesis',
+        '5': 'forge',
+      };
+      if (tabMap[e.key]) {
+        setActiveTab(tabMap[e.key]);
+      }
+      if (e.key === 'Escape') {
+        setFileModalContent(null);
+        setPresentationModal(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   // Forge stacked-runs state
   const [forgeRuns, setForgeRuns] = useState<ForgeRun[]>(result.forge ?? []);
   const [forgeRunning, setForgeRunning] = useState(false);
@@ -930,13 +1007,16 @@ function ScoreDrawer({
       {isExpanded && (
         <>
           {/* Tab strip */}
-          <div style={{
-            background: '#000408',
-            borderBottom: '1px solid #0a2235',
-            padding: '0 1.25rem',
-            display: 'flex', gap: 0,
-            flexShrink: 0,
-          }}>
+          <div
+            className="arena-tab-bar"
+            style={{
+              background: '#000408',
+              borderBottom: '1px solid #0a2235',
+              padding: '0 1.25rem',
+              display: 'flex', gap: 0,
+              flexShrink: 0,
+            }}
+          >
             <button style={tabStyle('scores')} onClick={() => setActiveTab('scores')}>SCORES</button>
             {hasPresentations && (
               <button style={tabStyle('presentations')} onClick={() => setActiveTab('presentations')}>PRESENTATIONS</button>
@@ -948,6 +1028,14 @@ function ScoreDrawer({
             <button style={tabStyle('forge')} onClick={() => setActiveTab('forge')}>
               FORGE{forgeRuns.length > 0 ? ` (${forgeRuns.length})` : ''}
             </button>
+          </div>
+          {/* E3: Keyboard hint */}
+          <div style={{
+            textAlign: 'right', fontSize: '0.52rem', color: '#3d7d94',
+            padding: '0.2rem 1.25rem 0',
+            letterSpacing: '0.5px', flexShrink: 0,
+          }}>
+            [1–5] switch tabs · [Esc] close modal
           </div>
 
           {/* Tab content */}
@@ -988,7 +1076,7 @@ function ScoreDrawer({
                           color: isWinner ? '#eab308' : '#c8eef8',
                           flexShrink: 0, fontFamily: 'monospace',
                         }}>
-                          {Math.round(tr.totalScore * 100)}%
+                          {Math.round(tr.totalScore * 100 * scoreProgress)}%
                         </span>
                       </div>
 
@@ -1013,14 +1101,14 @@ function ScoreDrawer({
                                 {cs.criterionId}
                               </span>
                               <span style={{ color: isWinner ? '#eab308' : '#c8eef8', fontWeight: 700, marginLeft: '0.4rem', flexShrink: 0, fontFamily: 'monospace' }}>
-                                {Math.round((cs.score / maxScore) * 100)}%
+                                {Math.round((cs.score / maxScore) * 100 * scoreProgress)}%
                               </span>
                             </div>
                             <div style={{ height: '4px', background: 'rgba(10,34,53,0.6)', borderRadius: '2px', overflow: 'hidden' }}>
                               <div
                                 className="arena-progress-bar"
                                 style={{
-                                  height: '100%', width: `${pct}%`,
+                                  height: '100%', width: `${pct * scoreProgress}%`,
                                   background: isWinner
                                     ? 'linear-gradient(90deg, #eab308, #f59e0b)'
                                     : `linear-gradient(90deg, ${color}, ${color}88)`,
@@ -1664,6 +1752,23 @@ function ScoreDrawer({
         </>
       )}
 
+      {/* E2: Winner announcement banner */}
+      {showWinnerBanner && winnerLabel && (
+        <div style={{
+          position: 'fixed', top: '1.5rem', left: '50%',
+          zIndex: 9999,
+          background: 'rgba(0,240,255,0.12)', border: '1px solid rgba(0,240,255,0.5)',
+          borderRadius: '8px', padding: '0.75rem 2rem',
+          color: '#00f0ff', fontSize: '0.85rem', fontWeight: 700,
+          letterSpacing: '2px', textTransform: 'uppercase',
+          animation: 'winnerBanner 4s ease forwards',
+          backdropFilter: 'blur(8px)',
+          pointerEvents: 'none',
+        }}>
+          🏆 {winnerLabel} wins
+        </div>
+      )}
+
       {/* Presentation modal */}
       {presentationModal && (
         <div
@@ -1897,6 +2002,15 @@ export default function CompetitionPage() {
   const [competitionStartTime, setCompetitionStartTime] = useState<number | null>(null);
   const [rematchLoading, setRematchLoading] = useState(false);
   const [copyLabel, setCopyLabel] = useState<'🔗 Copy Link' | '✓ Copied'>('🔗 Copy Link');
+
+  // E4: Mobile layout
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 700);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   // Resizable score drawer
   const [scoreDrawerHeight, setScoreDrawerHeight] = useState(SCORE_DRAWER_COLLAPSED);
@@ -2192,9 +2306,11 @@ export default function CompetitionPage() {
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <header style={{
           display: 'flex', alignItems: 'center', gap: '0.85rem',
-          padding: '0.7rem 1.4rem', borderBottom: '1px solid #0a2235',
+          padding: isMobile ? '0.5rem 0.75rem' : '0.7rem 1.4rem',
+          borderBottom: '1px solid #0a2235',
           background: 'linear-gradient(180deg, rgba(2,8,20,0.98) 0%, rgba(0,4,8,0.98) 100%)',
-          flexShrink: 0,
+          flexShrink: 0, flexWrap: isMobile ? 'wrap' : 'nowrap',
+          overflow: 'hidden',
         }}>
           <a href="/" style={{
             fontSize: '0.75rem', color: '#00f0ff', fontWeight: 800,
@@ -2463,8 +2579,8 @@ export default function CompetitionPage() {
         {/* ── Lanes ────────────────────────────────────────────────────────── */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${numTeams}, 1fr)`,
-          overflow: 'hidden', flex: 1, minHeight: 0,
+          gridTemplateColumns: isMobile ? '1fr' : `repeat(${numTeams}, 1fr)`,
+          overflow: isMobile ? 'auto' : 'hidden', flex: 1, minHeight: 0,
         }}>
           {orderedTeams.map((team, i) => {
             // Broadcast events (TIME_UP, TIME_WARNING) are shown in the StateBanner,

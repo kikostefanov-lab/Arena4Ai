@@ -7,6 +7,7 @@ import { analyticsRouter } from './routes/analytics.js';
 import { leaderboardRouter } from './routes/leaderboard.js';
 import { generateBriefRouter } from './routes/generate-brief.js';
 import { tournamentsRouter } from './routes/tournaments.js';
+import { briefsRouter } from './routes/briefs.js';
 import { attachWebSocket } from './websocket.js';
 
 const CORS = {
@@ -49,6 +50,7 @@ export function createApp(): Application {
   app.use('/leaderboard', leaderboardRouter);
   app.use('/generate-brief', generateBriefRouter);
   app.use('/tournaments', tournamentsRouter);
+  app.use('/briefs', briefsRouter);
 
   return app;
 }

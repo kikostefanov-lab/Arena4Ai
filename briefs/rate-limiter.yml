@@ -1,6 +1,7 @@
 id: rate-limiter
 title: Sliding Window Rate Limiter
 format: HACKATHON
+tags: ["Systems", "Algorithms"]
 problem: |
   Implement a sliding window rate limiter in Python. The script reads requests
   from stdin and outputs whether each is ALLOWED or DENIED.

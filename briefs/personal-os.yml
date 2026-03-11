@@ -1,6 +1,7 @@
 id: personal-os-001
 title: Personal OS Design
 format: HACKATHON
+tags: ["Design", "Writing"]
 
 problem: |
   Design a complete "Personal Operating System" — a framework for how a

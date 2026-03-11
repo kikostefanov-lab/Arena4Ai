@@ -25,7 +25,7 @@ interface CompetitionSummary {
   state: string;
   startedAt: string | null;
   completedAt: string | null;
-  brief: { title: string; format?: string; timeLimitMs?: number; problem?: string };
+  brief: { title: string; format?: string; timeLimitMs?: number; problem?: string; tags?: string[] };
   teams: Team[];
   winnerId: string | null;
 }
@@ -58,6 +58,7 @@ export default function GalleryPage() {
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string>('ALL');
   const [modelFilter, setModelFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
   const [tournamentsLoading, setTournamentsLoading] = useState(true);
@@ -126,6 +127,10 @@ export default function GalleryPage() {
   const runningCount = competitions.filter((c) => c.state === 'RUNNING').length;
   const uniqueModels = new Set(competitions.flatMap((c) => c.teams?.map((t) => t.model) ?? []));
 
+  const availableCategories = Array.from(
+    new Set(competitions.flatMap((c) => c.brief?.tags ?? []))
+  ).sort();
+
   const filteredCompetitions = competitions.filter((c) => {
     const stateMatch = stateFilter === 'ALL'
       || (stateFilter === 'LIVE' && c.state === 'RUNNING')
@@ -134,7 +139,9 @@ export default function GalleryPage() {
       || (stateFilter === 'CANCELLED' && c.state === 'CANCELLED');
     const modelMatch = modelFilter === 'ALL'
       || c.teams?.some((t) => t.model.toLowerCase().startsWith(modelFilter));
-    if (!stateMatch || !modelMatch) return false;
+    const categoryMatch = categoryFilter === 'ALL'
+      || c.brief?.tags?.includes(categoryFilter);
+    if (!stateMatch || !modelMatch || !categoryMatch) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const title = (c.brief?.title ?? '').toLowerCase();
@@ -270,6 +277,17 @@ export default function GalleryPage() {
                   {apiOnline ? 'API Online' : 'API Offline'}
                 </span>
               )}
+              <Link
+                href="/briefs"
+                className="nav-link"
+                style={{
+                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
+                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
+                  letterSpacing: '1px', fontWeight: 600,
+                }}
+              >
+                📚 BRIEFS
+              </Link>
               <a
                 href="/analytics"
                 className="nav-link"
@@ -424,6 +442,30 @@ export default function GalleryPage() {
                 );
               })}
             </div>
+            {availableCategories.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.55rem', color: '#1e4a5a', letterSpacing: '1px', textTransform: 'uppercase', marginRight: '0.2rem', fontWeight: 700 }}>Category</span>
+                {(['ALL', ...availableCategories]).map((cat) => {
+                  const active = categoryFilter === cat;
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setCategoryFilter(cat)}
+                      style={{
+                        fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
+                        borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
+                        border: `1px solid ${active ? 'rgba(0,128,255,0.4)' : '#0a2235'}`,
+                        background: active ? 'rgba(0,128,255,0.15)' : 'transparent',
+                        color: active ? '#7cc6db' : '#1e4a5a',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -558,6 +600,16 @@ export default function GalleryPage() {
                             display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                           }}>
                             <span style={{ fontSize: '0.6rem' }}>{fmt.icon}</span> {fmt.label}
+                          </span>
+                        )}
+                        {comp.brief?.tags?.[0] && (
+                          <span style={{
+                            fontSize: '0.5rem', fontWeight: 700, padding: '0.1rem 0.45rem',
+                            borderRadius: '3px', letterSpacing: '1px',
+                            background: 'rgba(0,128,255,0.15)', color: '#7cc6db',
+                            border: '1px solid rgba(0,128,255,0.2)',
+                          }}>
+                            {comp.brief.tags[0]}
                           </span>
                         )}
                         {isRunning && (

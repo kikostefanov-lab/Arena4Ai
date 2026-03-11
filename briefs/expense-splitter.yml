@@ -1,6 +1,7 @@
 id: expense-splitter
 title: Expense Splitter
 format: SPRINT
+tags: ["Algorithms", "CLI"]
 problem: |
   Write a Python script that reads a group expense log from stdin and prints
   the minimal set of transfers needed to settle all debts.

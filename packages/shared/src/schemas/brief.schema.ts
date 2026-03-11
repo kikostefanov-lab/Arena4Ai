@@ -25,6 +25,7 @@ export const briefSchema = z.object({
   format: z.nativeEnum(CompetitionFormat),
   timeLimitMs: z.number().positive(),
   expectedOutput: z.string().optional(),
+  tags: z.array(z.string()).optional(),
 });
 
 export type BriefInput = z.infer<typeof briefSchema>;
