@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Orbitron } from 'next/font/google';
 import './globals.css';
+import { TopBar } from '../components/TopBar';
 
 const orbitron = Orbitron({
   subsets: ['latin'],
@@ -26,8 +27,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="corner corner-tr" />
         <div className="corner corner-bl" />
         <div className="corner corner-br" />
+        {/* NAV-001: Fixed top navigation bar */}
+        <TopBar />
         {/* BG-008: Main content above all overlays */}
-        <main style={{ position: 'relative', zIndex: 2 }}>{children}</main>
+        <main style={{ position: 'relative', zIndex: 2, paddingTop: '3.5rem' }}>{children}</main>
       </body>
     </html>
   );
