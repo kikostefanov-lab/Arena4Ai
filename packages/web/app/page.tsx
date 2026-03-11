@@ -151,7 +151,6 @@ export default function GalleryPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#000408',
       fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
