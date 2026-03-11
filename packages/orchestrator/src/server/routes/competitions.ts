@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import archiver from 'archiver';
 import { briefSchema, CompetitionFormat, CompetitionState } from '@arena/shared';
-import type { Team, TeamPresentation, ForgeOutput } from '@arena/shared';
+import type { Team, TeamPresentation, ForgeOutput, Brief, Deliverable } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
@@ -11,6 +11,7 @@ import { requireApiKey } from '../middleware/auth.js';
 import { applyPreset } from '../../brief/presets.js';
 import { runForge, getForgeProgress } from '../../forge/forge-orchestrator.js';
 import type { ForgeInput } from '../../forge/forge-orchestrator.js';
+import { synthesizeDeliverables } from '../../synthesis/merge-engine.js';
 
 export const competitionsRouter = Router();
 
@@ -147,6 +148,9 @@ competitionsRouter.get('/:id/events', async (req: Request, res: Response) => {
 // In-memory guard to prevent concurrent forge runs for the same competition
 const forgingInProgress = new Set<string>();
 
+// In-memory guard to prevent concurrent synthesis runs
+const synthesisInProgress = new Set<string>();
+
 // POST /competitions/:id/forge — trigger forge generation
 competitionsRouter.post('/:id/forge', requireApiKey, async (req: Request, res: Response) => {
   const id = String(req.params.id);
@@ -277,6 +281,64 @@ competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response
   }
 
   await archive.finalize();
+});
+
+// POST /competitions/:id/synthesis — trigger on-demand synthesis
+competitionsRouter.post('/:id/synthesis', requireApiKey, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+
+  if (synthesisInProgress.has(id)) {
+    res.status(409).json({ error: 'Synthesis is already in progress' });
+    return;
+  }
+
+  const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
+  if (!result) { res.status(409).json({ error: 'No results found' }); return; }
+
+  const allowedStates = [
+    CompetitionState.COMPLETE,
+    CompetitionState.FORGE_COMPLETE,
+    CompetitionState.FORGING,
+  ];
+  if (!allowedStates.includes(comp.state as CompetitionState)) {
+    res.status(409).json({ error: `Cannot synthesize in ${comp.state} state` });
+    return;
+  }
+
+  synthesisInProgress.add(id);
+
+  const deliverables = (result.deliverables as Deliverable[]) ?? [];
+  const presentations = (result.presentations as TeamPresentation[]) ?? [];
+  const brief = comp.brief as Brief;
+
+  synthesizeDeliverables(brief, deliverables, { claudeBin: process.env.CLAUDE_BIN }, presentations)
+    .then(async (synthesis) => {
+      if (synthesis) {
+        await repo.saveSynthesis(id, synthesis);
+        console.log(`[arena] synthesis complete for ${id}`);
+      } else {
+        console.log(`[arena] synthesis returned null for ${id} (no deliverables)`);
+      }
+    })
+    .catch((err: Error) => {
+      console.error(`[arena] synthesis failed for ${id}:`, err.message);
+    })
+    .finally(() => synthesisInProgress.delete(id));
+
+  res.status(202).json({ ok: true, message: 'Synthesis started' });
+});
+
+// GET /competitions/:id/synthesis — get synthesis result
+competitionsRouter.get('/:id/synthesis', async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const result = await repo.getResult(id);
+  if (!result) { res.status(404).json({ error: 'Competition not found' }); return; }
+  const inProgress = synthesisInProgress.has(id);
+  res.json({
+    status: inProgress ? 'running' : result.synthesis ? 'complete' : 'idle',
+    synthesis: result.synthesis ?? null,
+  });
 });
 
 // DELETE /competitions/:id — remove a competition and all its data
