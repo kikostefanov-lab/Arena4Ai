@@ -18,6 +18,12 @@ Static landing page + Cloudflare Workers email backend.
 cd marketing/worker
 npx wrangler d1 create arena4ai-registrants
 ```
+To access your new D1 Database in your Worker, add the following snippet to your configuration file:
+[[d1_databases]]
+binding = "arena4ai_registrants"
+database_name = "arena4ai-registrants"
+database_id = "fdcb9eec-5005-4382-b547-00abbcdbead4"
+
 
 Copy the `database_id` from the output and paste it into `wrangler.toml`:
 
@@ -37,6 +43,7 @@ npx wrangler d1 execute arena4ai-registrants --file=./schema.sql
 npx wrangler secret put ADMIN_KEY
 # Enter a strong random string when prompted — save it somewhere safe
 ```
+Yellowheart13!1974
 
 ### 4. Deploy the Worker
 
@@ -46,18 +53,18 @@ npx wrangler deploy
 
 The output will show your worker URL, e.g.:
 `https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev`
-
+https://arena4ai-worker.kikostefanov.workers.dev
 ### 5. Test the Worker
 
 ```bash
 # Register an email
-curl -X POST https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/register \
+curl -X POST https://arena4ai-worker.kikostefanov.workers.dev/api/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com"}'
 # Expected: {"ok":true}
 
 # List registrants (replace YOUR_KEY)
-curl "https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/registrants?key=YOUR_KEY"
+curl "https://arena4ai-worker.kikostefanov.workers.dev/api/registrants?key=YOUR_KEY"
 # Expected: {"ok":true,"count":1,"registrants":[...]}
 ```
 
@@ -99,7 +106,7 @@ npx wrangler pages deploy marketing --project-name=arena4ai-landing
 
 On first run, Wrangler will create the Pages project. After deploy you get a URL like:
 `https://arena4ai-landing.pages.dev`
-
+https://0c3451c5.arena4ai-landing.pages.dev
 ### 3. Connect custom domains
 
 In Cloudflare Dashboard → Pages → arena4ai-landing → Custom Domains:
@@ -118,7 +125,7 @@ npx wrangler pages deploy marketing --project-name=arena4ai-landing
 ## Part 3 — Viewing Registrants
 
 ```bash
-curl "https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/registrants?key=YOUR_ADMIN_KEY"
+curl "https://arena4ai-worker.kikostefanov.workers.dev/api/registrants?key=Yellowheart13!1974"
 ```
 
 Or query D1 directly:

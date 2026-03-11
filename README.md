@@ -190,6 +190,26 @@ Each forge run generates six build artifacts in parallel using Claude:
 
 Forge runs stack — each is stored and downloadable as a ZIP. Results are displayed in the Forge tab.
 
+## Marketing Site (arena4.ai)
+
+The `marketing/` directory contains the public landing page for [arena4.ai](https://arena4.ai) and [arena4ai.com](https://arena4ai.com).
+
+- **`marketing/index.html`** — static cinematic landing page (TRON aesthetic, email capture, no build step)
+- **`marketing/worker/`** — Cloudflare Worker + D1 SQLite for email registration backend
+- **`marketing/README.md`** — full Cloudflare Pages + Workers deployment guide
+
+Deploy with Wrangler:
+
+```bash
+# Deploy the email Worker
+cd marketing/worker && npx wrangler deploy
+
+# Deploy the landing page to Cloudflare Pages
+npx wrangler pages deploy marketing --project-name=arena4ai-landing
+```
+
+See `marketing/README.md` for first-time setup (D1 create, schema migration, ADMIN_KEY secret).
+
 ## Tests
 
 ```bash

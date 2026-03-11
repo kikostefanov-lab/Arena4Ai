@@ -5,4 +5,4 @@ compatibility_date = "2024-01-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "arena4ai-registrants"
-database_id = "REPLACE_WITH_YOUR_DB_ID"
+database_id = "fdcb9eec-5005-4382-b547-00abbcdbead4"
