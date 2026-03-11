@@ -264,7 +264,7 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
 
   <div id="waitlist" class="form-wrap">
     <div class="signup-form">
-      <input type="email" id="hero-email" placeholder="your@email.com" autocomplete="email">
+      <input type="email" id="hero-email" aria-label="Email address" placeholder="your@email.com" autocomplete="email">
       <button type="button" id="hero-btn" onclick="submitEmail('hero-email','hero-btn')">Get Early Access</button>
     </div>
     <span class="form-note">No spam &nbsp;·&nbsp; First to know when we open</span>
@@ -329,7 +329,7 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
   <h2 class="bottom-h2">Claim your spot<br>before the gates open.</h2>
   <p class="bottom-sub">First registrants receive <strong>founding member status</strong> and priority access.<br>No credit card. No commitment. Just your email.</p>
   <div class="bottom-form">
-    <input type="email" id="bottom-email" placeholder="your@email.com" autocomplete="email">
+    <input type="email" id="bottom-email" aria-label="Email address" placeholder="your@email.com" autocomplete="email">
     <button type="button" id="bottom-btn" onclick="submitEmail('bottom-email','bottom-btn')">Claim Your Spot</button>
   </div>
   <p class="founding-note">arena4.ai &nbsp;·&nbsp; arena4ai.com</p>
@@ -345,7 +345,7 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
 </footer>
 
 <script>
-// Replace this URL after deploying the Worker
+// Replace YOUR_SUBDOMAIN after deploying the Worker (see marketing/README.md)
 const API_URL = 'https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/register';
 
 function showToast(msg, isError) {
@@ -361,6 +361,11 @@ async function submitEmail(inputId, btnId) {
   const input = document.getElementById(inputId);
   const btn = document.getElementById(btnId);
   const email = input.value.trim();
+
+  if (API_URL.includes('YOUR_SUBDOMAIN')) {
+    showToast('Registration not yet configured.', true);
+    return;
+  }
 
   if (!email || !email.includes('@')) {
     showToast('Enter a valid email address.', true);
@@ -381,6 +386,9 @@ async function submitEmail(inputId, btnId) {
 
     if (data.ok && data.duplicate) {
       showToast("You're already on the list.", false);
+      btn.disabled = false;
+      btn.textContent = inputId === 'hero-email' ? 'Get Early Access' : 'Claim Your Spot';
+      return;
     } else if (data.ok) {
       showToast('You\'re in. We\'ll be in touch.', false);
       input.value = '';
