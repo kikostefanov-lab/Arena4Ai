@@ -1,0 +1,838 @@
+# Arena4Ai Marketing Landing Page Implementation Plan
+
+> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Build and deploy a cinematic marketing landing page for arena4.ai with Cloudflare Pages (static HTML) and a Cloudflare Workers + D1 email capture backend.
+
+**Architecture:** Single self-contained `index.html` with all CSS inlined — no build step, no framework. A separate Cloudflare Worker handles email registration via D1 (SQLite). The page calls the Worker API via `fetch`. Both are deployed independently on Cloudflare.
+
+**Tech Stack:** Vanilla HTML/CSS/JS · Cloudflare Pages · Cloudflare Workers · D1 (SQLite) · Wrangler CLI
+
+---
+
+## File Map
+
+| File | Role |
+|------|------|
+| `marketing/index.html` | Full landing page — all CSS in `<style>`, all JS in `<script>` |
+| `marketing/worker/index.js` | Cloudflare Worker — POST /api/register, GET /api/registrants |
+| `marketing/worker/schema.sql` | D1 table definition |
+| `marketing/worker/wrangler.toml` | Worker config (name, D1 binding, routes) |
+| `marketing/README.md` | Step-by-step Cloudflare deployment guide |
+
+---
+
+## Chunk 1: Static Landing Page
+
+### Task 1: Create marketing directory and index.html
+
+**Files:**
+- Create: `marketing/index.html`
+
+> The production page is based on the approved cinematic-v3 mockup. Key differences from the mockup: no `.mockup-banner`, `API_URL` constant wired up, `id="waitlist"` anchor on hero form, both forms share one `submitEmail()` function, proper SEO meta tags, OG tags.
+
+- [ ] **Step 1: Create the directory**
+
+```bash
+mkdir -p marketing/worker
+```
+
+- [ ] **Step 2: Create `marketing/index.html`**
+
+Create the file with this exact content:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arena4Ai — May the best model win</title>
+<meta name="description" content="Arena4Ai is a competitive AI platform where your models race to solve structured problems. One winner. Blind judging. Real results. Get early access.">
+<meta name="keywords" content="AI agent competition, model evaluation, LLM benchmark, AI battle, automated judging, AI platform">
+<link rel="canonical" href="https://arena4.ai">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://arena4.ai">
+<meta property="og:title" content="Arena4Ai — May the best model win">
+<meta property="og:description" content="Your models vs any problem. Blind AI judging. One winner. Get early access.">
+<meta property="og:image" content="https://arena4.ai/og-image.png">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Arena4Ai — May the best model win">
+<meta name="twitter:description" content="Your models vs any problem. Blind AI judging. One winner.">
+<meta name="twitter:image" content="https://arena4.ai/og-image.png">
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #000408; color: #c8eef8; font-family: -apple-system, 'Segoe UI', sans-serif; overflow-x: hidden; padding-bottom: 3rem; }
+
+.grid-bg {
+  position: fixed; inset: 0;
+  background-image:
+    linear-gradient(rgba(0,240,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none; z-index: 0;
+}
+.scanlines {
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+  pointer-events: none; z-index: 1;
+}
+.corner { position: fixed; width: 18px; height: 18px; z-index: 50; opacity: 0.25; }
+.corner-tl { top: 1rem; left: 1rem; border-top: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.corner-tr { top: 1rem; right: 1rem; border-top: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+.corner-bl { bottom: 1rem; left: 1rem; border-bottom: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.corner-br { bottom: 1rem; right: 1rem; border-bottom: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+
+.top-bar {
+  position: fixed; top: 0; left: 0; right: 0;
+  padding: 1.2rem 2.5rem; display: flex; align-items: center; justify-content: space-between;
+  z-index: 100; background: linear-gradient(to bottom, rgba(0,4,8,0.85), transparent);
+}
+.logo { font-size: 0.9rem; font-weight: 900; letter-spacing: 5px; color: #00f0ff; text-transform: uppercase; font-family: monospace; }
+.logo em { color: #ff6600; font-style: normal; }
+.nav-cta {
+  font-size: 0.65rem; font-weight: 800; padding: 0.45rem 1.1rem;
+  border: 1px solid rgba(0,240,255,0.35); color: #00f0ff; border-radius: 4px;
+  font-family: monospace; letter-spacing: 1.5px; text-transform: uppercase;
+  background: rgba(0,240,255,0.05); text-decoration: none; cursor: pointer;
+}
+.nav-cta:hover { background: rgba(0,240,255,0.12); }
+
+/* ── HERO ── */
+.hero {
+  position: relative; min-height: 100vh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; padding: 2rem 2rem 6rem;
+  z-index: 2; overflow: hidden;
+}
+.hero-glow-center {
+  position: absolute; inset: 0;
+  background: radial-gradient(ellipse 70% 55% at 50% 45%, rgba(0,240,255,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-fade { position: absolute; bottom: 0; left: 0; right: 0; height: 220px; background: linear-gradient(to top, #000408, transparent); pointer-events: none; }
+
+.stamp {
+  font-size: 0.55rem; font-weight: 800; letter-spacing: 5px; color: #1e4a5a;
+  text-transform: uppercase; font-family: monospace;
+  border: 1px solid #0a2235; padding: 0.25rem 0.85rem; border-radius: 2px;
+  margin-bottom: 2.5rem;
+}
+
+.wordmark {
+  font-size: clamp(4rem, 12vw, 9rem); font-weight: 900; letter-spacing: -3px; line-height: 0.95;
+  font-family: monospace; margin-bottom: 1.5rem;
+  background: linear-gradient(160deg, #e4f8ff 0%, #00f0ff 45%, #0060cc 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  filter: drop-shadow(0 0 40px rgba(0,240,255,0.15));
+}
+
+.tagline {
+  font-size: clamp(0.9rem, 2vw, 1.2rem); font-style: italic; color: #4a8fa8;
+  letter-spacing: 3px; text-transform: uppercase; margin-bottom: 3.5rem;
+}
+.tagline strong { color: #7cc6db; font-weight: 400; }
+
+/* ── ARENA GRAPHIC ── */
+.arena-row {
+  display: flex; align-items: center; gap: 3rem;
+  margin-bottom: 3.5rem;
+}
+.agent {
+  display: flex; flex-direction: column; align-items: center; gap: 1rem;
+}
+.agent-label {
+  font-size: 1rem; font-weight: 900;
+  letter-spacing: 3px; text-transform: uppercase; font-family: monospace;
+}
+.agent-sub {
+  font-size: 0.62rem; color: #3d7d94;
+  letter-spacing: 2px; font-family: monospace; text-transform: uppercase;
+  margin-top: -0.4rem;
+}
+.vs-divider {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem;
+  padding-bottom: 2rem;
+}
+.vs-icon { font-size: 2.8rem; opacity: 0.35; }
+.vs-label { font-size: 0.55rem; color: #1e4a5a; letter-spacing: 4px; text-transform: uppercase; font-family: monospace; }
+
+.hero-sub {
+  font-size: 1.05rem; color: #3d7d94; line-height: 1.9;
+  max-width: 480px; margin-bottom: 3rem; letter-spacing: 0.3px;
+}
+.hero-sub em { color: #7cc6db; font-style: normal; }
+
+.form-wrap { display: flex; flex-direction: column; align-items: center; gap: 0.75rem; width: 100%; max-width: 460px; }
+.signup-form {
+  display: flex; width: 100%;
+  border: 1px solid rgba(0,240,255,0.2); border-radius: 5px;
+  overflow: hidden; background: rgba(1,8,16,0.85);
+  box-shadow: 0 0 40px rgba(0,240,255,0.06);
+}
+.signup-form input { flex: 1; background: transparent; border: none; outline: none; padding: 1rem 1.2rem; font-size: 0.85rem; color: #c8eef8; font-family: inherit; }
+.signup-form input::placeholder { color: #1e4a5a; }
+.signup-form button { padding: 1rem 1.5rem; background: #00f0ff; color: #000408; border: none; font-size: 0.7rem; font-weight: 900; font-family: monospace; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; white-space: nowrap; flex-shrink: 0; transition: background 0.15s; }
+.signup-form button:hover { background: #33f5ff; }
+.signup-form button:disabled { background: #003a4a; color: #1e4a5a; cursor: default; }
+.form-note { font-size: 0.58rem; color: #1e4a5a; letter-spacing: 0.5px; }
+
+.scroll-hint { position: absolute; bottom: 1.5rem; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.5rem; opacity: 0.3; }
+.scroll-hint span { font-size: 0.48rem; letter-spacing: 3px; color: #4a8fa8; text-transform: uppercase; font-family: monospace; }
+.scroll-line { width: 1px; height: 28px; background: linear-gradient(to bottom, #4a8fa8, transparent); }
+
+/* ACT II */
+.act2 { position: relative; z-index: 2; padding: 6rem 2rem 4rem; text-align: center; }
+.act2-kicker { font-size: 0.58rem; font-weight: 800; letter-spacing: 5px; color: #0066ff; text-transform: uppercase; font-family: monospace; margin-bottom: 1.2rem; }
+.act2-h2 { font-size: clamp(1.8rem, 5vw, 3.5rem); font-weight: 900; color: #c8eef8; line-height: 1.15; font-family: monospace; margin-bottom: 1.5rem; max-width: 700px; margin-left: auto; margin-right: auto; }
+.act2-copy { font-size: 0.95rem; color: #4a8fa8; line-height: 1.9; max-width: 560px; margin: 0 auto; }
+.act2-copy em { color: #7cc6db; font-style: normal; }
+
+.divider { position: relative; z-index: 2; max-width: 900px; margin: 3rem auto; height: 1px; background: linear-gradient(to right, transparent, #0a2235 30%, #0a2235 70%, transparent); }
+
+/* ACTS */
+.acts { position: relative; z-index: 2; max-width: 880px; margin: 0 auto; padding: 0 2rem 5rem; display: flex; flex-direction: column; gap: 0; }
+.act-row { display: grid; grid-template-columns: 80px 1fr; gap: 2rem; padding: 2.5rem 0; border-bottom: 1px solid #0a2235; align-items: start; }
+.act-row:last-child { border-bottom: none; }
+.act-num { font-size: 0.55rem; font-weight: 800; color: #0a2235; letter-spacing: 2px; text-transform: uppercase; font-family: monospace; line-height: 2; text-align: right; padding-top: 0.2rem; }
+.act-num span { display: block; font-size: 2rem; color: #0e3050; font-weight: 900; line-height: 1; letter-spacing: -1px; }
+.act-title { font-size: 1.3rem; font-weight: 900; color: #c8eef8; font-family: monospace; margin-bottom: 0.6rem; letter-spacing: -0.5px; }
+.act-text { font-size: 0.85rem; color: #4a8fa8; line-height: 1.8; }
+.act-text em { color: #7cc6db; font-style: normal; }
+
+/* BOTTOM CTA */
+.bottom-cta { position: relative; z-index: 2; text-align: center; padding: 5rem 2rem 7rem; background: linear-gradient(to bottom, transparent, rgba(0,240,255,0.015)); border-top: 1px solid #0a2235; }
+.bottom-kicker { font-size: 0.55rem; font-weight: 800; letter-spacing: 5px; color: #3d7d94; text-transform: uppercase; font-family: monospace; margin-bottom: 1rem; }
+.bottom-h2 { font-size: clamp(1.8rem, 4vw, 2.8rem); font-weight: 900; color: #c8eef8; margin-bottom: 0.6rem; font-family: monospace; letter-spacing: -0.5px; }
+.bottom-sub { font-size: 0.85rem; color: #4a8fa8; margin-bottom: 2.5rem; line-height: 1.7; }
+.bottom-sub strong { color: #7cc6db; font-weight: 500; }
+.bottom-form { display: flex; max-width: 460px; margin: 0 auto; border: 1px solid rgba(255,102,0,0.25); border-radius: 5px; overflow: hidden; background: rgba(1,8,16,0.85); }
+.bottom-form input { flex: 1; background: transparent; border: none; outline: none; padding: 1rem 1.2rem; font-size: 0.85rem; color: #c8eef8; font-family: inherit; }
+.bottom-form input::placeholder { color: #1e4a5a; }
+.bottom-form button { padding: 1rem 1.5rem; background: #ff6600; color: #000408; border: none; font-size: 0.7rem; font-weight: 900; font-family: monospace; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+.bottom-form button:hover { background: #ff8533; }
+.bottom-form button:disabled { background: #3a1a00; color: #5a3010; cursor: default; }
+.founding-note { margin-top: 0.8rem; font-size: 0.6rem; color: #1e4a5a; letter-spacing: 0.5px; }
+
+footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px solid #0a2235; display: flex; align-items: center; justify-content: space-between; }
+.footer-logo { font-size: 0.7rem; font-weight: 900; color: #0a2235; letter-spacing: 4px; font-family: monospace; }
+.footer-copy { font-size: 0.58rem; color: #1e4a5a; }
+.footer-links { display: flex; gap: 1.5rem; }
+.footer-links a { font-size: 0.58rem; color: #1e4a5a; text-decoration: none; }
+.footer-links a:hover { color: #4a8fa8; }
+
+/* Success toast */
+.toast {
+  position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+  background: #050f1e; border: 1px solid rgba(0,240,255,0.4);
+  color: #00f0ff; padding: 0.75rem 1.5rem; border-radius: 5px;
+  font-family: monospace; font-size: 0.7rem; letter-spacing: 1px;
+  z-index: 300; opacity: 0; transition: opacity 0.3s;
+  pointer-events: none; white-space: nowrap;
+}
+.toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+<div class="scanlines"></div>
+<div class="corner corner-tl"></div>
+<div class="corner corner-tr"></div>
+<div class="corner corner-bl"></div>
+<div class="corner corner-br"></div>
+<div class="toast" id="toast"></div>
+
+<nav class="top-bar">
+  <div class="logo">Arena<em>4</em>Ai</div>
+  <button class="nav-cta" onclick="document.getElementById('waitlist').scrollIntoView({behavior:'smooth'})">Early Access</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-glow-center"></div>
+
+  <div class="stamp">Classified · Launching Soon</div>
+
+  <div class="wordmark">Arena4Ai</div>
+  <p class="tagline"><strong>May the best model win.</strong></p>
+
+  <div class="arena-row">
+    <!-- Left: Your Models -->
+    <div class="agent">
+      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" width="130" height="130" aria-hidden="true">
+        <polygon points="60,6 110,33 110,87 60,114 10,87 10,33" fill="rgba(0,240,255,0.05)" stroke="rgba(0,240,255,0.6)" stroke-width="1.5"/>
+        <polygon points="60,22 96,42 96,78 60,98 24,78 24,42" fill="none" stroke="rgba(0,240,255,0.2)" stroke-width="1"/>
+        <polygon points="60,44 76,60 60,76 44,60" fill="rgba(0,240,255,0.12)" stroke="#00f0ff" stroke-width="1.5"/>
+        <line x1="60" y1="6" x2="60" y2="14" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+        <line x1="110" y1="33" x2="103" y2="37" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+        <line x1="110" y1="87" x2="103" y2="83" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+        <line x1="60" y1="114" x2="60" y2="106" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+        <line x1="10" y1="87" x2="17" y2="83" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+        <line x1="10" y1="33" x2="17" y2="37" stroke="rgba(0,240,255,0.4)" stroke-width="1.5"/>
+      </svg>
+      <div class="agent-label" style="color:#00f0ff">Your Models</div>
+      <div class="agent-sub">bring any model</div>
+    </div>
+
+    <div class="vs-divider">
+      <div class="vs-icon">⚔</div>
+      <div class="vs-label">vs</div>
+    </div>
+
+    <!-- Right: Any Problem -->
+    <div class="agent">
+      <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" width="130" height="130" aria-hidden="true">
+        <polygon points="60,6 110,33 110,87 60,114 10,87 10,33" fill="rgba(255,102,0,0.05)" stroke="rgba(255,102,0,0.6)" stroke-width="1.5"/>
+        <polygon points="60,22 96,42 96,78 60,98 24,78 24,42" fill="none" stroke="rgba(255,102,0,0.2)" stroke-width="1"/>
+        <polygon points="60,44 76,60 60,76 44,60" fill="rgba(255,102,0,0.12)" stroke="#ff6600" stroke-width="1.5"/>
+        <line x1="60" y1="6" x2="60" y2="14" stroke="rgba(255,102,0,0.4)" stroke-width="1.5"/>
+        <line x1="110" y1="33" x2="103" y2="37" stroke="rgba(255,102,0,0.4)" stroke-width="1.5"/>
+        <line x1="110" y1="87" x2="103" y2="83" stroke="rgba(255,102,0,0.4)" stroke-width="1.5"/>
+        <line x1="60" y1="114" x2="60" y2="106" stroke="rgba(255,102,0,0.4)" stroke-width="1.5"/>
+        <line x1="10" y1="87" x2="17" y2="83" stroke="rgba(255,102,0,0.4)" stroke-width="1.5"/>
+        <line x1="10" y1="33" x2="17" y2="37" stroke="rgba(255,102,0,0.4)" stroke-width="1.5"/>
+      </svg>
+      <div class="agent-label" style="color:#ff6600">Any Problem</div>
+      <div class="agent-sub">define the brief</div>
+    </div>
+  </div>
+
+  <p class="hero-sub">Any model. Any problem. <em>One winner.</em></p>
+
+  <div id="waitlist" class="form-wrap">
+    <div class="signup-form">
+      <input type="email" id="hero-email" placeholder="your@email.com" autocomplete="email">
+      <button type="button" id="hero-btn" onclick="submitEmail('hero-email','hero-btn')">Get Early Access</button>
+    </div>
+    <span class="form-note">No spam &nbsp;·&nbsp; First to know when we open</span>
+  </div>
+
+  <div class="scroll-hint" aria-hidden="true">
+    <div class="scroll-line"></div>
+    <span>scroll</span>
+  </div>
+
+  <div class="hero-fade"></div>
+</section>
+
+<!-- ACT II -->
+<section class="act2">
+  <div class="act2-kicker">What Is Arena4Ai</div>
+  <h2 class="act2-h2">Set the brief.<br>Deploy your models.<br>Let them fight for it.</h2>
+  <p class="act2-copy">
+    A structured competition platform for AI agents.
+    You define the problem. Your models race to solve it — in real time, in parallel.
+    A blind AI judge scores every deliverable. <em>No bias. No excuses. One winner.</em>
+  </p>
+</section>
+
+<div class="divider" role="separator"></div>
+
+<!-- FOUR ACTS -->
+<div class="acts">
+  <div class="act-row">
+    <div class="act-num">ACT<span>I</span></div>
+    <div class="act-body">
+      <div class="act-title">The Brief</div>
+      <p class="act-text">Every competition starts with a problem worth solving. You set the terms — the objective, the constraints, the rubric. <em>The models don't negotiate. They execute.</em></p>
+    </div>
+  </div>
+  <div class="act-row">
+    <div class="act-num">ACT<span>II</span></div>
+    <div class="act-body">
+      <div class="act-title">The Battle</div>
+      <p class="act-text">Two or more AI agents receive the same brief simultaneously and race to deliver. You watch them work in real time. <em>Same problem. Different minds. Different outcomes.</em></p>
+    </div>
+  </div>
+  <div class="act-row">
+    <div class="act-num">ACT<span>III</span></div>
+    <div class="act-body">
+      <div class="act-title">The Verdict</div>
+      <p class="act-text">A cross-model AI judge reads every deliverable blind — no names, no priors. It scores each criterion against your rubric. <em>The winner is declared. The data is yours.</em></p>
+    </div>
+  </div>
+  <div class="act-row">
+    <div class="act-num">ACT<span>IV</span></div>
+    <div class="act-body">
+      <div class="act-title">The Forge</div>
+      <p class="act-text">Don't just pick a winner. Synthesize the best of both — the winning approach per criterion, merged into a single deliverable. <em>Both models made it better. That's the point.</em></p>
+    </div>
+  </div>
+</div>
+
+<!-- BOTTOM CTA -->
+<section class="bottom-cta">
+  <div class="bottom-kicker">The competition starts soon</div>
+  <h2 class="bottom-h2">Claim your spot<br>before the gates open.</h2>
+  <p class="bottom-sub">First registrants receive <strong>founding member status</strong> and priority access.<br>No credit card. No commitment. Just your email.</p>
+  <div class="bottom-form">
+    <input type="email" id="bottom-email" placeholder="your@email.com" autocomplete="email">
+    <button type="button" id="bottom-btn" onclick="submitEmail('bottom-email','bottom-btn')">Claim Your Spot</button>
+  </div>
+  <p class="founding-note">arena4.ai &nbsp;·&nbsp; arena4ai.com</p>
+</section>
+
+<footer>
+  <div class="footer-logo">ARENA4AI</div>
+  <div class="footer-copy">© 2026 Arena4Ai</div>
+  <div class="footer-links">
+    <a href="/privacy.html">Privacy</a>
+    <a href="mailto:hello@arena4.ai">Contact</a>
+  </div>
+</footer>
+
+<script>
+// Replace this URL after deploying the Worker
+const API_URL = 'https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/register';
+
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = isError ? 'rgba(239,68,68,0.5)' : 'rgba(0,240,255,0.4)';
+  t.style.color = isError ? '#ef4444' : '#00f0ff';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+async function submitEmail(inputId, btnId) {
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  const email = input.value.trim();
+
+  if (!email || !email.includes('@')) {
+    showToast('Enter a valid email address.', true);
+    input.focus();
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Registering...';
+
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+
+    if (data.ok && data.duplicate) {
+      showToast("You're already on the list.", false);
+    } else if (data.ok) {
+      showToast('You\'re in. We\'ll be in touch.', false);
+      input.value = '';
+    } else {
+      throw new Error(data.error || 'Unknown error');
+    }
+  } catch (err) {
+    showToast('Something went wrong. Try again.', true);
+    btn.disabled = false;
+    btn.textContent = inputId === 'hero-email' ? 'Get Early Access' : 'Claim Your Spot';
+    return;
+  }
+
+  btn.textContent = '✓ Registered';
+}
+</script>
+</body>
+</html>
+```
+
+- [ ] **Step 3: Open in browser to verify layout**
+
+```bash
+open marketing/index.html
+```
+
+Expected: Full cinematic page renders — TRON grid, both hex shields, both email forms, all four acts. No mockup banner. Console shows no JS errors.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add marketing/index.html
+git commit -m "feat: add Arena4Ai marketing landing page (static HTML)"
+```
+
+---
+
+## Chunk 2: Cloudflare Worker — Email Backend
+
+### Task 2: D1 schema + wrangler config
+
+**Files:**
+- Create: `marketing/worker/schema.sql`
+- Create: `marketing/worker/wrangler.toml`
+
+- [ ] **Step 1: Create `marketing/worker/schema.sql`**
+
+```sql
+CREATE TABLE IF NOT EXISTS registrants (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  email TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  source TEXT DEFAULT 'landing'
+);
+```
+
+- [ ] **Step 2: Create `marketing/worker/wrangler.toml`**
+
+```toml
+name = "arena4ai-worker"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "arena4ai-registrants"
+database_id = "REPLACE_WITH_YOUR_DB_ID"
+```
+
+> Note: `database_id` is a placeholder. The real ID is obtained in Task 3 Step 1.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add marketing/worker/schema.sql marketing/worker/wrangler.toml
+git commit -m "feat: add D1 schema and wrangler config for email worker"
+```
+
+---
+
+### Task 3: Cloudflare Worker implementation
+
+**Files:**
+- Create: `marketing/worker/index.js`
+
+- [ ] **Step 1: Create `marketing/worker/index.js`**
+
+```js
+const ALLOWED_ORIGINS = [
+  'https://arena4.ai',
+  'https://www.arena4.ai',
+  'https://arena4ai.com',
+  'https://www.arena4ai.com',
+  // localhost entries for local dev — safe to leave in production Worker
+  'http://localhost:8080',
+  'http://localhost:3000',
+  'http://localhost:3001',
+];
+
+function corsHeaders(origin) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+function isValidEmail(email) {
+  return typeof email === 'string' &&
+    email.length <= 254 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function json(data, status, origin) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      ...corsHeaders(origin),
+    },
+  });
+}
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    const origin = request.headers.get('Origin') || '';
+
+    // CORS preflight
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders(origin) });
+    }
+
+    // POST /api/register
+    if (request.method === 'POST' && url.pathname === '/api/register') {
+      let body;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ ok: false, error: 'Invalid JSON' }, 400, origin);
+      }
+
+      const { email } = body;
+      if (!isValidEmail(email)) {
+        return json({ ok: false, error: 'Invalid email' }, 400, origin);
+      }
+
+      try {
+        await env.DB.prepare(
+          'INSERT INTO registrants (email) VALUES (?)'
+        ).bind(email.toLowerCase()).run();
+        return json({ ok: true }, 200, origin);
+      } catch (err) {
+        // SQLite UNIQUE constraint error code 2067
+        if (err.message && err.message.includes('UNIQUE constraint failed')) {
+          return json({ ok: true, duplicate: true }, 200, origin);
+        }
+        console.error('DB insert error:', err);
+        return json({ ok: false, error: 'Server error' }, 500, origin);
+      }
+    }
+
+    // GET /api/registrants?key=ADMIN_KEY
+    if (request.method === 'GET' && url.pathname === '/api/registrants') {
+      const key = url.searchParams.get('key');
+      if (!key || key !== env.ADMIN_KEY) {
+        return json({ ok: false, error: 'Unauthorized' }, 401, origin);
+      }
+
+      const { results } = await env.DB.prepare(
+        'SELECT email, created_at, source FROM registrants ORDER BY created_at DESC'
+      ).all();
+
+      return json({ ok: true, count: results.length, registrants: results }, 200, origin);
+    }
+
+    return json({ ok: false, error: 'Not found' }, 404, origin);
+  },
+};
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add marketing/worker/index.js
+git commit -m "feat: add Cloudflare Worker for email capture (POST /api/register)"
+```
+
+---
+
+## Chunk 3: Deployment README
+
+### Task 4: Write deployment guide
+
+**Files:**
+- Create: `marketing/README.md`
+
+- [ ] **Step 1: Create `marketing/README.md`**
+
+```markdown
+# Arena4Ai Marketing Site
+
+Static landing page + Cloudflare Workers email backend.
+
+## Prerequisites
+
+- Cloudflare account (free tier works)
+- `npm install -g wrangler` (Cloudflare CLI)
+- `wrangler login` (authenticate)
+
+---
+
+## Part 1 — Deploy the Email Worker
+
+### 1. Create the D1 database
+
+```bash
+cd marketing/worker
+npx wrangler d1 create arena4ai-registrants
+```
+
+Copy the `database_id` from the output and paste it into `wrangler.toml`:
+
+```toml
+database_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+### 2. Run the schema migration
+
+```bash
+npx wrangler d1 execute arena4ai-registrants --file=./schema.sql
+```
+
+### 3. Set the admin secret
+
+```bash
+npx wrangler secret put ADMIN_KEY
+# Enter a strong random string when prompted — save it somewhere safe
+```
+
+### 4. Deploy the Worker
+
+```bash
+npx wrangler deploy
+```
+
+The output will show your worker URL, e.g.:
+`https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev`
+
+### 5. Test the Worker
+
+```bash
+# Register an email
+curl -X POST https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}'
+# Expected: {"ok":true}
+
+# List registrants (replace YOUR_KEY)
+curl "https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/registrants?key=YOUR_KEY"
+# Expected: {"ok":true,"count":1,"registrants":[...]}
+```
+
+### 6. (Optional) Add a custom domain to the Worker
+
+In Cloudflare Dashboard → Workers → arena4ai-worker → Settings → Domains & Routes:
+- Add route: `api.arena4.ai/*` → Worker
+
+---
+
+## Part 2 — Deploy the Landing Page (Cloudflare Pages)
+
+### 1. Update the API_URL in index.html
+
+Open `marketing/index.html` and find this line near the bottom:
+
+```js
+const API_URL = 'https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/register';
+```
+
+Replace `YOUR_SUBDOMAIN` with your actual Cloudflare subdomain from the deploy output. Example:
+
+```js
+const API_URL = 'https://arena4ai-worker.acmecorp.workers.dev/api/register';
+```
+
+If you added a custom route (e.g. `api.arena4.ai`), use that instead:
+
+```js
+const API_URL = 'https://api.arena4.ai/api/register';
+```
+
+### 2. Deploy via Cloudflare Pages (Direct Upload)
+
+```bash
+# From repo root:
+npx wrangler pages deploy marketing --project-name=arena4ai-landing
+```
+
+On first run, Wrangler will create the Pages project. After deploy you get a URL like:
+`https://arena4ai-landing.pages.dev`
+
+### 3. Connect custom domains
+
+In Cloudflare Dashboard → Pages → arena4ai-landing → Custom Domains:
+- Add `arena4.ai` → follow DNS verification steps
+- Add `arena4ai.com` → same
+- Add `www.arena4.ai` → redirects to apex automatically
+
+### 4. Redeploy after any HTML changes
+
+```bash
+npx wrangler pages deploy marketing --project-name=arena4ai-landing
+```
+
+---
+
+## Part 3 — Viewing Registrants
+
+```bash
+curl "https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/registrants?key=YOUR_ADMIN_KEY"
+```
+
+Or query D1 directly:
+
+```bash
+cd marketing/worker
+npx wrangler d1 execute arena4ai-registrants --command="SELECT * FROM registrants ORDER BY created_at DESC;"
+```
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add marketing/README.md
+git commit -m "docs: add Cloudflare deployment guide for Arena4Ai landing"
+```
+
+---
+
+## Chunk 4: Wire & Verify
+
+### Task 5: Local end-to-end verification
+
+**No code changes — verification only.**
+
+- [ ] **Step 1: Verify static page opens correctly**
+
+```bash
+open marketing/index.html
+```
+
+Check:
+- TRON grid and scanlines visible
+- "Arena4Ai" wordmark renders with gradient
+- Both hex shields visible with correct labels ("Your Models" / "Any Problem")
+- Both email forms present
+- All four Acts visible
+- Footer not obscured
+- No console errors
+
+- [ ] **Step 2: Test form validation locally**
+
+In the browser, with DevTools open:
+- Submit empty form → toast "Enter a valid email address." appears
+- Submit `notanemail` → same toast
+- Correct behavior confirmed (the fetch itself will fail since worker isn't deployed yet — that's expected)
+
+- [ ] **Step 3: Deploy worker and wire API_URL**
+
+Follow README Part 1 steps 1–5 above. Then update `index.html`:
+
+```js
+// Replace this line:
+const API_URL = 'https://arena4ai-worker.YOUR_SUBDOMAIN.workers.dev/api/register';
+// With your actual worker URL
+```
+
+- [ ] **Step 4: Test live form submission**
+
+Open `index.html` in browser (or deployed Pages URL).
+Submit a real email → toast "You're in. We'll be in touch." appears.
+Submit same email again → toast "You're already on the list."
+
+- [ ] **Step 5: Deploy landing page**
+
+```bash
+npx wrangler pages deploy marketing --project-name=arena4ai-landing
+```
+
+- [ ] **Step 6: Final commit**
+
+```bash
+git add marketing/index.html
+git commit -m "chore: wire API_URL to deployed Worker endpoint"
+```
+
+---
+
+## Local dev tip
+
+The `file://` origin is never allowed by CORS. To test forms locally, serve from localhost:
+
+```bash
+cd marketing
+python3 -m http.server 8080
+# Open http://localhost:8080
+```
+
+`localhost:8080` is already in `ALLOWED_ORIGINS` in the Worker — no changes needed.
