@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { EXAMPLE_BRIEFS } from '../../../lib/example-briefs';
-import { getModelColor, MONOSPACE_FONT, FORM_LABEL_STYLE } from '../../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, FORM_LABEL_STYLE, KICKER_STYLE } from '../../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -176,21 +176,13 @@ export default function NewTournamentPage() {
       fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
-      <style>{`
-        input:focus, textarea:focus, select:focus { border-color: #00f0ff !important; }
-        .team-card { transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease; }
-        .team-card:hover { transform: translateY(-1px); }
-        .submit-btn { transition: background 0.15s ease, transform 0.1s ease; }
-        .submit-btn:hover:not(:disabled) { background: #33f5ff !important; transform: translateY(-1px); }
-      `}</style>
-
       <div style={{ maxWidth: '680px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Header */}
         <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: '0.6rem', color: '#00f0ff', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.4rem', fontWeight: 700 }}>
+              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
                 ◆ New Tournament
               </div>
               <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#c8eef8' }}>
@@ -438,7 +430,7 @@ export default function NewTournamentPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #0a2235',
           }}>
-            <span style={{ fontSize: '0.6rem', color: '#00f0ff', letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700 }}>
+            <span style={{ ...KICKER_STYLE, color: '#00f0ff' }}>
               Brief
             </span>
             <div style={{ position: 'relative' }}>

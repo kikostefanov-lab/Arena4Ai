@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getModelColor, getStateStyle, FORMAT_BADGES, MONOSPACE_FONT, HOVER_DARK, HOVER_TEXT, KICKER_STYLE } from '../lib/design-tokens';
-import { formatTimeLimit } from '../lib/format';
+import { formatTimeLimit, resolveTeamLabel } from '../lib/format';
 
 interface TournamentSummary {
   id: string;
@@ -41,10 +41,6 @@ function timeAgo(dateStr: string | null): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
-}
-
-function teamLabel(t: Team) {
-  return t.persona ? `${t.model}:${t.persona}` : t.model;
 }
 
 function teamColor(t: Team): string {
@@ -271,7 +267,7 @@ export default function GalleryPage() {
                   borderRadius: '6px',
                   color: '#c8eef8',
                   fontSize: '0.72rem',
-                  fontFamily: 'monospace',
+                  fontFamily: MONOSPACE_FONT,
                   padding: '0.5rem 2rem 0.5rem 2rem',
                   outline: 'none',
                   boxSizing: 'border-box',
@@ -300,7 +296,7 @@ export default function GalleryPage() {
               )}
             </div>
             {searchQuery.trim() && (
-              <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: '0 0 0.15rem', fontFamily: 'monospace' }}>
+              <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: '0 0 0.15rem', fontFamily: MONOSPACE_FONT }}>
                 Showing {filteredCompetitions.length} of {competitions.length} competition{competitions.length !== 1 ? 's' : ''}
               </p>
             )}
@@ -552,7 +548,7 @@ export default function GalleryPage() {
                             border: `1px solid ${teamColor(teamA)}33`,
                             color: teamColor(teamA), fontWeight: 600, fontSize: '0.62rem',
                           }}>
-                            {teamLabel(teamA)}
+                            {resolveTeamLabel(comp.teams, teamA.id, teamA.model)}
                           </span>
                         )}
                         {teamA && teamB && (
@@ -566,7 +562,7 @@ export default function GalleryPage() {
                             border: `1px solid ${teamColor(teamB)}33`,
                             color: teamColor(teamB), fontWeight: 600, fontSize: '0.62rem',
                           }}>
-                            {teamLabel(teamB)}
+                            {resolveTeamLabel(comp.teams, teamB.id, teamB.model)}
                           </span>
                         )}
                         {winnerTeam && (
@@ -576,7 +572,7 @@ export default function GalleryPage() {
                               color: '#00f0ff', fontSize: '0.6rem', fontWeight: 700,
                               display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                             }}>
-                              🏆 {teamLabel(winnerTeam)} wins
+                              🏆 {resolveTeamLabel(comp.teams, winnerTeam.id, winnerTeam.model)} wins
                             </span>
                           </>
                         )}

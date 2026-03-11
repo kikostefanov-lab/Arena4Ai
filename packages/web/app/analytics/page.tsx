@@ -1,6 +1,6 @@
 import { orchestratorUrl, orchestratorHeaders } from '../../lib/orchestrator';
 import { formatDuration } from '../../lib/format';
-import { MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
+import { MONOSPACE_FONT, KICKER_STYLE, getModelColor } from '../../lib/design-tokens';
 
 interface AgentStat { model: string; wins: number; total: number; winRate: number; }
 interface FormatStat { format: string; total: number; completed: number; avgDurationMs: number | null; }
@@ -35,12 +35,6 @@ function parseAgentKey(key: string): { model: string; persona: string | null } {
   if (colon === -1) return { model: key, persona: null };
   return { model: key.slice(0, colon), persona: key.slice(colon + 1) };
 }
-
-const MODEL_COLORS: Record<string, string> = {
-  claude: '#00f0ff',
-  codex: '#0066ff',
-  gemini: '#00f0ff',
-};
 
 const MODEL_ICONS: Record<string, string> = {
   claude: '🟠',
@@ -79,11 +73,6 @@ function FormatBadge({ format }: { format: string | null }) {
       <span style={{ fontSize: '0.65rem' }}>{icon}</span> {label}
     </span>
   );
-}
-
-function getModelColorForKey(key: string): string {
-  const base = key.split(':')[0]?.toLowerCase() ?? '';
-  return MODEL_COLORS[base] ?? '#4a8fa8';
 }
 
 function getModelIcon(key: string): string {
@@ -263,7 +252,7 @@ export default async function AnalyticsPage() {
                     <tbody>
                       {sorted.map((stat, idx) => {
                         const { model, persona } = parseAgentKey(stat.model);
-                        const modelColor = getModelColorForKey(stat.model);
+                        const modelColor = getModelColor(stat.model);
                         const modelIcon = getModelIcon(stat.model);
                         const isTop = stat.winRate === topWinRate && stat.winRate > 0;
                         return (
@@ -365,7 +354,7 @@ export default async function AnalyticsPage() {
                             return (
                               <th key={p} style={{
                                 padding: '0.6rem 0.75rem', textAlign: 'center',
-                                fontSize: '0.56rem', color: getModelColorForKey(p),
+                                fontSize: '0.56rem', color: getModelColor(p),
                                 fontWeight: 700, whiteSpace: 'nowrap',
                               }}>
                                 <span style={{ marginRight: '0.2rem' }}>{icon}</span> {p}
@@ -379,7 +368,7 @@ export default async function AnalyticsPage() {
                           <tr key={rowPersona} style={{ borderBottom: '1px solid rgba(10,34,53,0.5)' }}>
                             <td style={{
                               padding: '0.65rem 0.75rem',
-                              color: getModelColorForKey(rowPersona),
+                              color: getModelColor(rowPersona),
                               fontWeight: 700, whiteSpace: 'nowrap',
                             }}>
                               <span style={{ marginRight: '0.3rem' }}>{getModelIcon(rowPersona)}</span>
@@ -568,7 +557,7 @@ export default async function AnalyticsPage() {
                   </thead>
                   <tbody>
                     {(data.recentCompetitions ?? []).map((comp) => {
-                      const winnerColor = comp.winner ? getModelColorForKey(comp.winner) : '#4a8fa8';
+                      const winnerColor = comp.winner ? getModelColor(comp.winner) : '#4a8fa8';
                       return (
                         <tr key={comp.id} style={{ borderBottom: '1px solid rgba(10,34,53,0.5)' }}>
                           <td style={{ padding: '0.65rem 1rem' }}>
@@ -589,11 +578,11 @@ export default async function AnalyticsPage() {
                           <td style={{ padding: '0.65rem 1rem', color: '#4a8fa8' }}>
                             {comp.agents.length >= 2 ? (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}>
-                                <span style={{ color: getModelColorForKey(comp.agents[0]), fontWeight: 600 }}>
+                                <span style={{ color: getModelColor(comp.agents[0]), fontWeight: 600 }}>
                                   {comp.agents[0]}
                                 </span>
                                 <span style={{ color: '#1e4a5a', fontSize: '0.58rem', fontWeight: 700 }}>VS</span>
-                                <span style={{ color: getModelColorForKey(comp.agents[1]), fontWeight: 600 }}>
+                                <span style={{ color: getModelColor(comp.agents[1]), fontWeight: 600 }}>
                                   {comp.agents[1]}
                                 </span>
                               </span>

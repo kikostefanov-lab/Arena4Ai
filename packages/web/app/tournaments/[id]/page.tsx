@@ -55,10 +55,6 @@ function medalFor(rank: number): string {
   return `${rank + 1}.`;
 }
 
-function formatTeamLabel(team: string): string {
-  return team;
-}
-
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function TournamentPage() {
@@ -217,12 +213,7 @@ export default function TournamentPage() {
               )}
               <Link
                 href="/"
-                className="nav-link"
-                style={{
-                  fontSize: '0.6rem', color: '#4a8fa8', padding: '0.4rem 0.8rem',
-                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
-                  letterSpacing: '1px', fontWeight: 600,
-                }}
+                className="arena-btn"
               >
                 ← GALLERY
               </Link>
@@ -295,11 +286,11 @@ export default function TournamentPage() {
             </span>
             <span style={{ fontSize: '0.72rem', color: '#4a8fa8' }}>Current match:</span>
             <span style={{ color: getModelColor(tournament.currentMatch.teamA.split(':')[0]), fontWeight: 700, fontSize: '0.75rem' }}>
-              {formatTeamLabel(tournament.currentMatch.teamA)}
+              {tournament.currentMatch.teamA}
             </span>
             <span style={{ color: '#1e4a5a', fontSize: '0.65rem', fontWeight: 700 }}>VS</span>
             <span style={{ color: getModelColor(tournament.currentMatch.teamB.split(':')[0]), fontWeight: 700, fontSize: '0.75rem' }}>
-              {formatTeamLabel(tournament.currentMatch.teamB)}
+              {tournament.currentMatch.teamB}
             </span>
             {tournament.currentMatch.competitionId && (
               <Link
@@ -482,7 +473,7 @@ export default function TournamentPage() {
                   <span style={{ fontSize: '0.65rem', color: '#4a8fa8' }}>
                     Match {i + 1}
                   </span>
-                  <span style={{ fontSize: '0.58rem', color: '#1e4a5a', fontFamily: 'monospace' }}>
+                  <span style={{ fontSize: '0.58rem', color: '#1e4a5a', fontFamily: MONOSPACE_FONT }}>
                     {matchId.slice(0, 8)}…
                   </span>
                   <Link

@@ -84,10 +84,6 @@ html {
   0%, 100% { box-shadow: 0 0 4px rgba(0,240,255,0.3); }
   50%       { box-shadow: 0 0 12px rgba(0,240,255,0.6); }
 }
-@keyframes slideIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
 @keyframes slideInScore {
   from { opacity: 0; transform: translateY(12px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
@@ -148,7 +144,7 @@ html {
 }
 
 /* ── Arena animation utility classes (from [id]/page.tsx GLOBAL_STYLES) ── */
-.arena-event-row  { animation: slideIn 0.2s ease-out; }
+.arena-event-row  { animation: fadeIn 0.2s ease-out; }
 .arena-score-card { animation: slideInScore 0.4s ease-out both; }
 .arena-winner-card { animation: glow 2s ease-in-out infinite; }
 .arena-progress-bar { animation: progressReveal 0.8s ease-out both; }
@@ -212,6 +208,13 @@ html {
   background: rgba(255,102,0,0.05);
 }
 .arena-btn-orange:hover { background: rgba(255,102,0,0.12); border-color: rgba(255,102,0,0.6); }
+
+/* ── CP-005: Focus ring for bare inputs outside arena-form ── */
+input:focus, textarea:focus, select:focus { border-color: #00f0ff !important; outline: none; }
+
+/* ── CP-006: Team card hover ── */
+.team-card { transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease; }
+.team-card:hover { transform: translateY(-1px); }
 
 /* ── CP-003: Shared form styles ── */
 .arena-form {
