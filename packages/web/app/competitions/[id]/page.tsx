@@ -786,20 +786,25 @@ function ScoreDrawer({
       });
       if (!res.ok) {
         const body = await res.json() as { error?: string };
+        // 409 "already in progress" means forge IS running — keep forgeRunning=true
+        if (res.status === 409 && body.error?.toLowerCase().includes('in progress')) {
+          return; // polling will detect completion
+        }
         setForgeError(body.error ?? 'Forge failed to start');
+        setForgeRunning(false);
       }
-      // Polling loop will pick up new run when done
+      // 202 success — keep forgeRunning=true; polling below will clear it when done
     } catch {
       setForgeError('Network error');
-    } finally {
       setForgeRunning(false);
     }
   }
 
-  // Poll for new forge runs while FORGING
+  // Poll for new forge runs while forgeRunning OR comp is in FORGING state
   const forgePollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => {
-    if (comp?.state !== 'FORGING') {
+    const shouldPoll = forgeRunning || comp?.state === 'FORGING';
+    if (!shouldPoll) {
       if (forgePollRef.current) { clearInterval(forgePollRef.current); forgePollRef.current = null; }
       return;
     }
@@ -808,15 +813,19 @@ function ScoreDrawer({
       try {
         const res = await fetch(`/api/competitions/${competitionId}/forge`);
         if (!res.ok) return;
-        const data = await res.json() as { runs?: ForgeRun[] };
+        const data = await res.json() as { status?: string; runs?: ForgeRun[] };
         if (Array.isArray(data.runs)) {
           setForgeRuns(data.runs);
           setActiveForgeRunId((prev) => prev ?? (data.runs!.length > 0 ? data.runs![data.runs!.length - 1].id : null));
         }
+        // Clear forgeRunning once the server confirms forge is no longer running
+        if (data.status && data.status !== 'forging') {
+          setForgeRunning(false);
+        }
       } catch { /* ignore */ }
     }, 3000);
     return () => { if (forgePollRef.current) { clearInterval(forgePollRef.current); forgePollRef.current = null; } };
-  }, [comp?.state, competitionId]);
+  }, [comp?.state, forgeRunning, competitionId]);
 
   const tabStyle = (tab: 'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'): React.CSSProperties => ({
     fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
