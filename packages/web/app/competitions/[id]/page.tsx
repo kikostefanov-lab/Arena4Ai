@@ -1481,7 +1481,7 @@ function ScoreDrawer({
                       <span style={{ fontSize: '1.1rem' }}>🔬</span>
                       <div>
                         <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI Synthesis</div>
-                        <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>The best elements from both submissions merged into a single hybrid solution</div>
+                        <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>The best elements from all submissions merged into a single hybrid solution</div>
                       </div>
                     </div>
 
@@ -1586,7 +1586,7 @@ function ScoreDrawer({
                       Synthesize a Hybrid Solution
                     </div>
                     <div style={{ fontSize: '0.75rem', color: '#7cc6db', maxWidth: '400px', margin: '0 auto 1.5rem', lineHeight: 1.7 }}>
-                      Ask AI to merge the best elements from both teams into a single unified deliverable,
+                      Ask AI to merge the best elements from all teams into a single unified deliverable,
                       with per-criterion attribution showing what came from whom.
                     </div>
                     {synthError && (
@@ -1908,7 +1908,7 @@ const STATE_BANNERS: Partial<Record<CompetitionState | 'PAUSED', {
   icon: string; label: string; sub: string;
   bg: string; border: string; color: string; animate?: string;
 }>> = {
-  JUDGING:     { icon: '⚖️', label: 'JUDGING IN PROGRESS',    sub: 'AI judge is evaluating both submissions…',        bg: 'rgba(234,179,8,0.10)',  border: 'rgba(234,179,8,0.3)',  color: '#eab308', animate: 'judgingPulse 2s ease-in-out infinite' },
+  JUDGING:     { icon: '⚖️', label: 'JUDGING IN PROGRESS',    sub: 'AI judge is evaluating all submissions…',        bg: 'rgba(234,179,8,0.10)',  border: 'rgba(234,179,8,0.3)',  color: '#eab308', animate: 'judgingPulse 2s ease-in-out infinite' },
   PAUSED:      { icon: '⏸',  label: 'COMPETITION PAUSED',     sub: 'Resume when ready — clock is frozen.',             bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6' },
   COLLECTING:  { icon: '📦', label: 'COLLECTING DELIVERABLES', sub: 'Gathering files from each agent workspace…',       bg: 'rgba(0,240,255,0.10)', border: 'rgba(0,240,255,0.3)', color: '#00f0ff', animate: 'judgingPulse 2s ease-in-out infinite' },
   PRESENTING:  { icon: '🎤', label: 'GENERATING PRESENTATIONS', sub: 'Translating deliverables into human-readable summaries…', bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6', animate: 'judgingPulse 2s ease-in-out infinite' },
