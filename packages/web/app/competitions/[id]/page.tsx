@@ -1346,199 +1346,224 @@ function ScoreDrawer({
               </div>
             )}
 
-            {/* FILES TAB — shows deliverable files (from result) when available, falls back to event-file captures */}
-            {activeTab === 'files' && hasFiles && (
-              <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-                {result.deliverables!.map((td, tdIdx) => {
-                  const label = resolveLabel(teams, td.teamId, td.teamId);
-                  const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
-                  const rgb = hexToRgb(color);
+            {/* FILES TAB */}
+            {activeTab === 'files' && (
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
 
-                  return (
-                    <div key={td.teamId} style={{
-                      marginBottom: tdIdx < result.deliverables!.length - 1 ? '1.25rem' : 0,
-                      border: `1px solid rgba(${rgb},0.2)`,
-                      borderRadius: '8px', overflow: 'hidden',
+                {/* ── Primary: deliverable files ── */}
+                {hasFiles && (
+                  <>
+                    {/* Column grid */}
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${result.deliverables!.length}, 1fr)`,
+                      flex: 1, minHeight: 0, overflow: 'hidden',
                     }}>
-                      {/* Team header */}
-                      <div style={{
-                        padding: '0.5rem 0.85rem',
-                        background: `rgba(${rgb},0.08)`,
-                        borderBottom: `1px solid rgba(${rgb},0.15)`,
-                        display: 'flex', alignItems: 'center', gap: '0.5rem',
-                      }}>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase' }}>
-                          {label}
-                        </span>
-                        <span style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
-                          {td.files.length} {td.files.length === 1 ? 'file' : 'files'}
-                        </span>
-                        <span style={{ flex: 1 }} />
-                        <a
-                          href={`/api/competitions/${competitionId}/deliverables/${td.teamId}/download`}
-                          download
-                          style={{
-                            fontSize: '0.62rem', fontWeight: 700, padding: '0.25rem 0.65rem',
-                            borderRadius: '5px', background: 'rgba(0,240,255,0.1)',
-                            border: '1px solid rgba(0,240,255,0.35)', color: '#00f0ff',
-                            textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
-                            letterSpacing: '0.5px',
-                          }}
-                        >
-                          📦 ZIP
-                        </a>
-                      </div>
+                      {result.deliverables!.map((td, tdIdx) => {
+                        const label = resolveLabel(teams, td.teamId, td.teamId);
+                        const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
+                        const rgb = hexToRgb(color);
+                        return (
+                          <div
+                            key={td.teamId}
+                            className="arena-scrollbar"
+                            style={{
+                              borderRight: tdIdx < result.deliverables!.length - 1 ? '1px solid #0a2235' : 'none',
+                              overflowY: 'auto', display: 'flex', flexDirection: 'column',
+                            }}
+                          >
+                            {/* Sticky column header */}
+                            <div style={{
+                              position: 'sticky', top: 0, zIndex: 2,
+                              background: `rgba(${rgb},0.08)`,
+                              borderBottom: `1px solid rgba(${rgb},0.2)`,
+                              padding: '0.55rem 0.85rem',
+                              display: 'flex', alignItems: 'center', gap: '0.5rem',
+                              flexShrink: 0,
+                            }}>
+                              <span style={{ fontSize: '0.7rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase', flex: 1 }}>
+                                {label}
+                              </span>
+                              <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>{td.files.length} files</span>
+                              <a
+                                href={`/api/competitions/${competitionId}/deliverables/${td.teamId}/download`}
+                                download
+                                style={{
+                                  fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.5rem',
+                                  borderRadius: '4px', background: 'rgba(0,240,255,0.08)',
+                                  border: '1px solid rgba(0,240,255,0.3)', color: '#00f0ff',
+                                  textDecoration: 'none', letterSpacing: '0.5px',
+                                }}
+                              >
+                                📦 ZIP
+                              </a>
+                            </div>
 
-                      {td.files.length === 0 && (
-                        <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#1e4a5a', fontStyle: 'italic' }}>
-                          No files submitted
-                        </div>
-                      )}
+                            {td.files.length === 0 && (
+                              <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.72rem', color: '#1e4a5a', fontStyle: 'italic' }}>
+                                No files submitted
+                              </div>
+                            )}
 
-                      {td.files.length > 0 && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '0.4rem 0.5rem' }}>
-                          {td.files.map((file) => {
-                            const isFileExpanded = expandedFile?.teamId === td.teamId && expandedFile?.path === file.path;
-                            const previewLines = file.content.split('\n').slice(0, 50).join('\n');
-                            const hasMore = file.content.split('\n').length > 50;
-
-                            return (
-                              <div key={file.path}>
-                                {/* File row */}
+                            {td.files.map((file) => {
+                              const isSelected = selectedFileKey?.teamId === td.teamId && selectedFileKey?.path === file.path;
+                              return (
                                 <div
-                                  onClick={() => setExpandedFile(isFileExpanded ? null : { teamId: td.teamId, path: file.path })}
+                                  key={file.path}
+                                  onClick={() => setSelectedFileKey(isSelected ? null : { teamId: td.teamId, path: file.path })}
                                   style={{
                                     display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                    padding: '0.35rem 0.6rem', borderRadius: '5px',
-                                    background: isFileExpanded ? 'rgba(0,240,255,0.06)' : 'rgba(10,34,53,0.4)',
+                                    padding: '0.4rem 0.85rem',
+                                    borderBottom: '1px solid rgba(10,34,53,0.4)',
                                     cursor: 'pointer',
-                                    borderLeft: isFileExpanded ? '2px solid #00f0ff' : '2px solid transparent',
-                                    transition: 'all 0.15s ease',
+                                    background: isSelected ? 'rgba(0,240,255,0.07)' : 'transparent',
+                                    borderLeft: isSelected ? `2px solid #00f0ff` : '2px solid transparent',
                                   }}
                                 >
-                                  <span style={{ fontSize: '0.7rem' }}>📄</span>
-                                  <span style={{ fontSize: '0.72rem', color: '#e4f8ff', flex: 1 }}>{file.path}</span>
-                                  <span style={{ fontSize: '0.6rem', color: '#3d7d94' }}>
+                                  <span style={{ fontSize: '0.7rem', flexShrink: 0 }}>📄</span>
+                                  <span style={{ fontSize: '0.72rem', color: isSelected ? '#e4f8ff' : '#7cc6db', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {file.path}
+                                  </span>
+                                  <span style={{ fontSize: '0.6rem', color: '#1e4a5a', flexShrink: 0 }}>
                                     {(file.content.length / 1024).toFixed(1)} KB
                                   </span>
-                                  <span style={{ fontSize: '0.6rem', color: isFileExpanded ? '#00f0ff' : '#3d7d94' }}>
-                                    {isFileExpanded ? '▲' : '▾'}
-                                  </span>
                                 </div>
-
-                                {/* Inline preview */}
-                                {isFileExpanded && (
-                                  <div style={{
-                                    background: '#000408', border: '1px solid #0a2235',
-                                    borderTop: 'none', borderRadius: '0 0 6px 6px',
-                                    padding: '0.65rem 0.8rem',
-                                    maxHeight: '240px', overflowY: 'auto',
-                                    fontFamily: "'SF Mono', 'Fira Code', monospace",
-                                    fontSize: '0.68rem', color: '#7cc6db', lineHeight: 1.6,
-                                    whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                                  }}>
-                                    {previewLines}
-                                    {hasMore && (
-                                      <div style={{ marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px solid #0a2235' }}>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setFileModalContent({ path: file.path, content: file.content }); }}
-                                          style={{
-                                            background: 'none', border: 'none', color: '#00f0ff',
-                                            fontSize: '0.62rem', cursor: 'pointer', fontFamily: 'inherit', padding: 0,
-                                          }}
-                                        >
-                                          Open full file ({file.content.split('\n').length} lines) →
-                                        </button>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* FILES TAB — fallback to event-captured files when no deliverables */}
-            {activeTab === 'files' && !hasFiles && (
-              <div style={{ maxWidth: '900px', margin: '0 auto' }}>
-                {!fileEventsByTeam || fileEventsByTeam.every((t) => t.files.length === 0) ? (
-                  <div style={{ color: '#1e4a5a', fontStyle: 'italic', fontSize: '0.78rem', textAlign: 'center', paddingTop: '1rem' }}>
-                    No files recorded for this competition.
-                  </div>
-                ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(fileEventsByTeam.length, 2)}, 1fr)`, gap: '1rem' }}>
-                    {fileEventsByTeam.map((teamFiles, tdIdx) => {
-                      const label = resolveLabel(teams, teamFiles.teamId, teamFiles.teamId);
-                      const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
-                      const rgb = hexToRgb(color);
-                      return (
-                        <div key={teamFiles.teamId} style={{
-                          border: `1px solid rgba(${rgb},0.2)`,
-                          borderRadius: '8px', overflow: 'hidden',
-                        }}>
-                          {/* Team header */}
-                          <div style={{
-                            padding: '0.5rem 0.85rem',
-                            background: `rgba(${rgb},0.08)`,
-                            borderBottom: `1px solid rgba(${rgb},0.15)`,
-                            display: 'flex', alignItems: 'center', gap: '0.5rem',
-                          }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase' }}>
-                              {label}
-                            </span>
-                            <span style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
-                              {teamFiles.files.length} {teamFiles.files.length === 1 ? 'file' : 'files'}
-                            </span>
+                              );
+                            })}
                           </div>
-                          {/* Files */}
-                          {teamFiles.files.length === 0 ? (
-                            <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#1e4a5a', fontStyle: 'italic' }}>
-                              No files recorded
+                        );
+                      })}
+                    </div>
+
+                    {/* File preview panel — only shown when a file is selected */}
+                    {selectedFileKey && (() => {
+                      const teamDel = result.deliverables!.find(td => td.teamId === selectedFileKey.teamId);
+                      const file = teamDel?.files.find(f => f.path === selectedFileKey.path);
+                      if (!file) return null;
+                      const teamIdx = result.deliverables!.findIndex(td => td.teamId === selectedFileKey.teamId);
+                      const color = LANE_COLORS[teamIdx] ?? '#4a8fa8';
+                      const rgb = hexToRgb(color);
+                      const label = resolveLabel(teams, selectedFileKey.teamId, selectedFileKey.teamId);
+                      return (
+                        <>
+                          {/* Resize handle */}
+                          <div
+                            style={{
+                              flexShrink: 0, height: '5px', background: '#0a2235',
+                              cursor: 'ns-resize', position: 'relative', transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,240,255,0.5)'; }}
+                            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#0a2235'; }}
+                            onMouseDown={(e) => {
+                              isDraggingFilePreview.current = true;
+                              dragFilePreviewStartY.current = e.clientY;
+                              dragFilePreviewStartH.current = filePreviewHeight;
+                              e.preventDefault();
+                            }}
+                          >
+                            <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '40px', height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.12)' }} />
+                          </div>
+
+                          {/* Preview panel */}
+                          <div style={{
+                            flexShrink: 0, height: `${filePreviewHeight}px`,
+                            borderTop: '2px solid rgba(0,240,255,0.3)',
+                            background: '#020b14', display: 'flex', flexDirection: 'column', overflow: 'hidden',
+                          }}>
+                            {/* Preview header */}
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: '0.6rem',
+                              padding: '0.4rem 0.85rem', borderBottom: '1px solid #0a2235',
+                              background: '#010810', flexShrink: 0,
+                            }}>
+                              <span style={{ fontSize: '0.7rem' }}>📄</span>
+                              <span style={{ fontSize: '0.72rem', color: '#00f0ff', fontWeight: 700, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {file.path}
+                              </span>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 800, padding: '0.15rem 0.45rem', borderRadius: '3px', background: `rgba(${rgb},0.12)`, color, flexShrink: 0 }}>
+                                {label}
+                              </span>
+                              <span style={{ fontSize: '0.6rem', color: '#3d7d94', flexShrink: 0 }}>
+                                {(file.content.length / 1024).toFixed(1)} KB
+                              </span>
+                              <a
+                                href={`/api/competitions/${competitionId}/deliverables/${selectedFileKey.teamId}/download`}
+                                download
+                                style={{ fontSize: '0.6rem', padding: '0.15rem 0.45rem', borderRadius: '3px', background: 'transparent', border: '1px solid #0a2235', color: '#4a8fa8', textDecoration: 'none' }}
+                              >
+                                ↓
+                              </a>
+                              <button
+                                onClick={() => setFileModalContent({ path: file.path, content: file.content })}
+                                style={{ fontSize: '0.6rem', padding: '0.15rem 0.45rem', borderRadius: '3px', background: 'transparent', border: '1px solid #0a2235', color: '#4a8fa8', cursor: 'pointer', fontFamily: 'monospace' }}
+                              >
+                                ⤢ Full
+                              </button>
                             </div>
-                          ) : (
-                            <div style={{ maxHeight: '400px', overflowY: 'auto' }} className="arena-scrollbar">
-                              {teamFiles.files.map((f, fIdx) => (
-                                <div key={fIdx} style={{ borderBottom: fIdx < teamFiles.files.length - 1 ? '1px solid #0a2235' : 'none' }}>
-                                  {/* Filename bar */}
-                                  <div style={{
-                                    padding: '0.3rem 0.85rem',
-                                    background: '#000408',
-                                    fontSize: '0.68rem', color: '#1e4a5a', fontFamily: 'monospace',
-                                    display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                  }}>
-                                    <span style={{ color: '#00f0ff' }}>📄</span>
-                                    <span style={{ color: '#4a8fa8' }}>{f.path}</span>
-                                  </div>
-                                  {/* File content */}
-                                  <pre style={{
-                                    fontSize: '0.75rem', color: f.content ? '#d8f0fa' : '#1e4a5a',
-                                    whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-                                    lineHeight: 1.6, margin: 0,
-                                    padding: '0.65rem 1rem',
-                                    background: '#010810',
-                                    overflowX: 'auto',
-                                    fontStyle: f.content ? 'normal' : 'italic',
-                                  }}>
-                                    {f.content
-                                      ? (f.content.length > 3000
-                                        ? `${f.content.slice(0, 3000)}\n\n… (truncated — ${f.content.length - 3000} chars remaining)`
-                                        : f.content)
-                                      : '(no content captured)'}
-                                  </pre>
-                                </div>
-                              ))}
+
+                            {/* Scrollable file content */}
+                            <div
+                              className="arena-scrollbar"
+                              style={{
+                                flex: 1, overflowY: 'auto', padding: '0.65rem 1rem',
+                                fontFamily: "'SF Mono', 'Fira Code', monospace",
+                                fontSize: '0.7rem', color: '#7cc6db', lineHeight: 1.6,
+                                whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                              }}
+                            >
+                              {file.content}
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        </>
                       );
-                    })}
-                  </div>
+                    })()}
+                  </>
+                )}
+
+                {/* ── Fallback: event-captured files ── */}
+                {!hasFiles && (
+                  <>
+                    {!fileEventsByTeam || fileEventsByTeam.every((t) => t.files.length === 0) ? (
+                      <div style={{ padding: '3rem', textAlign: 'center', color: '#1e4a5a', fontSize: '0.78rem', fontStyle: 'italic' }}>
+                        No files recorded for this competition.
+                      </div>
+                    ) : (
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${Math.min(fileEventsByTeam.length, 3)}, 1fr)`,
+                        flex: 1, minHeight: 0, overflow: 'hidden',
+                      }}>
+                        {fileEventsByTeam.map((teamFiles, tdIdx) => {
+                          const label = resolveLabel(teams, teamFiles.teamId, teamFiles.teamId);
+                          const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
+                          const rgb = hexToRgb(color);
+                          return (
+                            <div key={teamFiles.teamId} className="arena-scrollbar" style={{ borderRight: tdIdx < fileEventsByTeam.length - 1 ? '1px solid #0a2235' : 'none', overflowY: 'auto' }}>
+                              <div style={{ position: 'sticky', top: 0, zIndex: 2, background: `rgba(${rgb},0.08)`, borderBottom: `1px solid rgba(${rgb},0.2)`, padding: '0.55rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                <span style={{ fontSize: '0.7rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase', flex: 1 }}>{label}</span>
+                                <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>{teamFiles.files.length} files</span>
+                              </div>
+                              {teamFiles.files.length === 0 ? (
+                                <div style={{ padding: '0.75rem', fontSize: '0.72rem', color: '#1e4a5a', fontStyle: 'italic' }}>No files recorded</div>
+                              ) : (
+                                teamFiles.files.map((f, fIdx) => (
+                                  <div key={fIdx} style={{ borderBottom: fIdx < teamFiles.files.length - 1 ? '1px solid #0a2235' : 'none' }}>
+                                    <div style={{ padding: '0.3rem 0.85rem', background: '#000408', fontSize: '0.68rem', color: '#4a8fa8', fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                      <span style={{ color: '#00f0ff' }}>📄</span>
+                                      <span>{f.path}</span>
+                                    </div>
+                                    <pre style={{ fontSize: '0.72rem', color: f.content ? '#d8f0fa' : '#1e4a5a', whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', monospace", lineHeight: 1.6, margin: 0, padding: '0.65rem 1rem', background: '#010810', overflowX: 'auto', fontStyle: f.content ? 'normal' : 'italic' }}>
+                                      {f.content ? (f.content.length > 3000 ? `${f.content.slice(0, 3000)}\n\n… (truncated)` : f.content) : '(no content captured)'}
+                                    </pre>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
