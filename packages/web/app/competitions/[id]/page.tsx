@@ -729,6 +729,7 @@ function ScoreDrawer({
   const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
   const [expandedFile, setExpandedFile] = useState<{ teamId: string; path: string } | null>(null);
   const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string } | null>(null);
+  const [presentationModal, setPresentationModal] = useState<TeamPresentation | null>(null);
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
   const winnerLabel = result.winnerId
@@ -770,6 +771,38 @@ function ScoreDrawer({
     borderBottom: activeTab === tab ? '2px solid #00f0ff' : '2px solid transparent',
     transition: 'all 0.15s', fontFamily: 'inherit',
   });
+
+  function downloadPresentation(pres: TeamPresentation) {
+    const lines = [
+      `# Presentation — ${pres.model}`,
+      '',
+      `## Approach`,
+      pres.approach,
+      '',
+      `## Key Insight`,
+      pres.keyInsight,
+      '',
+      `## Deliverable Summary`,
+      pres.deliverableSummary,
+      '',
+      `## Criteria Findings`,
+      ...(pres.criterionFindings ?? []).flatMap((f) => [
+        `### ${f.criterionId}`,
+        f.finding,
+        f.strength ? `**Strength:** ${f.strength}` : '',
+        f.gap ? `**Gap:** ${f.gap}` : '',
+        '',
+      ]),
+    ].join('\n');
+
+    const blob = new Blob([lines], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `presentation-${pres.model.replace(':', '-')}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
     <div className="arena-celebration" style={{
@@ -980,6 +1013,32 @@ function ScoreDrawer({
                         <span style={{ fontSize: '0.65rem', color: '#1e4a5a', fontStyle: 'italic' }}>
                           ({pres.model})
                         </span>
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+                          {/* Expand button */}
+                          <button
+                            onClick={() => setPresentationModal(pres)}
+                            style={{
+                              fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.5rem',
+                              borderRadius: '4px', background: 'transparent',
+                              border: '1px solid #0a2235', color: '#7cc6db',
+                              cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.5px',
+                            }}
+                          >
+                            ⤢ Expand
+                          </button>
+                          {/* Download button */}
+                          <button
+                            onClick={() => downloadPresentation(pres)}
+                            style={{
+                              fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.5rem',
+                              borderRadius: '4px', background: 'rgba(0,240,255,0.08)',
+                              border: '1px solid rgba(0,240,255,0.35)', color: '#00f0ff',
+                              cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.5px',
+                            }}
+                          >
+                            ↓ Download
+                          </button>
+                        </div>
                       </div>
 
                       <div style={{ padding: '1rem 1.1rem' }}>
@@ -1627,6 +1686,81 @@ function ScoreDrawer({
 
           </div>
         </>
+      )}
+
+      {/* Presentation modal */}
+      {presentationModal && (
+        <div
+          onClick={() => setPresentationModal(null)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,4,8,0.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#050f1e', border: '1px solid #0a2235', borderRadius: '10px',
+              width: 'min(680px, 92vw)', maxHeight: '82vh',
+              display: 'flex', flexDirection: 'column',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              padding: '0.9rem 1.2rem', borderBottom: '1px solid #0a2235',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#e4f8ff' }}>
+                {presentationModal.model}
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  onClick={() => downloadPresentation(presentationModal)}
+                  style={{
+                    fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.55rem',
+                    borderRadius: '4px', background: 'rgba(0,240,255,0.08)',
+                    border: '1px solid rgba(0,240,255,0.35)', color: '#00f0ff',
+                    cursor: 'pointer', fontFamily: 'monospace',
+                  }}
+                >
+                  ↓ Download
+                </button>
+                <button
+                  onClick={() => setPresentationModal(null)}
+                  style={{ background: 'none', border: 'none', color: '#3d7d94', cursor: 'pointer', fontSize: '1rem' }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            {/* Modal body */}
+            <div style={{ padding: '1.2rem', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              {[
+                { label: 'APPROACH', content: presentationModal.approach },
+                { label: 'KEY INSIGHT', content: presentationModal.keyInsight },
+                { label: 'DELIVERABLE SUMMARY', content: presentationModal.deliverableSummary },
+              ].map(({ label, content }) => (
+                <div key={label}>
+                  <div style={{ fontSize: '0.58rem', color: '#3d7d94', letterSpacing: '1.5px', marginBottom: '0.35rem' }}>{label}</div>
+                  <div style={{ fontSize: '0.78rem', color: '#e4f8ff', lineHeight: 1.7 }}>{content}</div>
+                </div>
+              ))}
+              {(presentationModal.criterionFindings ?? []).length > 0 && (
+                <div>
+                  <div style={{ fontSize: '0.58rem', color: '#3d7d94', letterSpacing: '1.5px', marginBottom: '0.6rem' }}>CRITERIA FINDINGS</div>
+                  {presentationModal.criterionFindings.map((f) => (
+                    <div key={f.criterionId} style={{ marginBottom: '0.85rem', paddingLeft: '0.7rem', borderLeft: '2px solid #0a2235' }}>
+                      <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#00f0ff', marginBottom: '0.25rem' }}>{f.criterionId}</div>
+                      <div style={{ fontSize: '0.72rem', color: '#e4f8ff', lineHeight: 1.6, marginBottom: '0.2rem' }}>{f.finding}</div>
+                      {f.strength && <div style={{ fontSize: '0.65rem', color: '#7cc6db' }}>Strength: {f.strength}</div>}
+                      {f.gap && <div style={{ fontSize: '0.65rem', color: '#7cc6db' }}>Gap: {f.gap}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Full-file modal */}
