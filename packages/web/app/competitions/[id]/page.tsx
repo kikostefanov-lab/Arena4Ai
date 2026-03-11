@@ -758,6 +758,14 @@ function ScoreDrawer({
   const [expandedFile, setExpandedFile] = useState<{ teamId: string; path: string } | null>(null);
   const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string } | null>(null);
   const [presentationModal, setPresentationModal] = useState<TeamPresentation | null>(null);
+  // Layout redesign state
+  const [selectedCriterionId, setSelectedCriterionId] = useState<string | null>(null);
+  const [selectedSynthCriterionId, setSelectedSynthCriterionId] = useState<string | null>(null);
+  const [selectedFileKey, setSelectedFileKey] = useState<{ teamId: string; path: string } | null>(null);
+  const [filePreviewHeight, setFilePreviewHeight] = useState(180);
+  const isDraggingFilePreview = useRef(false);
+  const dragFilePreviewStartY = useRef(0);
+  const dragFilePreviewStartH = useRef(0);
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
   const winnerLabel = result.winnerId
@@ -840,6 +848,23 @@ function ScoreDrawer({
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // File preview drag mechanic
+  useEffect(() => {
+    const handleMove = (e: MouseEvent) => {
+      if (!isDraggingFilePreview.current) return;
+      const delta = dragFilePreviewStartY.current - e.clientY;
+      const newH = Math.max(52, Math.min(420, dragFilePreviewStartH.current + delta));
+      setFilePreviewHeight(newH);
+    };
+    const handleUp = () => { isDraggingFilePreview.current = false; };
+    window.addEventListener('mousemove', handleMove);
+    window.addEventListener('mouseup', handleUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMove);
+      window.removeEventListener('mouseup', handleUp);
+    };
   }, []);
 
   // Forge stacked-runs state
@@ -1063,7 +1088,7 @@ function ScoreDrawer({
           </div>
 
           {/* Tab content */}
-          <div className="arena-scrollbar" style={{ overflowY: 'auto', flex: 1, padding: '1.25rem 1.5rem 1.5rem' }}>
+          <div className="arena-scrollbar" style={{ overflowY: 'auto', flex: 1, padding: 0 }}>
 
             {/* SCORES TAB */}
             {activeTab === 'scores' && (
