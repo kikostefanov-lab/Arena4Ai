@@ -12,6 +12,7 @@ import { applyPreset } from '../../brief/presets.js';
 import { runForge, getForgeProgress } from '../../forge/forge-orchestrator.js';
 import type { ForgeInput } from '../../forge/forge-orchestrator.js';
 import { synthesizeDeliverables } from '../../synthesis/merge-engine.js';
+import type { TeamDeliverable } from '../../db/schema.js';
 
 export const competitionsRouter = Router();
 
@@ -381,4 +382,36 @@ competitionsRouter.post('/:id/resume', requireApiKey, async (req: Request, res: 
   }
   runner.resume();
   res.json({ ok: true });
+});
+
+// GET /competitions/:id/deliverables/:teamId/download — ZIP of team files
+competitionsRouter.get('/:id/deliverables/:teamId/download', async (req: Request, res: Response) => {
+  const { id, teamId } = req.params as { id: string; teamId: string };
+
+  const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
+
+  const deliverables = (result?.deliverables as TeamDeliverable[] | null) ?? [];
+  const teamDel = deliverables.find(d => d.teamId === teamId);
+  if (!teamDel || teamDel.files.length === 0) {
+    res.status(404).json({ error: 'No deliverables found for team' });
+    return;
+  }
+
+  const teams = (comp.teams as Team[]) ?? [];
+  const team = teams.find(t => t.id === teamId);
+  const label = team ? `${team.model.replace(':', '-')}-files` : `team-${teamId.slice(0, 8)}-files`;
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="${label}.zip"`);
+
+  const archive = archiver('zip', { zlib: { level: 6 } });
+  archive.pipe(res);
+
+  for (const file of teamDel.files) {
+    const safePath = file.path.replace(/^\//, '').replace(/\.\.\//g, '');
+    archive.append(file.content, { name: safePath });
+  }
+
+  await archive.finalize();
 });
