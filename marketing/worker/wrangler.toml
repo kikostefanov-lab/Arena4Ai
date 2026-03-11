@@ -1,0 +1,8 @@
+name = "arena4ai-worker"
+main = "index.js"
+compatibility_date = "2024-01-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "arena4ai-registrants"
+database_id = "REPLACE_WITH_YOUR_DB_ID"
