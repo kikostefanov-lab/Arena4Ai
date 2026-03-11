@@ -736,6 +736,8 @@ function ScoreDrawer({
   teams,
   height,
   onToggle,
+  onMaximize,
+  maximized,
   fileEventsByTeam,
   comp,
 }: {
@@ -744,6 +746,8 @@ function ScoreDrawer({
   teams: Team[];
   height: number;
   onToggle: () => void;
+  onMaximize: () => void;
+  maximized: boolean;
   fileEventsByTeam?: TeamFileEvents[];
   comp?: { state: string } | null;
 }) {
@@ -962,46 +966,65 @@ function ScoreDrawer({
     }
   }
 
+  const drawerHeight = maximized ? '100%' : `${height}px`;
+
   return (
     <div className="arena-celebration" style={{
       borderTop: '2px solid rgba(0,240,255,0.4)',
       background: 'rgba(0,4,8,0.98)', flexShrink: 0,
-      height: `${height}px`, overflow: 'hidden',
+      height: drawerHeight, overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
       transition: 'none',
     }}>
-      {/* Collapsed strip */}
-      <button
-        onClick={onToggle}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
-          padding: '0 1.4rem', height: `${SCORE_DRAWER_COLLAPSED}px`, minHeight: `${SCORE_DRAWER_COLLAPSED}px`,
-          background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-          color: '#c8eef8', textAlign: 'left', flexShrink: 0,
-          borderBottom: isExpanded ? '1px solid #0a2235' : 'none',
-        }}
-      >
-        <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🏆</span>
-        <span style={{
-          color: '#eab308', fontSize: '0.82rem', fontWeight: 800,
-          letterSpacing: '1px', flexShrink: 0,
-        }}>
-          {winnerLabel ?? 'DRAW'}
-        </span>
-        <span style={{
-          color: '#1e4a5a', fontSize: '0.72rem', flex: 1,
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          letterSpacing: '0.3px',
-        }}>
-          {scoreSummary}
-        </span>
-        <span style={{
-          color: '#4a8fa8', fontSize: '0.72rem', flexShrink: 0,
-          background: 'rgba(10,34,53,0.4)', padding: '0.25rem 0.6rem', borderRadius: '4px',
-        }}>
-          {isExpanded ? '▲ hide' : '▼ details'}
-        </span>
-      </button>
+      {/* Header strip */}
+      <div style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
+        padding: '0 1.4rem', height: `${SCORE_DRAWER_COLLAPSED}px`, minHeight: `${SCORE_DRAWER_COLLAPSED}px`,
+        flexShrink: 0,
+        borderBottom: isExpanded ? '1px solid #0a2235' : 'none',
+      }}>
+        <button
+          onClick={onToggle}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+            background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+            color: '#c8eef8', textAlign: 'left', flex: 1, minWidth: 0, padding: 0,
+          }}
+        >
+          <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🏆</span>
+          <span style={{
+            color: '#eab308', fontSize: '0.82rem', fontWeight: 800,
+            letterSpacing: '1px', flexShrink: 0,
+          }}>
+            {winnerLabel ?? 'DRAW'}
+          </span>
+          <span style={{
+            color: '#1e4a5a', fontSize: '0.72rem', flex: 1,
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            letterSpacing: '0.3px',
+          }}>
+            {scoreSummary}
+          </span>
+          <span style={{
+            color: '#4a8fa8', fontSize: '0.72rem', flexShrink: 0,
+            background: 'rgba(10,34,53,0.4)', padding: '0.25rem 0.6rem', borderRadius: '4px',
+          }}>
+            {isExpanded ? '▲ hide' : '▼ details'}
+          </span>
+        </button>
+        <button
+          onClick={onMaximize}
+          title={maximized ? 'Restore split view' : 'Maximize results panel'}
+          style={{
+            flexShrink: 0, background: 'none', border: '1px solid #0a2235',
+            color: '#4a8fa8', fontSize: '0.75rem', cursor: 'pointer',
+            padding: '0.25rem 0.55rem', borderRadius: '4px', fontFamily: 'inherit',
+            transition: 'all 0.15s', lineHeight: 1,
+          }}
+        >
+          {maximized ? '⤡' : '⤢'}
+        </button>
+      </div>
 
       {/* Expanded body */}
       {isExpanded && (
@@ -2023,6 +2046,7 @@ export default function CompetitionPage() {
 
   // Resizable score drawer
   const [scoreDrawerHeight, setScoreDrawerHeight] = useState(SCORE_DRAWER_COLLAPSED);
+  const [bottomMaximized, setBottomMaximized] = useState(false);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
@@ -2699,7 +2723,8 @@ export default function CompetitionPage() {
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : `repeat(${numTeams}, 1fr)`,
-          overflow: isMobile ? 'auto' : 'hidden', flex: 1, minHeight: 0,
+          overflow: isMobile ? 'auto' : 'hidden',
+          flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0,
         }}>
           {orderedTeams.map((team, i) => {
             // Broadcast events (TIME_UP, TIME_WARNING) are shown in the StateBanner,
@@ -2739,8 +2764,8 @@ export default function CompetitionPage() {
           )}
         </div>
 
-        {/* ── Resize handle (only visible when there are results) ──────────── */}
-        {result && (
+        {/* ── Resize handle (only visible when there are results and not maximized) ── */}
+        {result && !bottomMaximized && (
           <div
             className={`resize-handle${isDraggingActive ? ' dragging' : ''}`}
             onMouseDown={handleResizeStart}
@@ -2758,6 +2783,13 @@ export default function CompetitionPage() {
             onToggle={() => setScoreDrawerHeight((h) =>
               h > SCORE_DRAWER_COLLAPSED ? SCORE_DRAWER_COLLAPSED : SCORE_DRAWER_EXPANDED
             )}
+            onMaximize={() => {
+              setBottomMaximized((m) => {
+                if (!m) setScoreDrawerHeight(SCORE_DRAWER_EXPANDED);
+                return !m;
+              });
+            }}
+            maximized={bottomMaximized}
             fileEventsByTeam={fileEventsByTeam}
             comp={{ state }}
           />
