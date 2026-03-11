@@ -757,6 +757,8 @@ function ScoreDrawer({
   const hasPresentations = (result.presentations ?? []).length > 0;
 
   const hasForge = result.forge != null;
+  const [synthRunning, setSynthRunning] = useState(false);
+  const [synthError, setSynthError] = useState<string | null>(null);
   const [forging, setForging] = useState(false);
   const [forgeError, setForgeError] = useState<string | null>(null);
   const [forgeProgress, setForgeProgress] = useState<Record<string, string> | null>(null);
@@ -802,6 +804,23 @@ function ScoreDrawer({
     a.download = `presentation-${pres.model.replace(':', '-')}.md`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function runSynthesis() {
+    setSynthRunning(true);
+    setSynthError(null);
+    try {
+      const res = await fetch(`/api/competitions/${competitionId}/synthesis`, { method: 'POST' });
+      if (!res.ok) {
+        const body = await res.json() as { error?: string };
+        setSynthError(body.error ?? 'Synthesis failed');
+      }
+      // Result will appear via polling (existing result polling loop or re-fetch)
+    } catch {
+      setSynthError('Network error — could not start synthesis');
+    } finally {
+      setSynthRunning(false);
+    }
   }
 
   return (
@@ -1408,8 +1427,35 @@ function ScoreDrawer({
                     </details>
                   </>
                 ) : (
-                  <div style={{ color: '#1e4a5a', fontStyle: 'italic', fontSize: '0.78rem', textAlign: 'center', paddingTop: '2rem' }}>
-                    Synthesis not available — run with <code style={{ fontFamily: 'monospace' }}>skipSynthesis: false</code> to enable
+                  <div style={{
+                    textAlign: 'center', padding: '4rem 2rem',
+                    background: '#050f1e', border: '1px solid #0a2235', borderRadius: '8px',
+                  }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>🔮</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#e4f8ff', marginBottom: '0.5rem' }}>
+                      Synthesize a Hybrid Solution
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#7cc6db', maxWidth: '400px', margin: '0 auto 1.5rem', lineHeight: 1.7 }}>
+                      Ask AI to merge the best elements from both teams into a single unified deliverable,
+                      with per-criterion attribution showing what came from whom.
+                    </div>
+                    {synthError && (
+                      <div style={{ fontSize: '0.68rem', color: '#ef4444', marginBottom: '1rem' }}>{synthError}</div>
+                    )}
+                    <button
+                      onClick={runSynthesis}
+                      disabled={synthRunning}
+                      style={{
+                        fontSize: '0.72rem', fontWeight: 800, padding: '0.6rem 1.5rem',
+                        borderRadius: '6px', background: 'rgba(0,240,255,0.12)',
+                        border: '1px solid rgba(0,240,255,0.4)', color: '#00f0ff',
+                        cursor: synthRunning ? 'not-allowed' : 'pointer',
+                        fontFamily: 'monospace', letterSpacing: '1.5px', textTransform: 'uppercase',
+                        opacity: synthRunning ? 0.6 : 1,
+                      }}
+                    >
+                      {synthRunning ? '🔮 Running…' : '🔮 Run Synthesis'}
+                    </button>
                   </div>
                 )}
               </div>
@@ -1831,7 +1877,6 @@ const STATE_BANNERS: Partial<Record<CompetitionState | 'PAUSED', {
   PAUSED:      { icon: '⏸',  label: 'COMPETITION PAUSED',     sub: 'Resume when ready — clock is frozen.',             bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6' },
   COLLECTING:  { icon: '📦', label: 'COLLECTING DELIVERABLES', sub: 'Gathering files from each agent workspace…',       bg: 'rgba(0,240,255,0.10)', border: 'rgba(0,240,255,0.3)', color: '#00f0ff', animate: 'judgingPulse 2s ease-in-out infinite' },
   PRESENTING:  { icon: '🎤', label: 'GENERATING PRESENTATIONS', sub: 'Translating deliverables into human-readable summaries…', bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6', animate: 'judgingPulse 2s ease-in-out infinite' },
-  SYNTHESIZING:{ icon: '🔮', label: 'SYNTHESIZING',            sub: 'Merging the best elements from both submissions…', bg: 'rgba(0,240,255,0.10)', border: 'rgba(0,240,255,0.3)', color: '#00f0ff', animate: 'judgingPulse 2s ease-in-out infinite' },
   FORGING:     { icon: '🔨', label: 'FORGING',                 sub: 'Generating build-ready artifacts from the winning solution…', bg: 'rgba(234,179,8,0.10)', border: 'rgba(234,179,8,0.3)', color: '#eab308', animate: 'judgingPulse 2s ease-in-out infinite' },
   FAILED:      { icon: '💥', label: 'COMPETITION FAILED',      sub: 'An error occurred during the competition.',        bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.3)',  color: '#ef4444' },
   CANCELLED:   { icon: '🚫', label: 'COMPETITION CANCELLED',   sub: 'This competition was stopped early.',              bg: 'rgba(136,150,171,0.08)',border: 'rgba(136,150,171,0.2)',color: '#4a8fa8' },
