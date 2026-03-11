@@ -1,5 +1,5 @@
 import { pgTable, text, jsonb, timestamp, serial, index, uniqueIndex } from 'drizzle-orm/pg-core';
-import type { TeamPresentation } from '@arena/shared';
+import type { TeamPresentation, ForgeRun } from '@arena/shared';
 import type { ForgeOutput } from '@arena/shared';
 
 export const competitions = pgTable('competitions', {
@@ -37,7 +37,7 @@ export const results = pgTable('results', {
   summary:        text('summary'),
   synthesis:      text('synthesis'),
   presentations:  jsonb('presentations').$type<TeamPresentation[]>(),
-  forge:          jsonb('forge').$type<ForgeOutput>(),
+  forge:          jsonb('forge').$type<ForgeRun[] | ForgeOutput>(),
   deliverables:   jsonb('deliverables').$type<TeamDeliverable[]>(),
 });
 

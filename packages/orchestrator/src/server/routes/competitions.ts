@@ -238,7 +238,7 @@ competitionsRouter.get('/:id/forge', async (req: Request, res: Response) => {
     return;
   }
 
-  res.json({ status: 'complete', forge: result.forge as ForgeOutput });
+  res.json({ status: 'complete', forge: result.forge as unknown });
 });
 
 // GET /competitions/:id/forge/progress — per-artifact progress during forging
@@ -261,7 +261,7 @@ competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response
     return;
   }
 
-  const forge = result.forge as ForgeOutput;
+  const forge = result.forge as unknown as ForgeOutput;
   const title = (comp?.brief as { title?: string } | null)?.title ?? id;
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
 

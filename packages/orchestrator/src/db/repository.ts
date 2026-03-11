@@ -2,7 +2,7 @@ import { and, eq, gt, asc, desc, sql, inArray } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { competitions, events, results, tournaments } from './schema.js';
 import type { TeamDeliverable } from './schema.js';
-import type { ArenaEvent, Brief, Team, TeamPresentation, ForgeOutput } from '@arena/shared';
+import type { ArenaEvent, Brief, Team, TeamPresentation, ForgeOutput, ForgeRun } from '@arena/shared';
 import { CompetitionState } from '@arena/shared';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
 
@@ -12,7 +12,7 @@ export interface StoredResult {
   summary?: string;
   synthesis?: SynthesisResult | null;
   presentations?: TeamPresentation[];
-  forge?: ForgeOutput | null;
+  forge?: ForgeRun[] | null;
   deliverables?: TeamDeliverable[];
 }
 
@@ -86,6 +86,25 @@ export class CompetitionRepository {
     await this.db.update(results).set({ forge }).where(eq(results.competitionId, competitionId));
   }
 
+  /** Append a new forge run to the runs array. */
+  async appendForgeRun(competitionId: string, run: ForgeRun): Promise<void> {
+    const existing = await this.getResult(competitionId);
+    const currentRuns = (existing?.forge as ForgeRun[] | null) ?? [];
+    // Backward compat: if existing forge is a plain ForgeOutput (not array), wrap it
+    const normalizedRuns = Array.isArray(currentRuns)
+      ? currentRuns
+      : [{ ...(currentRuns as ForgeOutput), id: 'legacy', source: 'winner' as const }];
+    await this.db.update(results)
+      .set({ forge: [...normalizedRuns, run] })
+      .where(eq(results.competitionId, competitionId));
+  }
+
+  async saveSynthesis(competitionId: string, synthesis: SynthesisResult): Promise<void> {
+    await this.db.update(results)
+      .set({ synthesis: JSON.stringify(synthesis) })
+      .where(eq(results.competitionId, competitionId));
+  }
+
   async countEvents(competitionId: string): Promise<number> {
     const rows = await this.db
       .select({ count: sql<number>`count(*)::int` })
@@ -108,7 +127,18 @@ export class CompetitionRepository {
         parsedSynthesis = { synthesis: row.synthesis, overallRationale: '', perCriterion: [] };
       }
     }
-    return { ...row, synthesis: parsedSynthesis };
+    // Normalize forge: old records stored a single ForgeOutput object, new ones are ForgeRun[]
+    let parsedForge: ForgeRun[] | null = null;
+    if (row.forge) {
+      const raw = row.forge as unknown;
+      if (Array.isArray(raw)) {
+        parsedForge = raw as ForgeRun[];
+      } else if (raw && typeof raw === 'object') {
+        // Legacy single ForgeOutput — wrap in array
+        parsedForge = [{ ...(raw as ForgeOutput), id: 'legacy', source: 'winner' as const }];
+      }
+    }
+    return { ...row, synthesis: parsedSynthesis, forge: parsedForge };
   }
 
   async listResults(competitionIds: string[]) {
