@@ -164,7 +164,6 @@ export default function NewTournamentPage() {
     boxSizing: 'border-box',
   };
 
-  const labelStyle: React.CSSProperties = { ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' };
 
   const sectionStyle: React.CSSProperties = {
     marginBottom: '1.5rem',
@@ -214,7 +213,7 @@ export default function NewTournamentPage() {
 
           {/* Tournament Name */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>Tournament Name (optional)</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Tournament Name (optional)</label>
             <input
               type="text"
               value={name}
@@ -226,7 +225,7 @@ export default function NewTournamentPage() {
 
           {/* Team Selection */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>
               Teams{' '}
               <span style={{ color: selectedTeams.length >= 2 && selectedTeams.length <= 8 ? '#0066ff' : '#ef4444' }}>
                 ({selectedTeams.length} selected — need 2–8)
@@ -378,7 +377,7 @@ export default function NewTournamentPage() {
 
           {/* Tournament Format */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <label style={labelStyle}>Tournament Format</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Tournament Format</label>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.65rem', marginBottom: '0.75rem' }}>
               {([
                 { value: 'ROUND_ROBIN', label: 'Round Robin', desc: 'Every team faces every other team once.' },
@@ -414,7 +413,7 @@ export default function NewTournamentPage() {
             </div>
             {tournamentType === 'SWISS' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                <label style={{ ...labelStyle, margin: 0 }}>Rounds</label>
+                <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem', margin: 0 }}>Rounds</label>
                 <select
                   value={swissRounds}
                   onChange={(e) => setSwissRounds(e.target.value === 'auto' ? 'auto' : Number(e.target.value))}
@@ -484,7 +483,7 @@ export default function NewTournamentPage() {
 
           {/* Problem */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>Problem *</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Problem *</label>
             <textarea
               value={problem}
               onChange={(e) => setProblem(e.target.value)}
@@ -498,7 +497,7 @@ export default function NewTournamentPage() {
           {/* Format + Time Limit */}
           <div style={{ ...sectionStyle, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
-              <label style={labelStyle}>Format</label>
+              <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Format</label>
               <select
                 value={format}
                 onChange={(e) => setFormat(e.target.value as typeof format)}
@@ -511,7 +510,7 @@ export default function NewTournamentPage() {
               </select>
             </div>
             <div>
-              <label style={labelStyle}>Time limit per match (minutes)</label>
+              <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Time limit per match (minutes)</label>
               <input
                 type="number"
                 value={timeLimitMins}
@@ -525,7 +524,7 @@ export default function NewTournamentPage() {
 
           {/* Constraints */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>Constraints (one per line)</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Constraints (one per line)</label>
             <textarea
               value={constraints}
               onChange={(e) => setConstraints(e.target.value)}
@@ -536,7 +535,7 @@ export default function NewTournamentPage() {
 
           {/* Deliverables */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>Deliverables (one per line)</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Deliverables (one per line)</label>
             <textarea
               value={deliverables}
               onChange={(e) => setDeliverables(e.target.value)}
@@ -547,7 +546,7 @@ export default function NewTournamentPage() {
 
           {/* Expected Output */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>Expected output (optional — enables automated scoring)</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Expected output (optional — enables automated scoring)</label>
             <textarea
               value={expectedOutput}
               onChange={(e) => setExpectedOutput(e.target.value)}
@@ -559,7 +558,7 @@ export default function NewTournamentPage() {
 
           {/* Rubric */}
           <div style={sectionStyle}>
-            <label style={labelStyle}>Rubric criteria</label>
+            <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>Rubric criteria</label>
             {criteria.map((c, i) => (
               <div key={i} style={{
                 background: '#050f1e', border: '1px solid #0a2235', borderRadius: '6px',

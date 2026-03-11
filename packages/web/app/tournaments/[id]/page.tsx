@@ -138,21 +138,6 @@ export default function TournamentPage() {
       fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .match-link { transition: color 0.15s ease; }
-        .match-link:hover { color: #00f0ff !important; }
-        .nav-link { transition: color 0.15s ease, border-color 0.15s ease; }
-        .nav-link:hover { color: #c8eef8 !important; border-color: #0e3050 !important; }
-      `}</style>
-
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Header */}
