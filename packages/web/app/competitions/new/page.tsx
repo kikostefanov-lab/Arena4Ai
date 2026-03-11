@@ -802,10 +802,7 @@ export default function NewCompetitionPage() {
               }}>
                 {/* Format preset cards */}
                 <div style={{ marginBottom: '1.5rem' }}>
-                  <label style={{
-                    display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.65rem',
-                  }}>
+                  <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.65rem' }}>
                     Format
                   </label>
                   <div style={{
@@ -850,10 +847,7 @@ export default function NewCompetitionPage() {
 
                 {/* Title */}
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{
-                    display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                  }}>
+                  <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>
                     Competition title
                   </label>
                   <input
@@ -876,10 +870,7 @@ export default function NewCompetitionPage() {
                   {/* AI Generator panel */}
                   <div style={{ marginBottom: '0.65rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showGenerator ? '0.65rem' : 0 }}>
-                      <label style={{
-                        display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                        color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px',
-                      }}>
+                      <label style={{ ...FORM_LABEL_STYLE, display: 'block' }}>
                         Problem statement
                       </label>
                       <button
@@ -968,10 +959,7 @@ export default function NewCompetitionPage() {
                 {/* Constraints + Deliverables */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div>
-                    <label style={{
-                      display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                      color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                    }}>
+                    <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>
                       Constraints (one per line)
                     </label>
                     <textarea
@@ -995,10 +983,7 @@ export default function NewCompetitionPage() {
                     />
                   </div>
                   <div>
-                    <label style={{
-                      display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                      color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                    }}>
+                    <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>
                       Deliverables (one per line)
                     </label>
                     <textarea
@@ -1025,10 +1010,7 @@ export default function NewCompetitionPage() {
 
                 {/* Time limit */}
                 <div>
-                  <label style={{
-                    display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                  }}>
+                  <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>
                     Time limit (minutes)
                   </label>
                   <input
@@ -1213,10 +1195,7 @@ export default function NewCompetitionPage() {
 
                 {/* Expected output */}
                 <div style={{ marginBottom: '1rem' }}>
-                  <label style={{
-                    display: 'block', fontSize: '0.55rem', fontWeight: 700,
-                    color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                  }}>
+                  <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' }}>
                     Expected output
                     <span style={{ color: '#1e4a5a', fontWeight: 400, marginLeft: '0.5rem', textTransform: 'none', letterSpacing: '0' }}>
                       optional -- enables automated correctness scoring
