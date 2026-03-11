@@ -144,24 +144,13 @@ export default function LeaderboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.5rem' }}>
               <Link
                 href="/"
-                className="nav-link"
-                style={{
-                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
-                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
-                  letterSpacing: '1px', fontWeight: 600,
-                }}
+                className="nav-link arena-btn"
               >
                 ← GALLERY
               </Link>
               <Link
                 href="/competitions/new"
-                className="new-comp-btn"
-                style={{
-                  fontSize: '0.62rem', fontWeight: 700, padding: '0.45rem 1.1rem',
-                  background: '#00f0ff', color: '#000408', borderRadius: '4px',
-                  textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
-                  display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                }}
+                className="arena-btn arena-btn-primary new-comp-btn"
               >
                 ⚔️ New Battle
               </Link>
@@ -207,13 +196,7 @@ export default function LeaderboardPage() {
             </p>
             <Link
               href="/competitions/new"
-              className="new-comp-btn"
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
-                fontSize: '0.72rem', fontWeight: 700, padding: '0.6rem 1.5rem',
-                background: '#00f0ff', color: '#000408', borderRadius: '6px',
-                textDecoration: 'none', letterSpacing: '0.5px',
-              }}
+              className="arena-btn arena-btn-primary new-comp-btn"
             >
               ⚔️ Launch First Battle
             </Link>
