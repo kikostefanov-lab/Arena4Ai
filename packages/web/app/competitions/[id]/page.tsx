@@ -44,10 +44,10 @@ type CompetitionState = 'PENDING' | 'RUNNING' | 'COLLECTING' | 'PRESENTING' | 'J
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const HIST_COLORS: Record<string, string> = {
-  TOOL_CALL:   '#3b82f6',
-  FILE_CREATE: '#22c55e',
-  FILE_MODIFY: '#10b981',
-  REASONING:   '#06b6d4',
+  TOOL_CALL:   '#0080ff',
+  FILE_CREATE: '#00f0ff',
+  FILE_MODIFY: '#0066ff',
+  REASONING:   '#0066ff',
   ERROR:       '#ef4444',
 };
 
@@ -98,8 +98,8 @@ const GLOBAL_STYLES = `
 }
 
 @keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 4px rgba(249,115,22,0.3); }
-  50% { box-shadow: 0 0 12px rgba(249,115,22,0.6); }
+  0%, 100% { box-shadow: 0 0 4px rgba(0,240,255,0.3); }
+  50% { box-shadow: 0 0 12px rgba(0,240,255,0.6); }
 }
 
 @keyframes slideIn {
@@ -132,14 +132,14 @@ const GLOBAL_STYLES = `
 }
 
 @keyframes borderGlow {
-  0%, 100% { border-color: rgba(249,115,22,0.2); }
-  50% { border-color: rgba(249,115,22,0.5); }
+  0%, 100% { border-color: rgba(0,240,255,0.2); }
+  50% { border-color: rgba(0,240,255,0.5); }
 }
 
 @keyframes celebrationFlash {
-  0% { background: rgba(34,197,94,0.15); }
-  50% { background: rgba(34,197,94,0.05); }
-  100% { background: rgba(34,197,94,0); }
+  0% { background: rgba(0,240,255,0.15); }
+  50% { background: rgba(0,240,255,0.05); }
+  100% { background: rgba(0,240,255,0); }
 }
 
 @keyframes scanline {
@@ -168,8 +168,8 @@ const GLOBAL_STYLES = `
 
 .arena-scrollbar::-webkit-scrollbar { width: 5px; }
 .arena-scrollbar::-webkit-scrollbar-track { background: transparent; }
-.arena-scrollbar::-webkit-scrollbar-thumb { background: #1e2d45; border-radius: 3px; }
-.arena-scrollbar::-webkit-scrollbar-thumb:hover { background: #2d4060; }
+.arena-scrollbar::-webkit-scrollbar-thumb { background: #0a2235; border-radius: 3px; }
+.arena-scrollbar::-webkit-scrollbar-thumb:hover { background: #0e3050; }
 
 .arena-event-row { animation: slideIn 0.2s ease-out; }
 .arena-score-card { animation: slideInScore 0.4s ease-out both; }
@@ -181,14 +181,14 @@ const GLOBAL_STYLES = `
 .resize-handle {
   flex-shrink: 0;
   height: 5px;
-  background: #1e2d45;
+  background: #0a2235;
   cursor: ns-resize;
   user-select: none;
   transition: background 0.15s;
   position: relative;
 }
 .resize-handle:hover, .resize-handle.dragging {
-  background: rgba(249,115,22,0.5);
+  background: rgba(0,240,255,0.5);
 }
 .resize-handle::after {
   content: '';
@@ -240,7 +240,7 @@ function ActivitySpinner({ color, active }: { color: string; active: boolean }) 
 function ModelBadge({ model }: { model: string }) {
   const name = getModelName(model);
   const colors = MODEL_BADGE_COLORS[name] ?? {
-    bg: 'rgba(136,150,171,0.12)', fg: '#8896ab', border: 'rgba(136,150,171,0.3)',
+    bg: 'rgba(74,143,168,0.12)', fg: '#4a8fa8', border: 'rgba(74,143,168,0.3)',
   };
   return (
     <span style={{
@@ -281,7 +281,7 @@ function LaneHistogram({ events }: { events: ArenaEvent[] }) {
   return (
     <div style={{
       display: 'flex', width: '80px', height: '5px', borderRadius: '3px',
-      overflow: 'hidden', gap: '1px', background: 'rgba(30,45,69,0.5)',
+      overflow: 'hidden', gap: '1px', background: 'rgba(10,34,53,0.5)',
     }}>
       {Object.entries(HIST_COLORS).map(([t, color]) => {
         const count = counts[t] ?? 0;
@@ -359,14 +359,14 @@ function PreBattleScreen({ color, model, persona }: { color: string; model: stri
         <div style={{ fontSize: '1.25rem', fontWeight: 900, color, letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.5rem', textShadow: `0 0 20px ${color}80` }}>
           {displayName}
         </div>
-        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#8896ab', letterSpacing: '3px', animation: 'pulse 2s ease-in-out infinite' }}>
+        <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#4a8fa8', letterSpacing: '3px', animation: 'pulse 2s ease-in-out infinite' }}>
           BATTLE STATION INITIALIZING
         </div>
       </div>
 
       {/* Progress */}
       <div style={{ width: '78%', maxWidth: '320px', zIndex: 1 }}>
-        <div style={{ height: '6px', background: 'rgba(30,45,69,0.8)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.65rem' }}>
+        <div style={{ height: '6px', background: 'rgba(10,34,53,0.8)', borderRadius: '3px', overflow: 'hidden', marginBottom: '0.65rem' }}>
           <div style={{
             height: '100%', width: `${progress}%`, borderRadius: '3px',
             background: `linear-gradient(90deg, ${color}55, ${color})`,
@@ -375,7 +375,7 @@ function PreBattleScreen({ color, model, persona }: { color: string; model: stri
           }} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: '0.85rem', color: '#8896ab', animation: 'msgFade 1.6s ease-in-out infinite' }}>
+          <span style={{ fontSize: '0.85rem', color: '#4a8fa8', animation: 'msgFade 1.6s ease-in-out infinite' }}>
             {INIT_MESSAGES[msgIdx]}
           </span>
           <span style={{ fontSize: '0.82rem', color, fontFamily: 'monospace', fontWeight: 700, flexShrink: 0 }}>
@@ -428,14 +428,14 @@ const LanePanel = forwardRef<
     <div style={{
       display: 'flex', flexDirection: 'column', minWidth: 0,
       overflow: 'hidden', position: 'relative',
-      borderLeft: borderLeft ? '1px solid #1e2d45' : 'none',
-      background: '#0a0e17',
+      borderLeft: borderLeft ? '1px solid #0a2235' : 'none',
+      background: '#000408',
     }}>
       {/* Header */}
       <div style={{
         padding: '0.85rem 1.2rem',
-        background: 'linear-gradient(180deg, #0f1724 0%, #0d1520 100%)',
-        borderBottom: `3px solid ${isRunning ? color : '#1e2d45'}`,
+        background: 'linear-gradient(180deg, #020b14 0%, #010810 100%)',
+        borderBottom: `3px solid ${isRunning ? color : '#0a2235'}`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         flexShrink: 0, gap: '0.7rem',
         transition: 'border-color 0.3s ease',
@@ -469,8 +469,8 @@ const LanePanel = forwardRef<
           <ActivitySpinner color={color} active={isRunning && recentActivity} />
           <LaneHistogram events={events} />
           <span style={{
-            fontSize: '0.78rem', color: '#4a5568', fontWeight: 700,
-            fontFamily: 'monospace', background: 'rgba(30,45,69,0.4)',
+            fontSize: '0.78rem', color: '#1e4a5a', fontWeight: 700,
+            fontFamily: 'monospace', background: 'rgba(10,34,53,0.4)',
             padding: '0.15rem 0.55rem', borderRadius: '4px',
           }}>
             {eventCounts ? Object.values(eventCounts).reduce((a, b) => a + b, 0) : events.length}
@@ -497,7 +497,7 @@ const LanePanel = forwardRef<
             alignItems: 'center', justifyContent: 'center',
             height: '100%', gap: '0.5rem',
           }}>
-            <p style={{ color: '#2d4060', fontSize: '0.88rem', fontStyle: 'italic' }}>
+            <p style={{ color: '#0e3050', fontSize: '0.88rem', fontStyle: 'italic' }}>
               Waiting for competition to start...
             </p>
           </div>
@@ -517,8 +517,8 @@ const LanePanel = forwardRef<
       {hasRenderable && (
         <div style={{
           display: 'flex', gap: '0.9rem', padding: '0.45rem 1.2rem',
-          borderTop: '1px solid rgba(30,45,69,0.6)',
-          background: '#0d1520', flexShrink: 0, flexWrap: 'wrap',
+          borderTop: '1px solid rgba(10,34,53,0.6)',
+          background: '#010810', flexShrink: 0, flexWrap: 'wrap',
         }}>
           {Object.entries(HIST_COLORS).map(([evType, c]) => {
             const count = eventCounts ? (eventCounts[evType] ?? 0) : events.filter((e) => e.type === evType).length;
@@ -536,7 +536,7 @@ const LanePanel = forwardRef<
       {isPaused && (
         <div style={{
           position: 'absolute', inset: 0, zIndex: 15, pointerEvents: 'none',
-          background: 'rgba(10,14,23,0.65)',
+          background: 'rgba(0,4,8,0.65)',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: '0.6rem',
           backdropFilter: 'blur(2px)',
@@ -598,7 +598,7 @@ function renderMarkdown(text: string): React.ReactNode {
       nodes.push(
         <ul key={`ul-${key}`} style={{ margin: '0.3rem 0 0.6rem 1.4rem', padding: 0 }}>
           {listItems.map((item, i) => (
-            <li key={i} style={{ marginBottom: '0.2rem', color: '#c4d4e8' }}>{renderInline(item)}</li>
+            <li key={i} style={{ marginBottom: '0.2rem', color: '#d8f0fa' }}>{renderInline(item)}</li>
           ))}
         </ul>
       );
@@ -608,7 +608,7 @@ function renderMarkdown(text: string): React.ReactNode {
       nodes.push(
         <ol key={`ol-${key}`} style={{ margin: '0.3rem 0 0.6rem 1.4rem', padding: 0 }}>
           {numberedItems.map((item, i) => (
-            <li key={i} style={{ marginBottom: '0.2rem', color: '#c4d4e8' }}>{renderInline(item)}</li>
+            <li key={i} style={{ marginBottom: '0.2rem', color: '#d8f0fa' }}>{renderInline(item)}</li>
           ))}
         </ol>
       );
@@ -619,13 +619,13 @@ function renderMarkdown(text: string): React.ReactNode {
   const flushCode = (key: string) => {
     if (codeLines.length > 0) {
       nodes.push(
-        <div key={`code-${key}`} style={{ margin: '0.6rem 0', borderRadius: '6px', overflow: 'hidden', border: '1px solid #1e2d45' }}>
+        <div key={`code-${key}`} style={{ margin: '0.6rem 0', borderRadius: '6px', overflow: 'hidden', border: '1px solid #0a2235' }}>
           {codeLang && (
-            <div style={{ background: '#0a1628', padding: '0.2rem 0.7rem', fontSize: '0.55rem', color: '#4a6080', fontFamily: 'monospace', letterSpacing: '0.05em', borderBottom: '1px solid #1e2d45' }}>
+            <div style={{ background: '#010810', padding: '0.2rem 0.7rem', fontSize: '0.55rem', color: '#4a6080', fontFamily: 'monospace', letterSpacing: '0.05em', borderBottom: '1px solid #0a2235' }}>
               {codeLang}
             </div>
           )}
-          <pre style={{ margin: 0, padding: '0.75rem', background: '#060e1a', overflowX: 'auto', fontSize: '0.7rem', lineHeight: 1.55, color: '#a8d8a8', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace" }}>
+          <pre style={{ margin: 0, padding: '0.75rem', background: '#000408', overflowX: 'auto', fontSize: '0.7rem', lineHeight: 1.55, color: '#a8d8a8', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace" }}>
             <code>{codeLines.join('\n')}</code>
           </pre>
         </div>
@@ -639,8 +639,8 @@ function renderMarkdown(text: string): React.ReactNode {
     // Handle **bold** and `code`
     const parts = s.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
     return parts.map((part, i) => {
-      if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ color: '#e2e8f0' }}>{part.slice(2, -2)}</strong>;
-      if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily: 'monospace', fontSize: '0.68rem', background: '#0a1628', color: '#7dd3a8', padding: '0.1rem 0.3rem', borderRadius: '3px', border: '1px solid #1e2d45' }}>{part.slice(1, -1)}</code>;
+      if (part.startsWith('**') && part.endsWith('**')) return <strong key={i} style={{ color: '#c8eef8' }}>{part.slice(2, -2)}</strong>;
+      if (part.startsWith('`') && part.endsWith('`')) return <code key={i} style={{ fontFamily: 'monospace', fontSize: '0.68rem', background: '#010810', color: '#7dd3a8', padding: '0.1rem 0.3rem', borderRadius: '3px', border: '1px solid #0a2235' }}>{part.slice(1, -1)}</code>;
       return part;
     });
   };
@@ -669,10 +669,10 @@ function renderMarkdown(text: string): React.ReactNode {
 
     if (h1Match) {
       flushList(`list-${idx}`);
-      nodes.push(<h2 key={idx} style={{ fontSize: '0.9rem', fontWeight: 800, color: '#f97316', margin: '1.2rem 0 0.5rem', letterSpacing: '0.5px' }}>{h1Match[1]}</h2>);
+      nodes.push(<h2 key={idx} style={{ fontSize: '0.9rem', fontWeight: 800, color: '#00f0ff', margin: '1.2rem 0 0.5rem', letterSpacing: '0.5px' }}>{h1Match[1]}</h2>);
     } else if (h2Match) {
       flushList(`list-${idx}`);
-      nodes.push(<h3 key={idx} style={{ fontSize: '0.78rem', fontWeight: 800, color: '#e2e8f0', letterSpacing: '1px', textTransform: 'uppercase', margin: '1rem 0 0.35rem', borderBottom: '1px solid #1e2d45', paddingBottom: '0.3rem' }}>{h2Match[1]}</h3>);
+      nodes.push(<h3 key={idx} style={{ fontSize: '0.78rem', fontWeight: 800, color: '#c8eef8', letterSpacing: '1px', textTransform: 'uppercase', margin: '1rem 0 0.35rem', borderBottom: '1px solid #0a2235', paddingBottom: '0.3rem' }}>{h2Match[1]}</h3>);
     } else if (h3Match) {
       flushList(`list-${idx}`);
       nodes.push(<h4 key={idx} style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a0b4cc', margin: '0.8rem 0 0.25rem' }}>{h3Match[1]}</h4>);
@@ -687,7 +687,7 @@ function renderMarkdown(text: string): React.ReactNode {
     } else {
       flushList(`list-${idx}`);
       const trimmed = line.trim();
-      if (trimmed) nodes.push(<p key={idx} style={{ margin: '0.2rem 0', color: '#c4d4e8', lineHeight: 1.65 }}>{renderInline(trimmed)}</p>);
+      if (trimmed) nodes.push(<p key={idx} style={{ margin: '0.2rem 0', color: '#d8f0fa', lineHeight: 1.65 }}>{renderInline(trimmed)}</p>);
     }
   });
   flushList('list-end');
@@ -736,7 +736,7 @@ function ScoreDrawer({
   const teamDisplays = result.teams.map((tr, i) => ({
     result: tr,
     label: resolveLabel(teams, tr.teamId, `Team ${i + 1}`),
-    color: LANE_COLORS[i] ?? '#8896ab',
+    color: LANE_COLORS[i] ?? '#4a8fa8',
     isWinner: tr.teamId === result.winnerId,
   }));
 
@@ -763,16 +763,16 @@ function ScoreDrawer({
   const tabStyle = (tab: 'scores' | 'presentations' | 'files' | 'synthesis' | 'forge'): React.CSSProperties => ({
     fontSize: '0.62rem', fontWeight: 700, letterSpacing: '1.5px', textTransform: 'uppercase',
     padding: '0.65rem 1rem',
-    color: activeTab === tab ? '#e2e8f0' : '#4a5568',
+    color: activeTab === tab ? '#c8eef8' : '#1e4a5a',
     background: 'none', border: 'none', cursor: 'pointer',
-    borderBottom: activeTab === tab ? '2px solid #f97316' : '2px solid transparent',
+    borderBottom: activeTab === tab ? '2px solid #00f0ff' : '2px solid transparent',
     transition: 'all 0.15s', fontFamily: 'inherit',
   });
 
   return (
     <div className="arena-celebration" style={{
-      borderTop: '2px solid rgba(34,197,94,0.4)',
-      background: 'rgba(10,14,23,0.98)', flexShrink: 0,
+      borderTop: '2px solid rgba(0,240,255,0.4)',
+      background: 'rgba(0,4,8,0.98)', flexShrink: 0,
       height: `${height}px`, overflow: 'hidden',
       display: 'flex', flexDirection: 'column',
       transition: 'none',
@@ -784,8 +784,8 @@ function ScoreDrawer({
           width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
           padding: '0 1.4rem', height: `${SCORE_DRAWER_COLLAPSED}px`, minHeight: `${SCORE_DRAWER_COLLAPSED}px`,
           background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-          color: '#e2e8f0', textAlign: 'left', flexShrink: 0,
-          borderBottom: isExpanded ? '1px solid #1e2d45' : 'none',
+          color: '#c8eef8', textAlign: 'left', flexShrink: 0,
+          borderBottom: isExpanded ? '1px solid #0a2235' : 'none',
         }}
       >
         <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>🏆</span>
@@ -796,15 +796,15 @@ function ScoreDrawer({
           {winnerLabel ?? 'DRAW'}
         </span>
         <span style={{
-          color: '#4a5568', fontSize: '0.72rem', flex: 1,
+          color: '#1e4a5a', fontSize: '0.72rem', flex: 1,
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           letterSpacing: '0.3px',
         }}>
           {scoreSummary}
         </span>
         <span style={{
-          color: '#8896ab', fontSize: '0.72rem', flexShrink: 0,
-          background: 'rgba(30,45,69,0.4)', padding: '0.25rem 0.6rem', borderRadius: '4px',
+          color: '#4a8fa8', fontSize: '0.72rem', flexShrink: 0,
+          background: 'rgba(10,34,53,0.4)', padding: '0.25rem 0.6rem', borderRadius: '4px',
         }}>
           {isExpanded ? '▲ hide' : '▼ details'}
         </span>
@@ -815,8 +815,8 @@ function ScoreDrawer({
         <>
           {/* Tab strip */}
           <div style={{
-            background: '#0a0e17',
-            borderBottom: '1px solid #1e2d45',
+            background: '#000408',
+            borderBottom: '1px solid #0a2235',
             padding: '0 1.25rem',
             display: 'flex', gap: 0,
             flexShrink: 0,
@@ -852,8 +852,8 @@ function ScoreDrawer({
                       style={{
                         background: isWinner
                           ? 'linear-gradient(135deg, rgba(234,179,8,0.08) 0%, rgba(234,179,8,0.02) 100%)'
-                          : 'linear-gradient(135deg, #111827 0%, #0f1724 100%)',
-                        border: `1px solid ${isWinner ? 'rgba(234,179,8,0.4)' : '#1e2d45'}`,
+                          : 'linear-gradient(135deg, #050f1e 0%, #020b14 100%)',
+                        border: `1px solid ${isWinner ? 'rgba(234,179,8,0.4)' : '#0a2235'}`,
                         borderRadius: '10px', padding: '1rem',
                         animationDelay: `${cardIdx * 0.15}s`,
                       }}
@@ -861,7 +861,7 @@ function ScoreDrawer({
                       <div style={{
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         marginBottom: '0.75rem', paddingBottom: '0.6rem',
-                        borderBottom: `1px solid ${isWinner ? 'rgba(234,179,8,0.2)' : '#1e2d45'}`,
+                        borderBottom: `1px solid ${isWinner ? 'rgba(234,179,8,0.2)' : '#0a2235'}`,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
                           {isWinner && <span style={{ fontSize: '0.95rem' }}>🏆</span>}
@@ -869,7 +869,7 @@ function ScoreDrawer({
                         </div>
                         <span style={{
                           fontSize: '1.4rem', fontWeight: 900,
-                          color: isWinner ? '#eab308' : '#e2e8f0',
+                          color: isWinner ? '#eab308' : '#c8eef8',
                           flexShrink: 0, fontFamily: 'monospace',
                         }}>
                           {Math.round(tr.totalScore * 100)}%
@@ -893,14 +893,14 @@ function ScoreDrawer({
                               display: 'flex', justifyContent: 'space-between',
                               fontSize: '0.68rem', marginBottom: '0.22rem',
                             }}>
-                              <span style={{ color: '#8896ab', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
+                              <span style={{ color: '#4a8fa8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>
                                 {cs.criterionId}
                               </span>
-                              <span style={{ color: isWinner ? '#eab308' : '#e2e8f0', fontWeight: 700, marginLeft: '0.4rem', flexShrink: 0, fontFamily: 'monospace' }}>
+                              <span style={{ color: isWinner ? '#eab308' : '#c8eef8', fontWeight: 700, marginLeft: '0.4rem', flexShrink: 0, fontFamily: 'monospace' }}>
                                 {Math.round((cs.score / maxScore) * 100)}%
                               </span>
                             </div>
-                            <div style={{ height: '4px', background: 'rgba(30,45,69,0.6)', borderRadius: '2px', overflow: 'hidden' }}>
+                            <div style={{ height: '4px', background: 'rgba(10,34,53,0.6)', borderRadius: '2px', overflow: 'hidden' }}>
                               <div
                                 className="arena-progress-bar"
                                 style={{
@@ -914,7 +914,7 @@ function ScoreDrawer({
                               />
                             </div>
                             {cs.commentary && (
-                              <div style={{ fontSize: '0.62rem', color: '#4a5568', fontStyle: 'italic', marginTop: '0.18rem', lineHeight: 1.4 }}>
+                              <div style={{ fontSize: '0.62rem', color: '#1e4a5a', fontStyle: 'italic', marginTop: '0.18rem', lineHeight: 1.4 }}>
                                 {cs.commentary}
                               </div>
                             )}
@@ -927,7 +927,7 @@ function ScoreDrawer({
 
                 {result.summary && (
                   <p style={{
-                    fontSize: '0.78rem', color: '#8896ab', textAlign: 'center',
+                    fontSize: '0.78rem', color: '#4a8fa8', textAlign: 'center',
                     fontFamily: "-apple-system, 'Segoe UI', sans-serif",
                     lineHeight: 1.7, maxWidth: '600px', margin: '1rem auto 0',
                   }}>
@@ -945,13 +945,13 @@ function ScoreDrawer({
                   <span style={{ fontSize: '1.1rem' }}>🎤</span>
                   <div>
                     <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#3b82f6', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Team Presentations</div>
-                    <div style={{ fontSize: '0.65rem', color: '#8896ab', marginTop: '0.1rem' }}>Human-readable summary of what each team built, mapped to the judging criteria</div>
+                    <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>Human-readable summary of what each team built, mapped to the judging criteria</div>
                   </div>
                 </div>
 
                 {result.presentations!.map((pres, presIdx) => {
                   const label = resolveLabel(teams, pres.teamId, pres.teamId);
-                  const color = LANE_COLORS[presIdx] ?? '#8896ab';
+                  const color = LANE_COLORS[presIdx] ?? '#4a8fa8';
                   const rgb = hexToRgb(color);
                   const isWinner = pres.teamId === result.winnerId;
 
@@ -962,7 +962,7 @@ function ScoreDrawer({
                       borderRadius: '10px', overflow: 'hidden',
                       background: isWinner
                         ? 'linear-gradient(135deg, rgba(234,179,8,0.04) 0%, rgba(234,179,8,0.01) 100%)'
-                        : '#0a1628',
+                        : '#010810',
                     }}>
                       {/* Team header */}
                       <div style={{
@@ -975,7 +975,7 @@ function ScoreDrawer({
                         <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isWinner ? '#eab308' : color, letterSpacing: '1px', textTransform: 'uppercase' }}>
                           {label}
                         </span>
-                        <span style={{ fontSize: '0.65rem', color: '#4a5568', fontStyle: 'italic' }}>
+                        <span style={{ fontSize: '0.65rem', color: '#1e4a5a', fontStyle: 'italic' }}>
                           ({pres.model})
                         </span>
                       </div>
@@ -984,17 +984,17 @@ function ScoreDrawer({
                         {/* Approach */}
                         <div style={{ marginBottom: '1rem' }}>
                           <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Approach</div>
-                          <div style={{ fontSize: '0.78rem', color: '#c4d4e8', lineHeight: 1.7 }}>{pres.approach}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#d8f0fa', lineHeight: 1.7 }}>{pres.approach}</div>
                         </div>
 
                         {/* Key insight */}
                         <div style={{
                           marginBottom: '1rem', padding: '0.65rem 0.85rem',
-                          background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.15)',
+                          background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.15)',
                           borderRadius: '6px',
                         }}>
-                          <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#f97316', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Key Insight</div>
-                          <div style={{ fontSize: '0.75rem', color: '#e2e8f0', lineHeight: 1.6 }}>{pres.keyInsight}</div>
+                          <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Key Insight</div>
+                          <div style={{ fontSize: '0.75rem', color: '#c8eef8', lineHeight: 1.6 }}>{pres.keyInsight}</div>
                         </div>
 
                         {/* Criterion findings */}
@@ -1006,18 +1006,18 @@ function ScoreDrawer({
                             {pres.criterionFindings.map((cf, cfIdx) => (
                               <div key={cf.criterionId} style={{
                                 padding: '0.6rem 0.75rem',
-                                borderBottom: cfIdx < pres.criterionFindings.length - 1 ? '1px solid rgba(30,45,69,0.6)' : 'none',
+                                borderBottom: cfIdx < pres.criterionFindings.length - 1 ? '1px solid rgba(10,34,53,0.6)' : 'none',
                               }}>
                                 <code style={{
-                                  fontSize: '0.62rem', color: '#4a6080', background: '#060e1a',
-                                  padding: '0.12rem 0.4rem', borderRadius: '3px', border: '1px solid #1e2d45',
+                                  fontSize: '0.62rem', color: '#4a6080', background: '#000408',
+                                  padding: '0.12rem 0.4rem', borderRadius: '3px', border: '1px solid #0a2235',
                                 }}>{cf.criterionId}</code>
-                                <div style={{ fontSize: '0.75rem', color: '#c4d4e8', lineHeight: 1.6, marginTop: '0.35rem' }}>
+                                <div style={{ fontSize: '0.75rem', color: '#d8f0fa', lineHeight: 1.6, marginTop: '0.35rem' }}>
                                   {cf.finding}
                                 </div>
                                 <div style={{ display: 'flex', gap: '1rem', marginTop: '0.3rem', fontSize: '0.68rem' }}>
                                   {cf.strength && (
-                                    <span style={{ color: '#22c55e' }}>
+                                    <span style={{ color: '#00f0ff' }}>
                                       <span style={{ fontWeight: 700 }}>+</span> {cf.strength}
                                     </span>
                                   )}
@@ -1035,7 +1035,7 @@ function ScoreDrawer({
                         {/* Deliverable summary */}
                         <div>
                           <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What Was Delivered</div>
-                          <div style={{ fontSize: '0.72rem', color: '#8896ab', lineHeight: 1.6 }}>{pres.deliverableSummary}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6 }}>{pres.deliverableSummary}</div>
                         </div>
                       </div>
                     </div>
@@ -1049,7 +1049,7 @@ function ScoreDrawer({
               <div style={{ maxWidth: '700px', margin: '0 auto' }}>
                 {result.deliverables!.map((td, tdIdx) => {
                   const label = resolveLabel(teams, td.teamId, td.teamId);
-                  const color = LANE_COLORS[tdIdx] ?? '#8896ab';
+                  const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
                   const rgb = hexToRgb(color);
                   const currentFileIdx = activeFileIdx[td.teamId] ?? 0;
                   const currentFile = td.files[currentFileIdx];
@@ -1070,13 +1070,13 @@ function ScoreDrawer({
                         <span style={{ fontSize: '0.72rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase' }}>
                           {label}
                         </span>
-                        <span style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                        <span style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
                           {td.files.length} {td.files.length === 1 ? 'file' : 'files'}
                         </span>
                       </div>
 
                       {td.files.length === 0 && (
-                        <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#4a5568', fontStyle: 'italic' }}>
+                        <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#1e4a5a', fontStyle: 'italic' }}>
                           No files submitted
                         </div>
                       )}
@@ -1087,7 +1087,7 @@ function ScoreDrawer({
                           {td.files.length > 1 && (
                             <div style={{
                               display: 'flex', gap: '2px', padding: '0.4rem 0.6rem',
-                              background: '#0a0e17', borderBottom: '1px solid #1e2d45',
+                              background: '#000408', borderBottom: '1px solid #0a2235',
                               flexWrap: 'wrap',
                             }}>
                               {td.files.map((f, fIdx) => (
@@ -1099,7 +1099,7 @@ function ScoreDrawer({
                                     borderRadius: '4px', cursor: 'pointer',
                                     fontFamily: 'inherit', border: 'none',
                                     background: fIdx === currentFileIdx ? `rgba(${rgb},0.15)` : 'transparent',
-                                    color: fIdx === currentFileIdx ? color : '#4a5568',
+                                    color: fIdx === currentFileIdx ? color : '#1e4a5a',
                                     fontWeight: fIdx === currentFileIdx ? 700 : 400,
                                     transition: 'all 0.1s ease',
                                   }}
@@ -1116,18 +1116,18 @@ function ScoreDrawer({
                               {td.files.length === 1 && (
                                 <div style={{
                                   padding: '0.35rem 0.85rem',
-                                  background: '#0a0e17', borderBottom: '1px solid #1e2d45',
-                                  fontSize: '0.68rem', color: '#4a5568', fontFamily: 'monospace',
+                                  background: '#000408', borderBottom: '1px solid #0a2235',
+                                  fontSize: '0.68rem', color: '#1e4a5a', fontFamily: 'monospace',
                                 }}>
                                   {currentFile.path}
                                 </div>
                               )}
                               <pre style={{
-                                fontSize: '0.78rem', color: '#c4d4e8',
+                                fontSize: '0.78rem', color: '#d8f0fa',
                                 whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                                 lineHeight: 1.6, margin: 0,
                                 padding: '0.85rem 1rem',
-                                background: '#0d1520',
+                                background: '#010810',
                                 overflowX: 'auto',
                               }}>
                                 {currentFile.content.length > 5000
@@ -1148,14 +1148,14 @@ function ScoreDrawer({
             {activeTab === 'files' && !hasFiles && (
               <div style={{ maxWidth: '900px', margin: '0 auto' }}>
                 {!fileEventsByTeam || fileEventsByTeam.every((t) => t.files.length === 0) ? (
-                  <div style={{ color: '#4a5568', fontStyle: 'italic', fontSize: '0.78rem', textAlign: 'center', paddingTop: '1rem' }}>
+                  <div style={{ color: '#1e4a5a', fontStyle: 'italic', fontSize: '0.78rem', textAlign: 'center', paddingTop: '1rem' }}>
                     No files recorded for this competition.
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(fileEventsByTeam.length, 2)}, 1fr)`, gap: '1rem' }}>
                     {fileEventsByTeam.map((teamFiles, tdIdx) => {
                       const label = resolveLabel(teams, teamFiles.teamId, teamFiles.teamId);
-                      const color = LANE_COLORS[tdIdx] ?? '#8896ab';
+                      const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
                       const rgb = hexToRgb(color);
                       return (
                         <div key={teamFiles.teamId} style={{
@@ -1172,36 +1172,36 @@ function ScoreDrawer({
                             <span style={{ fontSize: '0.72rem', fontWeight: 800, color, letterSpacing: '1px', textTransform: 'uppercase' }}>
                               {label}
                             </span>
-                            <span style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                            <span style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
                               {teamFiles.files.length} {teamFiles.files.length === 1 ? 'file' : 'files'}
                             </span>
                           </div>
                           {/* Files */}
                           {teamFiles.files.length === 0 ? (
-                            <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#4a5568', fontStyle: 'italic' }}>
+                            <div style={{ padding: '0.75rem 0.85rem', fontSize: '0.75rem', color: '#1e4a5a', fontStyle: 'italic' }}>
                               No files recorded
                             </div>
                           ) : (
                             <div style={{ maxHeight: '400px', overflowY: 'auto' }} className="arena-scrollbar">
                               {teamFiles.files.map((f, fIdx) => (
-                                <div key={fIdx} style={{ borderBottom: fIdx < teamFiles.files.length - 1 ? '1px solid #1e2d45' : 'none' }}>
+                                <div key={fIdx} style={{ borderBottom: fIdx < teamFiles.files.length - 1 ? '1px solid #0a2235' : 'none' }}>
                                   {/* Filename bar */}
                                   <div style={{
                                     padding: '0.3rem 0.85rem',
-                                    background: '#0a0e17',
-                                    fontSize: '0.68rem', color: '#4a5568', fontFamily: 'monospace',
+                                    background: '#000408',
+                                    fontSize: '0.68rem', color: '#1e4a5a', fontFamily: 'monospace',
                                     display: 'flex', alignItems: 'center', gap: '0.4rem',
                                   }}>
-                                    <span style={{ color: '#22c55e' }}>📄</span>
-                                    <span style={{ color: '#8896ab' }}>{f.path}</span>
+                                    <span style={{ color: '#00f0ff' }}>📄</span>
+                                    <span style={{ color: '#4a8fa8' }}>{f.path}</span>
                                   </div>
                                   {/* File content */}
                                   <pre style={{
-                                    fontSize: '0.75rem', color: f.content ? '#c4d4e8' : '#4a5568',
+                                    fontSize: '0.75rem', color: f.content ? '#d8f0fa' : '#1e4a5a',
                                     whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
                                     lineHeight: 1.6, margin: 0,
                                     padding: '0.65rem 1rem',
-                                    background: '#0d1520',
+                                    background: '#010810',
                                     overflowX: 'auto',
                                     fontStyle: f.content ? 'normal' : 'italic',
                                   }}>
@@ -1229,11 +1229,11 @@ function ScoreDrawer({
                 {result.synthesis ? (
                   <>
                     {/* Header — what synthesis is */}
-                    <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: 'rgba(249,115,22,0.06)', border: '1px solid rgba(249,115,22,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                       <span style={{ fontSize: '1.1rem' }}>🔬</span>
                       <div>
-                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#f97316', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI Synthesis</div>
-                        <div style={{ fontSize: '0.65rem', color: '#8896ab', marginTop: '0.1rem' }}>The best elements from both submissions merged into a single hybrid solution</div>
+                        <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.08em', textTransform: 'uppercase' }}>AI Synthesis</div>
+                        <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>The best elements from both submissions merged into a single hybrid solution</div>
                       </div>
                     </div>
 
@@ -1241,13 +1241,13 @@ function ScoreDrawer({
                     {result.synthesis.overallRationale && (
                       <div style={{
                         marginBottom: '1.2rem', padding: '0.85rem 1rem',
-                        background: 'rgba(168,85,247,0.06)', border: '1px solid rgba(168,85,247,0.2)',
+                        background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.2)',
                         borderRadius: '8px',
                       }}>
-                        <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#a855f7', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
+                        <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
                           Synthesis Thesis
                         </div>
-                        <div style={{ fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.7 }}>
+                        <div style={{ fontSize: '0.78rem', color: '#c8eef8', lineHeight: 1.7 }}>
                           {result.synthesis.overallRationale}
                         </div>
                       </div>
@@ -1255,43 +1255,43 @@ function ScoreDrawer({
 
                     {/* Per-criterion breakdown */}
                     {(result.synthesis.perCriterion?.length ?? 0) > 0 && (
-                      <div style={{ marginBottom: '1.4rem', background: '#0a1628', border: '1px solid #1e2d45', borderRadius: '8px', overflow: 'hidden' }}>
-                        <div style={{ padding: '0.5rem 0.9rem', background: '#060e1a', borderBottom: '1px solid #1e2d45', fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                      <div style={{ marginBottom: '1.4rem', background: '#010810', border: '1px solid #0a2235', borderRadius: '8px', overflow: 'hidden' }}>
+                        <div style={{ padding: '0.5rem 0.9rem', background: '#000408', borderBottom: '1px solid #0a2235', fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
                           Criterion-by-criterion verdict
                         </div>
                         <div style={{ padding: '0.4rem 0' }}>
                           {(result.synthesis.perCriterion ?? []).map((entry, i) => {
                             const winnerTeam = teams.find(t => t.id === entry.teamId);
-                            const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#8896ab';
+                            const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
                             const winnerLabel = resolveLabel(teams, entry.teamId, entry.teamId);
                             return (
                               <div key={entry.criterionId} style={{
                                 padding: '0.7rem 0.9rem',
-                                borderBottom: i < (result.synthesis?.perCriterion?.length ?? 1) - 1 ? '1px solid rgba(30,45,69,0.6)' : 'none',
+                                borderBottom: i < (result.synthesis?.perCriterion?.length ?? 1) - 1 ? '1px solid rgba(10,34,53,0.6)' : 'none',
                               }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.4rem' }}>
-                                  <code style={{ fontSize: '0.62rem', color: '#4a6080', background: '#060e1a', padding: '0.15rem 0.4rem', borderRadius: '3px', border: '1px solid #1e2d45', whiteSpace: 'nowrap' }}>{entry.criterionId}</code>
+                                  <code style={{ fontSize: '0.62rem', color: '#4a6080', background: '#000408', padding: '0.15rem 0.4rem', borderRadius: '3px', border: '1px solid #0a2235', whiteSpace: 'nowrap' }}>{entry.criterionId}</code>
                                   <span style={{ fontSize: '0.68rem', fontWeight: 700, color: teamColor }}>{winnerLabel} wins</span>
                                 </div>
 
                                 {/* Winning approach */}
                                 {entry.winningApproach && (
-                                  <div style={{ fontSize: '0.72rem', color: '#c4d4e8', lineHeight: 1.6, marginBottom: '0.3rem' }}>
-                                    <span style={{ color: '#22c55e', fontWeight: 700, marginRight: '0.3rem' }}>Selected:</span>
+                                  <div style={{ fontSize: '0.72rem', color: '#d8f0fa', lineHeight: 1.6, marginBottom: '0.3rem' }}>
+                                    <span style={{ color: '#00f0ff', fontWeight: 700, marginRight: '0.3rem' }}>Selected:</span>
                                     {entry.winningApproach}
                                   </div>
                                 )}
 
                                 {/* Losing approach */}
                                 {entry.losingApproach && (
-                                  <div style={{ fontSize: '0.68rem', color: '#8896ab', lineHeight: 1.5, marginBottom: '0.3rem' }}>
-                                    <span style={{ color: '#4a5568', fontWeight: 700, marginRight: '0.3rem' }}>Alternative:</span>
+                                  <div style={{ fontSize: '0.68rem', color: '#4a8fa8', lineHeight: 1.5, marginBottom: '0.3rem' }}>
+                                    <span style={{ color: '#1e4a5a', fontWeight: 700, marginRight: '0.3rem' }}>Alternative:</span>
                                     {entry.losingApproach}
                                   </div>
                                 )}
 
                                 {/* Rationale */}
-                                <div style={{ fontSize: '0.68rem', color: '#8896ab', fontStyle: 'italic', lineHeight: 1.5 }}>
+                                <div style={{ fontSize: '0.68rem', color: '#4a8fa8', fontStyle: 'italic', lineHeight: 1.5 }}>
                                   {entry.rationale}
                                 </div>
                               </div>
@@ -1302,9 +1302,9 @@ function ScoreDrawer({
                     )}
 
                     {/* Synthesized solution */}
-                    <details style={{ background: '#060e1a', border: '1px solid #1e2d45', borderRadius: '8px', overflow: 'hidden', marginBottom: '0.8rem' }}>
+                    <details style={{ background: '#000408', border: '1px solid #0a2235', borderRadius: '8px', overflow: 'hidden', marginBottom: '0.8rem' }}>
                       <summary style={{
-                        padding: '0.5rem 0.9rem', background: '#0a1628',
+                        padding: '0.5rem 0.9rem', background: '#010810',
                         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                         cursor: 'pointer', listStyle: 'none',
                       }}>
@@ -1316,20 +1316,20 @@ function ScoreDrawer({
                               e.stopPropagation();
                               navigator.clipboard.writeText(result.synthesis?.synthesis ?? '').catch(() => {});
                             }}
-                            style={{ fontSize: '0.58rem', color: '#4a6080', background: 'none', border: '1px solid #1e2d45', borderRadius: '4px', padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace' }}
+                            style={{ fontSize: '0.58rem', color: '#4a6080', background: 'none', border: '1px solid #0a2235', borderRadius: '4px', padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace' }}
                           >
                             📋 copy
                           </button>
-                          <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>▼</span>
+                          <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>▼</span>
                         </div>
                       </summary>
-                      <div style={{ padding: '1rem', borderTop: '1px solid #1e2d45', fontFamily: "-apple-system, 'Segoe UI', sans-serif", fontSize: '0.78rem', lineHeight: 1.7, color: '#c4d4e8' }}>
+                      <div style={{ padding: '1rem', borderTop: '1px solid #0a2235', fontFamily: "-apple-system, 'Segoe UI', sans-serif", fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa' }}>
                         {renderedSynthesis}
                       </div>
                     </details>
                   </>
                 ) : (
-                  <div style={{ color: '#4a5568', fontStyle: 'italic', fontSize: '0.78rem', textAlign: 'center', paddingTop: '2rem' }}>
+                  <div style={{ color: '#1e4a5a', fontStyle: 'italic', fontSize: '0.78rem', textAlign: 'center', paddingTop: '2rem' }}>
                     Synthesis not available — run with <code style={{ fontFamily: 'monospace' }}>skipSynthesis: false</code> to enable
                   </div>
                 )}
@@ -1346,11 +1346,11 @@ function ScoreDrawer({
                       <span style={{ fontSize: '1.1rem' }}>🔨</span>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#eab308', letterSpacing: '0.08em', textTransform: 'uppercase' }}>The Forge</div>
-                        <div style={{ fontSize: '0.65rem', color: '#8896ab', marginTop: '0.1rem' }}>
-                          Build-ready artifacts forged by <code style={{ fontFamily: 'monospace', color: '#f97316' }}>{result.forge!.forgeModel}</code>
+                        <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>
+                          Build-ready artifacts forged by <code style={{ fontFamily: 'monospace', color: '#00f0ff' }}>{result.forge!.forgeModel}</code>
                         </div>
                       </div>
-                      <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>
+                      <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
                         {new Date(result.forge!.generatedAt).toLocaleString()}
                       </span>
                     </div>
@@ -1366,7 +1366,7 @@ function ScoreDrawer({
                         }}>
                           ⚒ Forged by {result.forge.forgeModel}
                         </span>
-                        <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>
+                        <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
                           {new Date(result.forge.generatedAt).toLocaleDateString()}
                         </span>
                         {result.forge.domain && (
@@ -1385,7 +1385,7 @@ function ScoreDrawer({
                           download
                           style={{
                             marginLeft: 'auto',
-                            fontSize: '0.65rem', fontWeight: 700, color: '#8896ab',
+                            fontSize: '0.65rem', fontWeight: 700, color: '#4a8fa8',
                             background: 'rgba(136,150,171,0.08)', border: '1px solid rgba(136,150,171,0.2)',
                             borderRadius: '4px', padding: '0.3rem 0.7rem',
                             textDecoration: 'none', letterSpacing: '0.5px',
@@ -1402,16 +1402,16 @@ function ScoreDrawer({
                       const renderArtifact = (artifact: ForgeArtifact) => (
                         <details key={artifact.type} style={{
                           marginBottom: '0.75rem',
-                          border: '1px solid #1e2d45',
+                          border: '1px solid #0a2235',
                           borderRadius: '8px', overflow: 'hidden',
-                          background: '#0a1628',
+                          background: '#010810',
                         }}>
                           <summary style={{
                             padding: '0.7rem 1rem',
                             cursor: 'pointer',
                             display: 'flex', alignItems: 'center', gap: '0.6rem',
-                            background: '#060e1a',
-                            fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0',
+                            background: '#000408',
+                            fontSize: '0.75rem', fontWeight: 700, color: '#c8eef8',
                             listStyle: 'none',
                           }}>
                             <span style={{ fontSize: '0.85rem' }}>
@@ -1432,18 +1432,18 @@ function ScoreDrawer({
                               }}
                               style={{
                                 fontSize: '0.58rem', color: '#4a6080', background: 'none',
-                                border: '1px solid #1e2d45', borderRadius: '4px',
+                                border: '1px solid #0a2235', borderRadius: '4px',
                                 padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace',
                               }}
                             >
                               ⬇ download
                             </button>
-                            <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>▼</span>
+                            <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>▼</span>
                           </summary>
                           <div style={{
-                            padding: '1rem', borderTop: '1px solid #1e2d45',
+                            padding: '1rem', borderTop: '1px solid #0a2235',
                             fontFamily: "-apple-system, 'Segoe UI', sans-serif",
-                            fontSize: '0.78rem', lineHeight: 1.7, color: '#c4d4e8',
+                            fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa',
                             whiteSpace: 'pre-wrap',
                           }}>
                             {artifact.content}
@@ -1458,7 +1458,7 @@ function ScoreDrawer({
                           {universalArtifacts.length > 0 && (
                             <>
                               <div style={{
-                                fontSize: '0.55rem', color: '#8896ab', letterSpacing: '2px',
+                                fontSize: '0.55rem', color: '#4a8fa8', letterSpacing: '2px',
                                 textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem',
                                 marginTop: '0.25rem',
                               }}>
@@ -1470,7 +1470,7 @@ function ScoreDrawer({
                           {domainArtifacts.length > 0 && (
                             <>
                               <div style={{
-                                fontSize: '0.55rem', color: '#8896ab', letterSpacing: '2px',
+                                fontSize: '0.55rem', color: '#4a8fa8', letterSpacing: '2px',
                                 textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem',
                                 marginTop: '1rem',
                               }}>
@@ -1490,30 +1490,30 @@ function ScoreDrawer({
                 ) : (
                   <div style={{ textAlign: 'center', paddingTop: '2rem' }}>
                     <div style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>🔨</div>
-                    <div style={{ fontSize: '0.82rem', color: '#e2e8f0', fontWeight: 700, marginBottom: '0.5rem' }}>
+                    <div style={{ fontSize: '0.82rem', color: '#c8eef8', fontWeight: 700, marginBottom: '0.5rem' }}>
                       The Forge
                     </div>
-                    <div style={{ fontSize: '0.72rem', color: '#8896ab', lineHeight: 1.6, maxWidth: '400px', margin: '0 auto 1.2rem' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6, maxWidth: '400px', margin: '0 auto 1.2rem' }}>
                       Review the presentations, scores, and synthesis above. When you&apos;re ready, forge the winning solution into build-ready artifacts.
                     </div>
                     {forging && (
                       <div style={{ marginBottom: '1.5rem', textAlign: 'left', display: 'inline-block' }}>
-                        <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '2px', color: '#8896ab', marginBottom: '0.6rem' }}>
+                        <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '2px', color: '#4a8fa8', marginBottom: '0.6rem' }}>
                           FORGING ARTIFACTS
                         </div>
                         {forgeProgress ? (
                           Object.entries(forgeProgress).map(([type, status]) => (
                             <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
-                              <span style={{ fontSize: '0.8rem', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'generating' ? '#f97316' : '#4a5568', flexShrink: 0, width: '1rem', textAlign: 'center' }}>
+                              <span style={{ fontSize: '0.8rem', color: status === 'done' ? '#00f0ff' : status === 'error' ? '#ef4444' : status === 'generating' ? '#00f0ff' : '#1e4a5a', flexShrink: 0, width: '1rem', textAlign: 'center' }}>
                                 {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'generating' ? '⟳' : '○'}
                               </span>
-                              <span style={{ fontSize: '0.68rem', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'generating' ? '#f97316' : '#4a5568' }}>
+                              <span style={{ fontSize: '0.68rem', color: status === 'done' ? '#00f0ff' : status === 'error' ? '#ef4444' : status === 'generating' ? '#00f0ff' : '#1e4a5a' }}>
                                 {ARTIFACT_EMOJI[type] ?? '📄'} {type.replace(/_/g, ' ')}
                               </span>
                             </div>
                           ))
                         ) : (
-                          <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                          <div style={{ fontSize: '0.68rem', color: '#1e4a5a' }}>
                             Selecting domain artifacts…
                           </div>
                         )}
@@ -1581,7 +1581,7 @@ function ScoreDrawer({
                         }
                       }}
                       style={{
-                        fontSize: '0.78rem', fontWeight: 800, color: forging ? '#eab308' : '#0a0e17',
+                        fontSize: '0.78rem', fontWeight: 800, color: forging ? '#eab308' : '#000408',
                         background: forging
                           ? 'rgba(234,179,8,0.1)'
                           : 'linear-gradient(135deg, #eab308, #f59e0b)',
@@ -1620,12 +1620,12 @@ const STATE_BANNERS: Partial<Record<CompetitionState | 'PAUSED', {
 }>> = {
   JUDGING:     { icon: '⚖️', label: 'JUDGING IN PROGRESS',    sub: 'AI judge is evaluating both submissions…',        bg: 'rgba(234,179,8,0.10)',  border: 'rgba(234,179,8,0.3)',  color: '#eab308', animate: 'judgingPulse 2s ease-in-out infinite' },
   PAUSED:      { icon: '⏸',  label: 'COMPETITION PAUSED',     sub: 'Resume when ready — clock is frozen.',             bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6' },
-  COLLECTING:  { icon: '📦', label: 'COLLECTING DELIVERABLES', sub: 'Gathering files from each agent workspace…',       bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.3)', color: '#a855f7', animate: 'judgingPulse 2s ease-in-out infinite' },
+  COLLECTING:  { icon: '📦', label: 'COLLECTING DELIVERABLES', sub: 'Gathering files from each agent workspace…',       bg: 'rgba(0,240,255,0.10)', border: 'rgba(0,240,255,0.3)', color: '#00f0ff', animate: 'judgingPulse 2s ease-in-out infinite' },
   PRESENTING:  { icon: '🎤', label: 'GENERATING PRESENTATIONS', sub: 'Translating deliverables into human-readable summaries…', bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.3)', color: '#3b82f6', animate: 'judgingPulse 2s ease-in-out infinite' },
-  SYNTHESIZING:{ icon: '🔮', label: 'SYNTHESIZING',            sub: 'Merging the best elements from both submissions…', bg: 'rgba(168,85,247,0.10)', border: 'rgba(168,85,247,0.3)', color: '#a855f7', animate: 'judgingPulse 2s ease-in-out infinite' },
+  SYNTHESIZING:{ icon: '🔮', label: 'SYNTHESIZING',            sub: 'Merging the best elements from both submissions…', bg: 'rgba(0,240,255,0.10)', border: 'rgba(0,240,255,0.3)', color: '#00f0ff', animate: 'judgingPulse 2s ease-in-out infinite' },
   FORGING:     { icon: '🔨', label: 'FORGING',                 sub: 'Generating build-ready artifacts from the winning solution…', bg: 'rgba(234,179,8,0.10)', border: 'rgba(234,179,8,0.3)', color: '#eab308', animate: 'judgingPulse 2s ease-in-out infinite' },
   FAILED:      { icon: '💥', label: 'COMPETITION FAILED',      sub: 'An error occurred during the competition.',        bg: 'rgba(239,68,68,0.10)',  border: 'rgba(239,68,68,0.3)',  color: '#ef4444' },
-  CANCELLED:   { icon: '🚫', label: 'COMPETITION CANCELLED',   sub: 'This competition was stopped early.',              bg: 'rgba(136,150,171,0.08)',border: 'rgba(136,150,171,0.2)',color: '#8896ab' },
+  CANCELLED:   { icon: '🚫', label: 'COMPETITION CANCELLED',   sub: 'This competition was stopped early.',              bg: 'rgba(136,150,171,0.08)',border: 'rgba(136,150,171,0.2)',color: '#4a8fa8' },
 };
 
 function StateBanner({ state, isPaused }: { state: CompetitionState; isPaused: boolean }) {
@@ -1646,7 +1646,7 @@ function StateBanner({ state, isPaused }: { state: CompetitionState; isPaused: b
       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: cfg.color, letterSpacing: '2px' }}>
         {cfg.label}
       </span>
-      <span style={{ fontSize: '0.67rem', color: '#8896ab', fontStyle: 'italic' }}>
+      <span style={{ fontSize: '0.67rem', color: '#4a8fa8', fontStyle: 'italic' }}>
         {cfg.sub}
       </span>
     </div>
@@ -1795,9 +1795,9 @@ export default function CompetitionPage() {
   // Update browser tab title when brief loads
   useEffect(() => {
     if (brief?.title) {
-      document.title = `${brief.title} — Arena`;
+      document.title = 'Arena4Ai';
     }
-    return () => { document.title = 'Agent Arena'; };
+    return () => { document.title = 'Arena4Ai'; };
   }, [brief?.title]);
 
   // Elapsed timer — counts from competition start time, freezes when paused or post-run
@@ -1949,7 +1949,7 @@ export default function CompetitionPage() {
         body: JSON.stringify({
           brief,
           teams,
-          options: { skipSandbox: true, skipSynthesis: false },
+          options: { skipSandbox: true },
         }),
       });
       if (!res.ok) return;
@@ -1998,22 +1998,22 @@ export default function CompetitionPage() {
         style={{
           display: 'flex', flexDirection: 'column',
           height: '100vh', overflow: 'hidden',
-          background: '#0a0e17',
+          background: '#000408',
           fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
-          color: '#e2e8f0',
-          border: isRunning ? '1px solid rgba(249,115,22,0.2)' : '1px solid transparent',
+          color: '#c8eef8',
+          border: isRunning ? '1px solid rgba(0,240,255,0.2)' : '1px solid transparent',
           transition: 'border-color 0.5s ease',
         }}
       >
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <header style={{
           display: 'flex', alignItems: 'center', gap: '0.85rem',
-          padding: '0.7rem 1.4rem', borderBottom: '1px solid #1e2d45',
-          background: 'linear-gradient(180deg, rgba(15,23,36,0.98) 0%, rgba(10,14,23,0.98) 100%)',
+          padding: '0.7rem 1.4rem', borderBottom: '1px solid #0a2235',
+          background: 'linear-gradient(180deg, rgba(2,8,20,0.98) 0%, rgba(0,4,8,0.98) 100%)',
           flexShrink: 0,
         }}>
           <a href="/" style={{
-            fontSize: '0.75rem', color: '#f97316', fontWeight: 800,
+            fontSize: '0.75rem', color: '#00f0ff', fontWeight: 800,
             letterSpacing: '2.5px', textDecoration: 'none', flexShrink: 0,
             display: 'flex', alignItems: 'center', gap: '0.4rem',
           }}>
@@ -2021,14 +2021,14 @@ export default function CompetitionPage() {
             ARENA
           </a>
 
-          <span style={{ color: '#1e2d45', fontSize: '1.1rem' }}>│</span>
+          <span style={{ color: '#0a2235', fontSize: '1.1rem' }}>│</span>
 
           <div style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center',
             gap: '0.8rem', flexWrap: 'wrap',
           }}>
             {briefTitle && (
-              <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#e2e8f0' }}>
+              <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#c8eef8' }}>
                 {briefTitle}
               </span>
             )}
@@ -2053,8 +2053,8 @@ export default function CompetitionPage() {
               </span>
             )}
             {connected && isRunning && (
-              <span style={{ fontSize: '0.65rem', color: '#22c55e', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                <StatusDot color="#22c55e" pulsing={false} />
+              <span style={{ fontSize: '0.65rem', color: '#00f0ff', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                <StatusDot color="#00f0ff" pulsing={false} />
                 live
               </span>
             )}
@@ -2063,8 +2063,8 @@ export default function CompetitionPage() {
             )}
             {totalEvents > 0 && (
               <span style={{
-                fontSize: '0.65rem', color: '#4a5568',
-                background: 'rgba(30,45,69,0.4)',
+                fontSize: '0.65rem', color: '#1e4a5a',
+                background: 'rgba(10,34,53,0.4)',
                 padding: '0.12rem 0.5rem', borderRadius: '3px', fontFamily: 'monospace',
               }}>
                 {totalEvents} events
@@ -2076,16 +2076,16 @@ export default function CompetitionPage() {
             <div style={{ display: 'flex', gap: '0.45rem' }}>
               {!isPaused
                 ? <button onClick={() => sendControl('pause')} style={ctrlBtn('#eab308', 'rgba(234,179,8,0.1)')}>PAUSE</button>
-                : <button onClick={() => sendControl('resume')} style={ctrlBtn('#22c55e', 'rgba(34,197,94,0.1)')}>RESUME</button>
+                : <button onClick={() => sendControl('resume')} style={ctrlBtn('#00f0ff', 'rgba(0,240,255,0.1)')}>RESUME</button>
               }
               <button onClick={() => sendControl('cancel')} style={ctrlBtn('#ef4444', 'rgba(239,68,68,0.1)')}>CANCEL</button>
             </div>
           )}
 
           <button onClick={() => setBriefOpen(o => !o)} style={{
-            fontSize: '0.70rem', color: briefOpen ? '#f97316' : '#8896ab',
-            background: briefOpen ? 'rgba(249,115,22,0.1)' : 'transparent',
-            border: `1px solid ${briefOpen ? 'rgba(249,115,22,0.4)' : '#1e2d45'}`,
+            fontSize: '0.70rem', color: briefOpen ? '#00f0ff' : '#4a8fa8',
+            background: briefOpen ? 'rgba(0,240,255,0.1)' : 'transparent',
+            border: `1px solid ${briefOpen ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
             borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
             letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
             display: 'flex', alignItems: 'center', gap: '0.35rem',
@@ -2108,9 +2108,9 @@ export default function CompetitionPage() {
           <button
             onClick={handleCopyLink}
             style={{
-              fontSize: '0.70rem', color: copyLabel === '✓ Copied' ? '#22c55e' : '#8896ab',
-              background: copyLabel === '✓ Copied' ? 'rgba(34,197,94,0.1)' : 'transparent',
-              border: `1px solid ${copyLabel === '✓ Copied' ? 'rgba(34,197,94,0.4)' : '#1e2d45'}`,
+              fontSize: '0.70rem', color: copyLabel === '✓ Copied' ? '#00f0ff' : '#4a8fa8',
+              background: copyLabel === '✓ Copied' ? 'rgba(0,240,255,0.1)' : 'transparent',
+              border: `1px solid ${copyLabel === '✓ Copied' ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
               borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
               letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
               display: 'flex', alignItems: 'center', gap: '0.35rem',
@@ -2126,9 +2126,9 @@ export default function CompetitionPage() {
               onClick={handleRematch}
               disabled={rematchLoading}
               style={{
-                fontSize: '0.70rem', color: rematchLoading ? '#4a5568' : '#f97316',
-                background: rematchLoading ? 'transparent' : 'rgba(249,115,22,0.08)',
-                border: `1px solid ${rematchLoading ? '#1e2d45' : 'rgba(249,115,22,0.35)'}`,
+                fontSize: '0.70rem', color: rematchLoading ? '#1e4a5a' : '#00f0ff',
+                background: rematchLoading ? 'transparent' : 'rgba(0,240,255,0.08)',
+                border: `1px solid ${rematchLoading ? '#0a2235' : 'rgba(0,240,255,0.35)'}`,
                 borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
                 letterSpacing: '0.5px', fontWeight: 600, cursor: rematchLoading ? 'not-allowed' : 'pointer',
                 display: 'flex', alignItems: 'center', gap: '0.35rem',
@@ -2137,15 +2137,15 @@ export default function CompetitionPage() {
               title="Start a new competition with the same brief and models"
             >
               {rematchLoading
-                ? <><ActivitySpinner color="#f97316" active={true} /> REMATCH</>
+                ? <><ActivitySpinner color="#00f0ff" active={true} /> REMATCH</>
                 : '⟳ REMATCH'}
             </button>
           )}
 
           {isComplete && (
             <a href={`/competitions/${id}/replay`} style={{
-              fontSize: '0.70rem', color: '#8896ab', textDecoration: 'none',
-              border: '1px solid #1e2d45', borderRadius: '6px',
+              fontSize: '0.70rem', color: '#4a8fa8', textDecoration: 'none',
+              border: '1px solid #0a2235', borderRadius: '6px',
               padding: '0.35rem 0.75rem', flexShrink: 0,
               letterSpacing: '0.5px', fontWeight: 600,
               display: 'flex', alignItems: 'center', gap: '0.35rem',
@@ -2157,7 +2157,7 @@ export default function CompetitionPage() {
 
           <div style={{
             fontFamily: 'monospace',
-            color: isRunning ? '#f97316' : '#8896ab',
+            color: isRunning ? '#00f0ff' : '#4a8fa8',
             fontSize: '0.95rem', fontWeight: 800,
             flexShrink: 0, minWidth: '4rem', textAlign: 'right',
             letterSpacing: '0.5px', transition: 'color 0.3s ease',
@@ -2169,27 +2169,27 @@ export default function CompetitionPage() {
         {/* ── Brief panel ──────────────────────────────────────────────────── */}
         {briefOpen && brief && (
           <div style={{
-            background: '#0d1520', borderBottom: '1px solid #1e2d45',
+            background: '#010810', borderBottom: '1px solid #0a2235',
             padding: '1.2rem 1.6rem', flexShrink: 0,
             maxHeight: '380px', overflowY: 'auto',
             display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem',
           }}>
             {/* Left col: problem + agents */}
             <div>
-              <div style={{ fontSize: '0.65rem', color: '#4a5568', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
+              <div style={{ fontSize: '0.65rem', color: '#1e4a5a', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
                 PROBLEM
               </div>
-              <div style={{ fontSize: '0.82rem', color: '#c4cdd9', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: '1rem' }}>
+              <div style={{ fontSize: '0.82rem', color: '#d8f0fa', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: '1rem' }}>
                 {brief.problem}
               </div>
 
               {(brief.constraints?.length ?? 0) > 0 && (
                 <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontSize: '0.65rem', color: '#4a5568', letterSpacing: '1.5px', marginBottom: '0.4rem' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#1e4a5a', letterSpacing: '1.5px', marginBottom: '0.4rem' }}>
                     CONSTRAINTS
                   </div>
                   {brief.constraints!.map((c, i) => (
-                    <div key={i} style={{ fontSize: '0.78rem', color: '#8896ab', paddingLeft: '0.6rem', borderLeft: '2px solid #1e2d45', marginBottom: '0.25rem' }}>
+                    <div key={i} style={{ fontSize: '0.78rem', color: '#4a8fa8', paddingLeft: '0.6rem', borderLeft: '2px solid #0a2235', marginBottom: '0.25rem' }}>
                       {c}
                     </div>
                   ))}
@@ -2198,11 +2198,11 @@ export default function CompetitionPage() {
 
               {(brief.deliverables?.length ?? 0) > 0 && (
                 <div>
-                  <div style={{ fontSize: '0.65rem', color: '#4a5568', letterSpacing: '1.5px', marginBottom: '0.4rem' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#1e4a5a', letterSpacing: '1.5px', marginBottom: '0.4rem' }}>
                     DELIVERABLES
                   </div>
                   {brief.deliverables!.map((d, i) => (
-                    <div key={i} style={{ fontSize: '0.78rem', color: '#8896ab', paddingLeft: '0.6rem', borderLeft: '2px solid #1e2d45', marginBottom: '0.25rem' }}>
+                    <div key={i} style={{ fontSize: '0.78rem', color: '#4a8fa8', paddingLeft: '0.6rem', borderLeft: '2px solid #0a2235', marginBottom: '0.25rem' }}>
                       {d}
                     </div>
                   ))}
@@ -2213,7 +2213,7 @@ export default function CompetitionPage() {
             {/* Right col: teams + rubric + rematch */}
             <div>
               <div style={{ marginBottom: '1rem' }}>
-                <div style={{ fontSize: '0.65rem', color: '#4a5568', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.65rem', color: '#1e4a5a', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
                   AGENTS
                 </div>
                 {teams.map((t, i) => {
@@ -2223,7 +2223,7 @@ export default function CompetitionPage() {
                       <span style={{ fontSize: '0.72rem', fontWeight: 800, color, background: `${color}18`, border: `1px solid ${color}44`, borderRadius: '4px', padding: '0.1rem 0.45rem', letterSpacing: '0.5px' }}>
                         {getModelName(t.model).toUpperCase()}
                       </span>
-                      <span style={{ fontSize: '0.78rem', color: '#8896ab' }}>{t.model}</span>
+                      <span style={{ fontSize: '0.78rem', color: '#4a8fa8' }}>{t.model}</span>
                     </div>
                   );
                 })}
@@ -2231,15 +2231,15 @@ export default function CompetitionPage() {
 
               {brief.rubric?.criteria && (
                 <div style={{ marginBottom: '1rem' }}>
-                  <div style={{ fontSize: '0.65rem', color: '#4a5568', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
+                  <div style={{ fontSize: '0.65rem', color: '#1e4a5a', letterSpacing: '1.5px', marginBottom: '0.5rem' }}>
                     RUBRIC
                   </div>
                   {brief.rubric.criteria.map((c) => (
                     <div key={c.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
-                      <span style={{ fontSize: '0.75rem', color: '#8896ab' }}>{c.id}</span>
+                      <span style={{ fontSize: '0.75rem', color: '#4a8fa8' }}>{c.id}</span>
                       <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.65rem', color: '#4a5568' }}>{Math.round(c.weight * 100)}%</span>
-                        <span style={{ fontSize: '0.72rem', color: '#c4cdd9', fontWeight: 700 }}>/{c.maxScore}</span>
+                        <span style={{ fontSize: '0.65rem', color: '#1e4a5a' }}>{Math.round(c.weight * 100)}%</span>
+                        <span style={{ fontSize: '0.72rem', color: '#d8f0fa', fontWeight: 700 }}>/{c.maxScore}</span>
                       </div>
                     </div>
                   ))}
@@ -2247,7 +2247,7 @@ export default function CompetitionPage() {
               )}
 
               {brief.timeLimitMs && (
-                <div style={{ fontSize: '0.72rem', color: '#4a5568', marginBottom: '1rem' }}>
+                <div style={{ fontSize: '0.72rem', color: '#1e4a5a', marginBottom: '1rem' }}>
                   ⏱ {Math.round(brief.timeLimitMs / 60000)} min time limit
                   {brief.format && <span style={{ marginLeft: '0.75rem' }}>📐 {brief.format}</span>}
                 </div>
@@ -2258,8 +2258,8 @@ export default function CompetitionPage() {
                 style={{
                   display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
                   fontSize: '0.72rem', fontWeight: 800, letterSpacing: '1px',
-                  color: '#f97316', background: 'rgba(249,115,22,0.1)',
-                  border: '1px solid rgba(249,115,22,0.35)', borderRadius: '6px',
+                  color: '#00f0ff', background: 'rgba(0,240,255,0.1)',
+                  border: '1px solid rgba(0,240,255,0.35)', borderRadius: '6px',
                   padding: '0.4rem 0.9rem', textDecoration: 'none',
                   transition: 'all 0.15s ease',
                 }}
@@ -2289,7 +2289,7 @@ export default function CompetitionPage() {
               .slice()
               .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-            const color = LANE_COLORS[i] ?? '#8896ab';
+            const color = LANE_COLORS[i] ?? '#4a8fa8';
 
             return (
               <LanePanel
@@ -2312,7 +2312,7 @@ export default function CompetitionPage() {
             <div style={{
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center',
-              color: '#2d4060', fontSize: '0.82rem', gap: '0.75rem',
+              color: '#0e3050', fontSize: '0.82rem', gap: '0.75rem',
             }}>
               <ActivitySpinner color="#3b82f6" active={true} />
               <span>Waiting for competition data...</span>

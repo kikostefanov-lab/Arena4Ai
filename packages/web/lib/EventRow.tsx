@@ -60,8 +60,8 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
       return {
         label: tool.toUpperCase().slice(0, 8),
         icon: getToolIcon(tool),
-        color: '#3b82f6',
-        bg: 'rgba(59,130,246,0.08)',
+        color: '#0080ff',
+        bg: 'rgba(0,128,255,0.08)',
         text,
       };
     }
@@ -70,19 +70,19 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
       const text = String(p.text ?? p.path ?? '');
       const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
       const fname = m ? m[1] : text.slice(0, 80);
-      return { label: 'CREATE', icon: '📄', color: '#22c55e', bg: 'rgba(34,197,94,0.08)', text: `New file: ${fname}` };
+      return { label: 'CREATE', icon: '📄', color: '#00f0ff', bg: 'rgba(0,240,255,0.08)', text: `New file: ${fname}` };
     }
 
     case 'FILE_MODIFY': {
       const text = String(p.text ?? p.path ?? '');
       const m = text.match(/(\/?(?:[\w.-]+\/)*[\w.-]+\.\w+)/);
       const fname = m ? m[1] : text.slice(0, 80);
-      return { label: 'MODIFY', icon: '✏️', color: '#10b981', bg: 'rgba(16,185,129,0.08)', text: `Modified: ${fname}` };
+      return { label: 'MODIFY', icon: '✏️', color: '#0066ff', bg: 'rgba(0,102,255,0.08)', text: `Modified: ${fname}` };
     }
 
     case 'REASONING': {
       if (p.text && typeof p.text === 'string') {
-        return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: p.text.trim() };
+        return { label: 'THINK', icon: '🧠', color: '#0080ff', bg: 'rgba(0,128,255,0.06)', text: p.text.trim() };
       }
       if (p.raw) {
         const raw = p.raw as Record<string, unknown>;
@@ -100,8 +100,8 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
               return {
                 label: isErr ? 'FAIL' : 'RESULT',
                 icon: isErr ? '❌' : '✅',
-                color: isErr ? '#ef4444' : '#22c55e',
-                bg: isErr ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.06)',
+                color: isErr ? '#ef4444' : '#00f0ff',
+                bg: isErr ? 'rgba(239,68,68,0.08)' : 'rgba(0,240,255,0.06)',
                 text: resultText,
               };
             }
@@ -113,7 +113,7 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
           const res = raw.result;
           const resText = res && typeof res === 'string' ? res.trim() : null;
           if (!resText) return null;
-          return { label: 'DONE', icon: '🏁', color: '#f97316', bg: 'rgba(249,115,22,0.08)', text: resText };
+          return { label: 'DONE', icon: '🏁', color: '#ff6600', bg: 'rgba(255,102,0,0.08)', text: resText };
         }
 
         if (raw.type === 'assistant') {
@@ -125,7 +125,7 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
             // Text output from agent
             const tb = blocks.find((b) => b.type === 'text');
             if (tb?.text && typeof tb.text === 'string') {
-              return { label: 'OUTPUT', icon: '💬', color: '#a78bfa', bg: 'rgba(167,139,250,0.07)', text: tb.text };
+              return { label: 'OUTPUT', icon: '💬', color: '#00d4ff', bg: 'rgba(0,212,255,0.07)', text: tb.text };
             }
 
             // Claude's internal thinking
@@ -134,7 +134,7 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
               const rawThink = thinkBlock.thinking.replace(/\n/g, ' ').trim();
               // Take first natural sentence for punchy commentary
               const sentence = rawThink.match(/[^.!?]{10,}[.!?]/)?.[0]?.trim() ?? rawThink;
-              return { label: 'THINK', icon: '🧠', color: '#06b6d4', bg: 'rgba(6,182,212,0.06)', text: sentence };
+              return { label: 'THINK', icon: '🧠', color: '#0080ff', bg: 'rgba(0,128,255,0.06)', text: sentence };
             }
 
             // Tool invocation
@@ -148,8 +148,8 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
               return {
                 label: toolName.toUpperCase().slice(0, 8),
                 icon: getToolIcon(toolName),
-                color: '#3b82f6',
-                bg: 'rgba(59,130,246,0.08)',
+                color: '#0080ff',
+                bg: 'rgba(0,128,255,0.08)',
                 text,
               };
             }
@@ -177,7 +177,7 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
     case 'COMMENTARY': {
       const text = typeof p.text === 'string' ? p.text.trim() : '';
       if (!text) return null;
-      return { label: '🎙️ Commentary', icon: '🎙️', color: '#eab308', bg: 'rgba(234,179,8,0.08)', text };
+      return { label: '🎙️ Commentary', icon: '🎙️', color: '#ffd700', bg: 'rgba(255,215,0,0.08)', text };
     }
 
     case 'TIME_WARNING':
@@ -186,13 +186,13 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
       const text = rem != null ? `${Math.round(Number(rem) / 1000)}s remaining on the clock` : null;
       if (!text) return null;
       const isUp = type === 'TIME_UP';
-      return { label: isUp ? 'TIME UP' : 'TIME', icon: '⏰', color: isUp ? '#f97316' : '#eab308', bg: isUp ? 'rgba(249,115,22,0.12)' : 'rgba(234,179,8,0.10)', text };
+      return { label: isUp ? 'TIME UP' : 'TIME', icon: '⏰', color: isUp ? '#ff6600' : '#ffd700', bg: isUp ? 'rgba(255,102,0,0.12)' : 'rgba(255,215,0,0.10)', text };
     }
 
     case 'JUDGE_SCORE': {
       const score = p.score ?? p.totalScore;
       const crit = p.criterionId ?? p.criterion;
-      if (crit && score != null) return { label: 'SCORE', icon: '⚖️', color: '#a855f7', bg: 'rgba(168,85,247,0.10)', text: `${String(crit)} → ${score}` };
+      if (crit && score != null) return { label: 'SCORE', icon: '⚖️', color: '#0066ff', bg: 'rgba(0,102,255,0.10)', text: `${String(crit)} → ${score}` };
       return null;
     }
 
@@ -234,7 +234,7 @@ export function EventRow({
   return (
     <div
       style={{
-        borderLeft: expanded ? '2px solid #eab308' : '2px solid transparent',
+        borderLeft: expanded ? '2px solid #00f0ff' : '2px solid transparent',
         borderRadius: '8px',
         transition: 'border-color 0.15s',
       }}
@@ -258,7 +258,7 @@ export function EventRow({
       >
         {/* Timestamp */}
         <span style={{
-          color: '#4a5568', fontSize: '0.75rem', fontFamily: 'monospace',
+          color: '#3d7d94', fontSize: '0.75rem', fontFamily: 'monospace',
           flexShrink: 0, width: '2.8rem', textAlign: 'right',
           marginTop: '2px', letterSpacing: '-0.3px',
         }}>
@@ -278,7 +278,7 @@ export function EventRow({
         </span>
         {/* Summary text (truncated) */}
         <span style={{
-          color: '#c4d4e8',
+          color: '#c8eef8',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -289,7 +289,7 @@ export function EventRow({
         </span>
         {/* Expand arrow */}
         {canExpand && (
-          <span style={{ fontSize: '0.6rem', color: '#2d4060', flexShrink: 0, marginLeft: '0.3rem' }}>
+          <span style={{ fontSize: '0.6rem', color: '#0e3050', flexShrink: 0, marginLeft: '0.3rem' }}>
             {expanded ? '▲' : '▼'}
           </span>
         )}
@@ -298,13 +298,13 @@ export function EventRow({
       {/* Expand panel */}
       {expanded && (
         <div style={{
-          background: 'rgba(10,14,23,0.7)',
-          borderTop: '1px solid rgba(30,45,69,0.6)',
+          background: 'rgba(0,4,8,0.7)',
+          borderTop: '1px solid rgba(10,34,53,0.6)',
           borderRadius: '0 0 8px 8px',
           padding: '0.6rem 0.8rem 0.6rem 4.5rem',
         }}>
           <p style={{
-            color: '#c4d4e8',
+            color: '#c8eef8',
             fontSize: '0.82rem',
             lineHeight: 1.6,
             margin: 0,
@@ -319,7 +319,7 @@ export function EventRow({
               marginTop: '0.5rem',
               background: 'none',
               border: 'none',
-              color: '#4a5568',
+              color: '#7cc6db',
               fontSize: '0.65rem',
               cursor: 'pointer',
               padding: 0,
