@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS as TOKEN_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import type { ForgeRun, ForgeSource } from '@arena/shared';
@@ -54,8 +54,6 @@ const HIST_COLORS: Record<string, string> = {
 
 // LANE_COLORS imported from design-tokens above
 
-const MODEL_BADGE_COLORS = TOKEN_BADGE_COLORS;
-
 const ARTIFACT_EMOJI: Record<string, string> = {
   // Universal
   executive_summary:      '⭐',
@@ -91,8 +89,6 @@ const ARTIFACT_EMOJI: Record<string, string> = {
 };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const resolveLabel = resolveTeamLabel;
 
 function getModelName(model: string): string {
   return model.split(':')[0].toLowerCase();
@@ -512,7 +508,7 @@ function renderMarkdown(text: string): React.ReactNode {
               {codeLang}
             </div>
           )}
-          <pre style={{ margin: 0, padding: '0.75rem', background: '#000408', overflowX: 'auto', fontSize: '0.7rem', lineHeight: 1.55, color: '#a8d8a8', fontFamily: "'SF Mono','Fira Code','Cascadia Code',monospace" }}>
+          <pre style={{ margin: 0, padding: '0.75rem', background: '#000408', overflowX: 'auto', fontSize: '0.7rem', lineHeight: 1.55, color: '#a8d8a8', fontFamily: MONOSPACE_FONT }}>
             <code>{codeLines.join('\n')}</code>
           </pre>
         </div>
@@ -632,12 +628,12 @@ function ScoreDrawer({
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
 
   const winnerLabel = result.winnerId
-    ? resolveLabel(teams, result.winnerId, result.winnerId)
+    ? resolveTeamLabel(teams, result.winnerId, result.winnerId)
     : null;
 
   const teamDisplays = result.teams.map((tr, i) => ({
     result: tr,
-    label: resolveLabel(teams, tr.teamId, `Team ${i + 1}`),
+    label: resolveTeamLabel(teams, tr.teamId, `Team ${i + 1}`),
     color: LANE_COLORS[i] ?? '#4a8fa8',
     isWinner: tr.teamId === result.winnerId,
   }));
@@ -1102,7 +1098,7 @@ function ScoreDrawer({
                   flex: 1, minHeight: 0,
                 }}>
                   {result.presentations!.map((pres, presIdx) => {
-                    const label = resolveLabel(teams, pres.teamId, pres.teamId);
+                    const label = resolveTeamLabel(teams, pres.teamId, pres.teamId);
                     const color = LANE_COLORS[presIdx] ?? '#4a8fa8';
                     const rgb = hexToRgb(color);
                     const isWinner = pres.teamId === result.winnerId;
@@ -1223,7 +1219,7 @@ function ScoreDrawer({
                       flex: 1, minHeight: 0, overflow: 'hidden',
                     }}>
                       {result.deliverables!.map((td, tdIdx) => {
-                        const label = resolveLabel(teams, td.teamId, td.teamId);
+                        const label = resolveTeamLabel(teams, td.teamId, td.teamId);
                         const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
                         const rgb = hexToRgb(color);
                         return (
@@ -1306,26 +1302,19 @@ function ScoreDrawer({
                       const teamIdx = result.deliverables!.findIndex(td => td.teamId === selectedFileKey.teamId);
                       const color = LANE_COLORS[teamIdx] ?? '#4a8fa8';
                       const rgb = hexToRgb(color);
-                      const label = resolveLabel(teams, selectedFileKey.teamId, selectedFileKey.teamId);
+                      const label = resolveTeamLabel(teams, selectedFileKey.teamId, selectedFileKey.teamId);
                       return (
                         <>
                           {/* Resize handle */}
                           <div
-                            style={{
-                              flexShrink: 0, height: '5px', background: '#0a2235',
-                              cursor: 'ns-resize', position: 'relative', transition: 'background 0.15s',
-                            }}
-                            onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'rgba(0,240,255,0.5)'; }}
-                            onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = '#0a2235'; }}
+                            className="resize-handle"
                             onMouseDown={(e) => {
                               isDraggingFilePreview.current = true;
                               dragFilePreviewStartY.current = e.clientY;
                               dragFilePreviewStartH.current = filePreviewHeight;
                               e.preventDefault();
                             }}
-                          >
-                            <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%,-50%)', width: '40px', height: '3px', borderRadius: '2px', background: 'rgba(255,255,255,0.12)' }} />
-                          </div>
+                          />
 
                           {/* Preview panel */}
                           <div style={{
@@ -1369,7 +1358,7 @@ function ScoreDrawer({
                               className="arena-scrollbar"
                               style={{
                                 flex: 1, overflowY: 'auto', padding: '0.65rem 1rem',
-                                fontFamily: "'SF Mono', 'Fira Code', monospace",
+                                fontFamily: MONOSPACE_FONT,
                                 fontSize: '0.7rem', color: '#7cc6db', lineHeight: 1.6,
                                 whiteSpace: 'pre-wrap', wordBreak: 'break-all',
                               }}
@@ -1397,7 +1386,7 @@ function ScoreDrawer({
                         flex: 1, minHeight: 0, overflow: 'hidden',
                       }}>
                         {fileEventsByTeam.map((teamFiles, tdIdx) => {
-                          const label = resolveLabel(teams, teamFiles.teamId, teamFiles.teamId);
+                          const label = resolveTeamLabel(teams, teamFiles.teamId, teamFiles.teamId);
                           const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
                           const rgb = hexToRgb(color);
                           return (
@@ -1415,7 +1404,7 @@ function ScoreDrawer({
                                       <span style={{ color: '#00f0ff' }}>📄</span>
                                       <span>{f.path}</span>
                                     </div>
-                                    <pre style={{ fontSize: '0.72rem', color: f.content ? '#d8f0fa' : '#1e4a5a', whiteSpace: 'pre-wrap', fontFamily: "'SF Mono', 'Fira Code', monospace", lineHeight: 1.6, margin: 0, padding: '0.65rem 1rem', background: '#010810', overflowX: 'auto', fontStyle: f.content ? 'normal' : 'italic' }}>
+                                    <pre style={{ fontSize: '0.72rem', color: f.content ? '#d8f0fa' : '#1e4a5a', whiteSpace: 'pre-wrap', fontFamily: MONOSPACE_FONT, lineHeight: 1.6, margin: 0, padding: '0.65rem 1rem', background: '#010810', overflowX: 'auto', fontStyle: f.content ? 'normal' : 'italic' }}>
                                       {f.content ? (f.content.length > 3000 ? `${f.content.slice(0, 3000)}\n\n… (truncated)` : f.content) : '(no content captured)'}
                                     </pre>
                                   </div>
@@ -1457,7 +1446,7 @@ function ScoreDrawer({
                       {(result.synthesis.perCriterion ?? []).map((entry) => {
                         const winnerTeam = teams.find(t => t.id === entry.teamId);
                         const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
-                        const wLabel = resolveLabel(teams, entry.teamId, entry.teamId);
+                        const wLabel = resolveTeamLabel(teams, entry.teamId, entry.teamId);
                         const isOpen = selectedSynthCriterionId === entry.criterionId;
 
                         return (
@@ -1842,7 +1831,7 @@ function ScoreDrawer({
             </div>
             <div style={{
               padding: '0.85rem 1.1rem', overflowY: 'auto', flex: 1,
-              fontFamily: "'SF Mono', 'Fira Code', monospace",
+              fontFamily: MONOSPACE_FONT,
               fontSize: '0.68rem', color: '#7cc6db', lineHeight: 1.7,
               whiteSpace: 'pre-wrap', wordBreak: 'break-all',
             }}>
@@ -2278,7 +2267,7 @@ export default function CompetitionPage() {
 
     hasNotifiedRef.current = true;
     const winnerLabel = result?.winnerId
-      ? resolveLabel(orderedTeams, result.winnerId, result.winnerId)
+      ? resolveTeamLabel(orderedTeams, result.winnerId, result.winnerId)
       : null;
     const body = winnerLabel
       ? `${briefTitle || 'Competition'} — ${winnerLabel} wins!`
@@ -2323,7 +2312,7 @@ export default function CompetitionPage() {
           display: 'flex', flexDirection: 'column',
           height: '100vh', overflow: 'hidden',
           background: '#000408',
-          fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+          fontFamily: MONOSPACE_FONT,
           color: '#c8eef8',
           border: isRunning ? '1px solid rgba(0,240,255,0.2)' : '1px solid transparent',
           transition: 'border-color 0.5s ease',

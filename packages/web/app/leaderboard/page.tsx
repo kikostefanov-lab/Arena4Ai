@@ -58,12 +58,14 @@ function WinRateBar({ winRate, color }: { winRate: number; color: string }) {
 }
 
 function RankBadge({ rank }: { rank: number }) {
-  const gold   = rank === 1 ? { bg: `${ACCENT_GOLD}26`,   color: ACCENT_GOLD,   border: `${ACCENT_GOLD}66` }   : null;
-  const silver = rank === 2 ? { bg: `${ACCENT_SILVER}26`, color: ACCENT_SILVER, border: `${ACCENT_SILVER}66` } : null;
-  const bronze = rank === 3 ? { bg: `${ACCENT_BRONZE}26`, color: ACCENT_BRONZE, border: `${ACCENT_BRONZE}66` }  : null;
-  const rankColor = rank === 1 ? ACCENT_GOLD : rank === 2 ? ACCENT_SILVER : rank === 3 ? ACCENT_BRONZE : TEXT_MUTED;
-  const style  = gold ?? silver ?? bronze ?? { bg: 'rgba(10,34,53,0.5)', color: rankColor, border: '#0a2235' };
-  const medal  = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+  const color =
+    rank === 1 ? ACCENT_GOLD :
+    rank === 2 ? ACCENT_SILVER :
+    rank === 3 ? ACCENT_BRONZE :
+    TEXT_MUTED;
+  const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+  const bg = medal ? `${color}26` : 'rgba(10,34,53,0.5)';
+  const border = medal ? `${color}66` : '#0a2235';
 
   return (
     <div style={{
@@ -73,11 +75,11 @@ function RankBadge({ rank }: { rank: number }) {
       width: '2.2rem',
       height: '2.2rem',
       borderRadius: '6px',
-      background: style.bg,
-      border: `1px solid ${style.border}`,
+      background: bg,
+      border: `1px solid ${border}`,
       fontSize: medal ? '1.1rem' : '0.85rem',
       fontWeight: 800,
-      color: style.color,
+      color,
       flexShrink: 0,
     }}>
       {medal ?? `#${rank}`}
