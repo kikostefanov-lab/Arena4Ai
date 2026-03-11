@@ -1231,134 +1231,118 @@ function ScoreDrawer({
 
             {/* PRESENTATIONS TAB — human-readable summaries of each team's work */}
             {activeTab === 'presentations' && hasPresentations && (
-              <div style={{ maxWidth: '760px', margin: '0 auto' }}>
-                {/* Header */}
-                <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                  <span style={{ fontSize: '1.1rem' }}>🎤</span>
-                  <div>
-                    <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#3b82f6', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Team Presentations</div>
-                    <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.1rem' }}>Human-readable summary of what each team built, mapped to the judging criteria</div>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                {/* Column grid — one column per team */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: `repeat(${result.presentations!.length}, 1fr)`,
+                  flex: 1, minHeight: 0,
+                }}>
+                  {result.presentations!.map((pres, presIdx) => {
+                    const label = resolveLabel(teams, pres.teamId, pres.teamId);
+                    const color = LANE_COLORS[presIdx] ?? '#4a8fa8';
+                    const rgb = hexToRgb(color);
+                    const isWinner = pres.teamId === result.winnerId;
 
-                {result.presentations!.map((pres, presIdx) => {
-                  const label = resolveLabel(teams, pres.teamId, pres.teamId);
-                  const color = LANE_COLORS[presIdx] ?? '#4a8fa8';
-                  const rgb = hexToRgb(color);
-                  const isWinner = pres.teamId === result.winnerId;
-
-                  return (
-                    <div key={pres.teamId} style={{
-                      marginBottom: '1.25rem',
-                      border: `1px solid ${isWinner ? 'rgba(234,179,8,0.4)' : `rgba(${rgb},0.2)`}`,
-                      borderRadius: '10px', overflow: 'hidden',
-                      background: isWinner
-                        ? 'linear-gradient(135deg, rgba(234,179,8,0.04) 0%, rgba(234,179,8,0.01) 100%)'
-                        : '#010810',
-                    }}>
-                      {/* Team header */}
-                      <div style={{
-                        padding: '0.7rem 1rem',
-                        background: isWinner ? 'rgba(234,179,8,0.08)' : `rgba(${rgb},0.08)`,
-                        borderBottom: `1px solid ${isWinner ? 'rgba(234,179,8,0.2)' : `rgba(${rgb},0.15)`}`,
-                        display: 'flex', alignItems: 'center', gap: '0.6rem',
-                      }}>
-                        {isWinner && <span style={{ fontSize: '0.9rem' }}>🏆</span>}
-                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: isWinner ? '#eab308' : color, letterSpacing: '1px', textTransform: 'uppercase' }}>
-                          {label}
-                        </span>
-                        <span style={{ fontSize: '0.65rem', color: '#1e4a5a', fontStyle: 'italic' }}>
-                          ({pres.model})
-                        </span>
-                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
-                          {/* Expand button */}
+                    return (
+                      <div
+                        key={pres.teamId}
+                        className="arena-scrollbar"
+                        style={{
+                          borderRight: presIdx < result.presentations!.length - 1 ? '1px solid #0a2235' : 'none',
+                          overflowY: 'auto',
+                          display: 'flex', flexDirection: 'column',
+                        }}
+                      >
+                        {/* Sticky column header */}
+                        <div style={{
+                          position: 'sticky', top: 0, zIndex: 2,
+                          background: `rgba(${rgb},0.08)`,
+                          borderBottom: `1px solid rgba(${rgb},0.2)`,
+                          padding: '0.6rem 1rem',
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          flexShrink: 0,
+                        }}>
+                          {isWinner && <span style={{ fontSize: '0.85rem' }}>🏆</span>}
+                          <span style={{ fontSize: '0.72rem', fontWeight: 800, color: isWinner ? '#eab308' : color, letterSpacing: '1px', textTransform: 'uppercase', flex: 1 }}>
+                            {label}
+                          </span>
+                          <span style={{ fontSize: '0.6rem', color: '#1e4a5a', fontStyle: 'italic' }}>({pres.model})</span>
                           <button
                             onClick={() => setPresentationModal(pres)}
-                            style={{
-                              fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.5rem',
-                              borderRadius: '4px', background: 'transparent',
-                              border: '1px solid #0a2235', color: '#7cc6db',
-                              cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.5px',
-                            }}
-                          >
-                            ⤢ Expand
-                          </button>
-                          {/* Download button */}
+                            style={{ fontSize: '0.58rem', padding: '0.15rem 0.45rem', borderRadius: '3px', background: 'transparent', border: '1px solid #0a2235', color: '#7cc6db', cursor: 'pointer', fontFamily: 'monospace' }}
+                          >⤢</button>
                           <button
                             onClick={() => downloadPresentation(pres)}
-                            style={{
-                              fontSize: '0.6rem', fontWeight: 700, padding: '0.2rem 0.5rem',
-                              borderRadius: '4px', background: 'rgba(0,240,255,0.08)',
-                              border: '1px solid rgba(0,240,255,0.35)', color: '#00f0ff',
-                              cursor: 'pointer', fontFamily: 'monospace', letterSpacing: '0.5px',
-                            }}
-                          >
-                            ↓ Download
-                          </button>
+                            style={{ fontSize: '0.58rem', padding: '0.15rem 0.45rem', borderRadius: '3px', background: 'rgba(0,240,255,0.08)', border: '1px solid rgba(0,240,255,0.3)', color: '#00f0ff', cursor: 'pointer', fontFamily: 'monospace' }}
+                          >↓ MD</button>
                         </div>
-                      </div>
 
-                      <div style={{ padding: '1rem 1.1rem' }}>
                         {/* Approach */}
-                        <div style={{ marginBottom: '1rem' }}>
-                          <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Approach</div>
-                          <div style={{ fontSize: '0.78rem', color: '#d8f0fa', lineHeight: 1.7 }}>{pres.approach}</div>
+                        <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(10,34,53,0.4)' }}>
+                          <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Approach</div>
+                          <div style={{ fontSize: '0.75rem', color: '#7cc6db', lineHeight: 1.6 }}>{pres.approach}</div>
                         </div>
 
                         {/* Key insight */}
-                        <div style={{
-                          marginBottom: '1rem', padding: '0.65rem 0.85rem',
-                          background: 'rgba(0,240,255,0.06)', border: '1px solid rgba(0,240,255,0.15)',
-                          borderRadius: '6px',
-                        }}>
-                          <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Key Insight</div>
-                          <div style={{ fontSize: '0.75rem', color: '#c8eef8', lineHeight: 1.6 }}>{pres.keyInsight}</div>
+                        <div style={{ padding: '0.65rem 1rem', borderBottom: '1px solid rgba(10,34,53,0.4)', background: 'rgba(0,240,255,0.03)' }}>
+                          <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Key Insight</div>
+                          <div style={{ fontSize: '0.72rem', color: '#c8eef8', lineHeight: 1.6, fontStyle: 'italic' }}>{pres.keyInsight}</div>
                         </div>
 
-                        {/* Criterion findings */}
-                        {pres.criterionFindings.length > 0 && (
-                          <div style={{ marginBottom: '1rem' }}>
-                            <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                              Criteria Assessment
-                            </div>
-                            {pres.criterionFindings.map((cf, cfIdx) => (
-                              <div key={cf.criterionId} style={{
-                                padding: '0.6rem 0.75rem',
-                                borderBottom: cfIdx < pres.criterionFindings.length - 1 ? '1px solid rgba(10,34,53,0.6)' : 'none',
-                              }}>
-                                <code style={{
-                                  fontSize: '0.62rem', color: '#4a6080', background: '#000408',
-                                  padding: '0.12rem 0.4rem', borderRadius: '3px', border: '1px solid #0a2235',
-                                }}>{cf.criterionId}</code>
-                                <div style={{ fontSize: '0.75rem', color: '#d8f0fa', lineHeight: 1.6, marginTop: '0.35rem' }}>
-                                  {cf.finding}
-                                </div>
-                                <div style={{ display: 'flex', gap: '1rem', marginTop: '0.3rem', fontSize: '0.68rem' }}>
+                        {/* Criterion findings — click each to expand */}
+                        {pres.criterionFindings.map((cf) => {
+                          const cfKey = `${pres.teamId}:${cf.criterionId}`;
+                          const isOpen = selectedCriterionId === cfKey;
+                          return (
+                            <div
+                              key={cf.criterionId}
+                              onClick={() => setSelectedCriterionId(isOpen ? null : cfKey)}
+                              style={{
+                                padding: '0.5rem 1rem',
+                                borderBottom: '1px solid rgba(10,34,53,0.35)',
+                                cursor: 'pointer',
+                                background: isOpen ? 'rgba(0,240,255,0.04)' : 'transparent',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                <span style={{ fontSize: '0.58rem', color: isOpen ? '#00f0ff' : '#3d7d94' }}>{isOpen ? '▼' : '▶'}</span>
+                                <code style={{ fontSize: '0.6rem', color: '#4a6080', background: '#000408', padding: '0.1rem 0.35rem', borderRadius: '3px', border: '1px solid #0a2235' }}>{cf.criterionId}</code>
+                              </div>
+                              {isOpen && (
+                                <div style={{ marginTop: '0.4rem', paddingLeft: '0.9rem' }}>
+                                  <div style={{ fontSize: '0.72rem', color: '#7cc6db', lineHeight: 1.6, marginBottom: '0.3rem' }}>{cf.finding}</div>
                                   {cf.strength && (
-                                    <span style={{ color: '#00f0ff' }}>
+                                    <div style={{ fontSize: '0.65rem', color: '#00f0ff', marginBottom: '0.15rem' }}>
                                       <span style={{ fontWeight: 700 }}>+</span> {cf.strength}
-                                    </span>
+                                    </div>
                                   )}
                                   {cf.gap && (
-                                    <span style={{ color: '#ef4444' }}>
-                                      <span style={{ fontWeight: 700 }}>-</span> {cf.gap}
-                                    </span>
+                                    <div style={{ fontSize: '0.65rem', color: '#ef444488' }}>
+                                      <span style={{ fontWeight: 700 }}>−</span> {cf.gap}
+                                    </div>
                                   )}
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              )}
+                            </div>
+                          );
+                        })}
 
                         {/* Deliverable summary */}
-                        <div>
-                          <div style={{ fontSize: '0.6rem', fontWeight: 800, color: '#4a6080', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>What Was Delivered</div>
-                          <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6 }}>{pres.deliverableSummary}</div>
+                        <div style={{ padding: '0.65rem 1rem', marginTop: 'auto' }}>
+                          <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Deliverables</div>
+                          <div style={{ fontSize: '0.68rem', color: '#4a8fa8', lineHeight: 1.6 }}>{pres.deliverableSummary}</div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'presentations' && !hasPresentations && (
+              <div style={{ padding: '3rem', textAlign: 'center', color: '#1e4a5a', fontSize: '0.8rem', fontStyle: 'italic' }}>
+                Presentations not available for this competition.
               </div>
             )}
 
