@@ -2,7 +2,7 @@ import type { CompetitionState } from '../constants/states.js';
 import type { CompetitionFormat } from '../constants/formats.js';
 
 export interface Team {
-  id: string;           // 'team-a' | 'team-b'
+  id: string;           // 'team-a' | 'team-b' | 'team-c' | 'team-d'
   model: string;        // 'claude:architect'
   persona: string;      // resolved system prompt
 }
@@ -41,7 +41,7 @@ export interface Deliverable {
 export interface Competition {
   id: string;
   brief: Brief;
-  teams: [Team, Team];
+  teams: Team[];
   state: CompetitionState;
   startedAt?: string;
   completedAt?: string;

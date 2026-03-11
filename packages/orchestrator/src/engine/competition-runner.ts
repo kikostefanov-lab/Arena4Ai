@@ -94,7 +94,7 @@ export class CompetitionRunner extends EventEmitter {
   private _activeAdapters: BaseAdapter[] = [];
   private _clock?: ClockManager;
 
-  constructor(brief: Brief, teams: [Team, Team], options: RunOptions = {}) {
+  constructor(brief: Brief, teams: Team[], options: RunOptions = {}) {
     super();
 
     this.competition = {

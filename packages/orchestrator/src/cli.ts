@@ -28,6 +28,7 @@ program
   .option('--skip-sandbox', 'Skip Docker sandbox creation (use local temp dirs instead)')
   .option('--time-limit <ms>', 'Override brief time limit in milliseconds')
   .option('--commentary', 'Enable live AI commentary during the competition')
+  .option('--teams <teams>', 'Comma-separated list of model:persona strings (overrides --team-a/--team-b)')
   .action(async (briefPath: string, opts: {
     teamA: string;
     teamB: string;
@@ -37,6 +38,7 @@ program
     skipSandbox: boolean;
     timeLimit?: string;
     commentary?: boolean;
+    teams?: string;
   }) => {
     try {
       const brief = await parseBrief(resolve(briefPath));
@@ -55,7 +57,10 @@ program
         return { id, model, persona };
       };
 
-      const teams: [Team, Team] = [makeTeam('team-a', opts.teamA), makeTeam('team-b', opts.teamB)];
+      const teamIds = ['team-a', 'team-b', 'team-c', 'team-d'];
+      const teams: Team[] = opts.teams
+        ? opts.teams.split(',').map((t: string, i: number) => makeTeam(teamIds[i] ?? `team-${i}`, t.trim()))
+        : [makeTeam('team-a', opts.teamA), makeTeam('team-b', opts.teamB)];
 
       const runner = new CompetitionRunner(
         brief,

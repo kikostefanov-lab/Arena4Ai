@@ -17,12 +17,16 @@ interface RubricCriterion {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const AVAILABLE_TEAMS = [
+const PRESET_TEAMS = [
   'claude:architect',
   'claude:speedrunner',
   'claude:pragmatist',
+  'claude:adversarial',
+  'claude:pioneer',
   'codex:standard',
+  'codex:architect',
   'gemini:speedrunner',
+  'gemini:architect',
 ] as const;
 
 const DEFAULT_CRITERIA: RubricCriterion[] = [
@@ -55,6 +59,9 @@ export default function NewTournamentPage() {
   const [showExamples, setShowExamples] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customModel, setCustomModel] = useState('claude');
+  const [customPersona, setCustomPersona] = useState('');
 
   function toggleTeam(team: string) {
     setSelectedTeams((prev) =>
@@ -99,8 +106,8 @@ export default function NewTournamentPage() {
     e.preventDefault();
     setError(null);
 
-    if (selectedTeams.length < 2 || selectedTeams.length > 4) {
-      setError('Select 2–4 teams to compete in the tournament.');
+    if (selectedTeams.length < 2 || selectedTeams.length > 8) {
+      setError('Select 2–8 teams to compete in the tournament.');
       return;
     }
     if (!problem.trim()) {
@@ -229,12 +236,12 @@ export default function NewTournamentPage() {
           <div style={sectionStyle}>
             <label style={labelStyle}>
               Teams{' '}
-              <span style={{ color: selectedTeams.length >= 2 && selectedTeams.length <= 4 ? '#22c55e' : '#ef4444' }}>
-                ({selectedTeams.length} selected — need 2–4)
+              <span style={{ color: selectedTeams.length >= 2 && selectedTeams.length <= 8 ? '#22c55e' : '#ef4444' }}>
+                ({selectedTeams.length} selected — need 2–8)
               </span>
             </label>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '0.5rem' }}>
-              {AVAILABLE_TEAMS.map((team) => {
+              {PRESET_TEAMS.map((team) => {
                 const model = modelOf(team);
                 const color = getModelColor(model);
                 const selected = selectedTeams.includes(team);
@@ -266,6 +273,114 @@ export default function NewTournamentPage() {
                   </button>
                 );
               })}
+              {/* Custom team entry */}
+              {!showCustomForm ? (
+                <button
+                  type="button"
+                  className="team-card"
+                  onClick={() => setShowCustomForm(true)}
+                  style={{
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '6px',
+                    border: '2px dashed #1e2d45',
+                    background: '#111827',
+                    color: '#4a5568',
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    letterSpacing: '0.5px',
+                  }}
+                >
+                  <div style={{ fontSize: '0.6rem', opacity: 0.7, marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    custom
+                  </div>
+                  + Add Custom
+                </button>
+              ) : (
+                <div style={{
+                  padding: '0.65rem 0.85rem',
+                  borderRadius: '6px',
+                  border: '2px dashed #f97316',
+                  background: '#111827',
+                }}>
+                  <div style={{ fontSize: '0.55rem', color: '#f97316', marginBottom: '0.4rem', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}>
+                    custom team
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '0.4rem' }}>
+                    {['claude', 'codex', 'gemini'].map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setCustomModel(m)}
+                        style={{
+                          fontSize: '0.55rem', padding: '0.2rem 0.4rem',
+                          border: `1px solid ${customModel === m ? getModelColor(m) : '#1e2d45'}`,
+                          background: customModel === m ? `${getModelColor(m)}20` : 'none',
+                          color: customModel === m ? getModelColor(m) : '#8896ab',
+                          borderRadius: '4px', cursor: 'pointer',
+                          fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    value={customPersona}
+                    onChange={(e) => setCustomPersona(e.target.value)}
+                    placeholder="persona..."
+                    style={{
+                      width: '100%', background: '#0a0e17',
+                      border: '1px solid #1e2d45', borderRadius: '4px',
+                      padding: '0.25rem 0.4rem', color: '#e2e8f0',
+                      fontSize: '0.65rem', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      outline: 'none', boxSizing: 'border-box', marginBottom: '0.4rem',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: '0.35rem' }}>
+                    <button
+                      type="button"
+                      disabled={!customPersona.trim()}
+                      onClick={() => {
+                        if (customPersona.trim()) {
+                          setSelectedTeams((prev) => [...prev, `${customModel}:${customPersona.trim()}`]);
+                          setShowCustomForm(false);
+                          setCustomPersona('');
+                          setCustomModel('claude');
+                        }
+                      }}
+                      style={{
+                        fontSize: '0.55rem', padding: '0.25rem 0.6rem',
+                        background: customPersona.trim() ? '#f97316' : '#1e2d45',
+                        color: customPersona.trim() ? '#0a0e17' : '#4a5568',
+                        border: 'none', borderRadius: '4px',
+                        cursor: customPersona.trim() ? 'pointer' : 'not-allowed',
+                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        fontWeight: 700,
+                      }}
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowCustomForm(false); setCustomPersona(''); setCustomModel('claude'); }}
+                      style={{
+                        fontSize: '0.55rem', padding: '0.25rem 0.6rem',
+                        background: 'none', color: '#4a5568',
+                        border: '1px solid #1e2d45', borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

@@ -3,4 +3,4 @@ export type { Brief, Team, Competition, Deliverable, RubricCriterion, Rubric } f
 export type { ScoreCard, JudgeResult, CriterionScore } from './scoring.js';
 export type { ModelAdapter } from './adapter.js';
 export type { TeamPresentation, CriterionFinding } from './presentation.js';
-export type { ForgeOutput, ForgeArtifact, ForgeArtifactType } from './forge.js';
+export type { ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeDomain } from './forge.js';

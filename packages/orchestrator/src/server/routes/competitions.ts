@@ -28,8 +28,8 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     return;
   }
 
-  if (!Array.isArray(body.teams) || body.teams.length !== 2) {
-    res.status(400).json({ error: 'teams must be an array of exactly 2 team objects' });
+  if (!Array.isArray(body.teams) || body.teams.length < 2 || body.teams.length > 4) {
+    res.status(400).json({ error: 'teams must be an array of 2–4 team objects' });
     return;
   }
 
@@ -41,11 +41,11 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     }
   }
 
-  const teams: [Team, Team] = rawTeams.map((t) => ({
+  const teams: Team[] = rawTeams.map((t) => ({
     id: String(t.id),
     model: String(t.model),
     persona: t.persona ? String(t.persona) : 'pragmatist',
-  })) as [Team, Team];
+  }));
 
   const options: RunOptions = {
     // Default to skipping Docker sandbox — callers can opt in via options.skipSandbox: false

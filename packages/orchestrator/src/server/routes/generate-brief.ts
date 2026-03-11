@@ -37,18 +37,20 @@ Return ONLY valid JSON with this exact structure (no markdown, no preamble):
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         claudeBin,
-        ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
-        { stdio: ['pipe', 'pipe', 'ignore'], env: claudeEnv() },
+        ['-p', '-'],
+        { stdio: ['pipe', 'pipe', 'pipe'], env: claudeEnv() },
       );
       child.stdin!.write(prompt);
       child.stdin!.end();
       let out = '';
+      let err = '';
       child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
-      const timer = setTimeout(() => { child.kill(); reject(new Error('timeout')); }, 30_000);
+      child.stderr.on('data', (chunk: Buffer) => { err += chunk.toString(); });
+      const timer = setTimeout(() => { child.kill(); reject(new Error('timeout')); }, 60_000);
       child.on('close', (code) => {
         clearTimeout(timer);
         if (code === 0) resolve(out.trim());
-        else reject(new Error(`exited ${code}`));
+        else reject(new Error(`exited ${code}: ${err.slice(0, 300)}`));
       });
       child.on('error', reject);
     });

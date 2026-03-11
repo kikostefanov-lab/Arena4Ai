@@ -352,10 +352,10 @@ export default function NewCompetitionPage() {
   const [timeLimitMins, setTimeLimitMins] = useState(FORMAT_PRESETS['SPRINT'].timeLimitMins);
   const [criteria, setCriteria] = useState<RubricCriterion[]>(FORMAT_PRESETS['SPRINT'].criteria);
   const [expectedOutput, setExpectedOutput] = useState('');
-  const [teamAModel, setTeamAModel] = useState<Model>('claude');
-  const [teamAPersona, setTeamAPersona] = useState('speedrunner');
-  const [teamBModel, setTeamBModel] = useState<Model>('claude');
-  const [teamBPersona, setTeamBPersona] = useState('architect');
+  const [teams, setTeams] = useState([
+    { id: 'team-a', model: 'claude' as Model, persona: 'speedrunner' },
+    { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
+  ]);
 
   // Pre-fill from a previous competition if ?from=<id>
   useEffect(() => {
@@ -373,14 +373,12 @@ export default function NewCompetitionPage() {
         if (b.constraints?.length) setConstraints(b.constraints.join('\n'));
         if (b.deliverables?.length) setDeliverables(b.deliverables.join('\n'));
         if (b.rubric?.criteria?.length) setCriteria(b.rubric.criteria);
-        if (data.teams?.length === 2) {
-          const [a, b2] = data.teams;
-          const [aProvider, aPersona] = (a.model ?? '').split(':');
-          const [bProvider, bPersona] = (b2.model ?? '').split(':');
-          if (aProvider) setTeamAModel(aProvider as Model);
-          if (aPersona) setTeamAPersona(aPersona);
-          if (bProvider) setTeamBModel(bProvider as Model);
-          if (bPersona) setTeamBPersona(bPersona);
+        if (data.teams?.length) {
+          const teamIds = ['team-a', 'team-b', 'team-c', 'team-d'];
+          setTeams(data.teams.slice(0, 4).map((t: { model?: string }, i: number) => {
+            const [provider, persona] = (t.model ?? '').split(':');
+            return { id: teamIds[i] ?? `team-${i}`, model: (provider || 'claude') as Model, persona: persona || 'pragmatist' };
+          }));
         }
       })
       .catch(() => {});
@@ -502,10 +500,7 @@ export default function NewCompetitionPage() {
           },
           ...(expectedOutput.trim() ? { expectedOutput: expectedOutput.trim() } : {}),
         },
-        teams: [
-          { id: 'team-a', model: teamAModel, persona: teamAPersona },
-          { id: 'team-b', model: teamBModel, persona: teamBPersona },
-        ],
+        teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona })),
         options: { claudeBin: 'claude', logDir: '/tmp/arena-logs' },
       };
       const res = await fetch('/api/competitions', {
@@ -1260,160 +1255,139 @@ export default function NewCompetitionPage() {
                 padding: '0 1.25rem 1.5rem',
                 animation: 'slideDown 0.3s ease-out',
               }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                  {/* ── Agent A ── */}
-                  <div>
-                    <div style={{
-                      fontSize: '0.58rem', fontWeight: 700, color: '#3b82f6',
-                      letterSpacing: '2px', marginBottom: '0.75rem',
-                      display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    }}>
-                      <span style={{
-                        width: '6px', height: '6px', borderRadius: '50%',
-                        background: '#3b82f6', display: 'inline-block',
-                      }} />
-                      AGENT A
-                    </div>
-
-                    {/* Model cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.85rem' }}>
-                      {(['claude', 'codex', 'gemini'] as Model[]).map((m) => {
-                        const meta = MODEL_META[m];
-                        const active = teamAModel === m;
-                        return (
-                          <div
-                            key={m}
-                            className={`model-card ${active ? 'active' : ''}`}
-                            onClick={() => setTeamAModel(m)}
-                            style={{
-                              border: `1px solid ${active ? meta.color : '#1e2d45'}`,
-                              boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
-                              background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#111827',
-                            }}
-                          >
-                            <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{meta.emoji}</div>
-                            <div style={{
-                              fontSize: '0.62rem', fontWeight: 700,
-                              color: active ? meta.color : '#8896ab',
-                            }}>
-                              {meta.label}
-                            </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '1rem' }}>
+                  {teams.map((team, i) => {
+                    const agentLabel = String.fromCharCode(65 + i);
+                    const agentColors = ['#3b82f6', '#a855f7', '#22c55e', '#f97316'];
+                    const agentColor = agentColors[i] ?? '#8896ab';
+                    return (
+                      <div key={team.id} style={{ position: 'relative' }}>
+                        <div style={{
+                          fontSize: '0.58rem', fontWeight: 700, color: agentColor,
+                          letterSpacing: '2px', marginBottom: '0.75rem',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <span style={{
+                              width: '6px', height: '6px', borderRadius: '50%',
+                              background: agentColor, display: 'inline-block',
+                            }} />
+                            {`AGENT ${agentLabel}`}
                           </div>
-                        );
-                      })}
-                    </div>
+                          {teams.length > 2 && (
+                            <button
+                              type="button"
+                              onClick={() => setTeams((prev) => prev.filter((_, idx) => idx !== i))}
+                              style={{
+                                background: 'none', border: 'none', color: '#4a5568',
+                                cursor: 'pointer', fontSize: '0.75rem', padding: '0.1rem 0.3rem',
+                                lineHeight: 1,
+                              }}
+                              title="Remove agent"
+                            >
+                              ✕
+                            </button>
+                          )}
+                        </div>
 
-                    {/* Persona */}
-                    <label style={{
-                      display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                      color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                    }}>
-                      Persona
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                      {PERSONAS.map((p) => (
-                        <button
-                          key={p} type="button"
-                          className={`persona-chip ${teamAPersona === p ? 'active' : ''}`}
-                          onClick={() => setTeamAPersona(p)}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      className="arena-input"
-                      type="text" value={teamAPersona}
-                      onChange={(e) => setTeamAPersona(e.target.value)}
-                      placeholder="or type custom persona..."
-                      style={{ fontSize: '0.65rem' }}
-                    />
-                  </div>
+                        {/* Model cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.85rem' }}>
+                          {(['claude', 'codex', 'gemini'] as Model[]).map((m) => {
+                            const meta = MODEL_META[m];
+                            const active = team.model === m;
+                            return (
+                              <div
+                                key={m}
+                                className={`model-card ${active ? 'active' : ''}`}
+                                onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, model: m } : t))}
+                                style={{
+                                  border: `1px solid ${active ? meta.color : '#1e2d45'}`,
+                                  boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
+                                  background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#111827',
+                                }}
+                              >
+                                <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{meta.emoji}</div>
+                                <div style={{
+                                  fontSize: '0.62rem', fontWeight: 700,
+                                  color: active ? meta.color : '#8896ab',
+                                }}>
+                                  {meta.label}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
 
-                  {/* ── Agent B ── */}
-                  <div>
-                    <div style={{
-                      fontSize: '0.58rem', fontWeight: 700, color: '#a855f7',
-                      letterSpacing: '2px', marginBottom: '0.75rem',
-                      display: 'flex', alignItems: 'center', gap: '0.4rem',
-                    }}>
-                      <span style={{
-                        width: '6px', height: '6px', borderRadius: '50%',
-                        background: '#a855f7', display: 'inline-block',
-                      }} />
-                      AGENT B
-                    </div>
+                        {/* Persona */}
+                        <label style={{
+                          display: 'block', fontSize: '0.5rem', fontWeight: 700,
+                          color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
+                        }}>
+                          Persona
+                        </label>
+                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                          {PERSONAS.map((p) => (
+                            <button
+                              key={p} type="button"
+                              className={`persona-chip ${team.persona === p ? 'active' : ''}`}
+                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: p } : t))}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          className="arena-input"
+                          type="text" value={team.persona}
+                          onChange={(e) => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: e.target.value } : t))}
+                          placeholder="or type custom persona..."
+                          style={{ fontSize: '0.65rem' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
 
-                    {/* Model cards */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem', marginBottom: '0.85rem' }}>
-                      {(['claude', 'codex', 'gemini'] as Model[]).map((m) => {
-                        const meta = MODEL_META[m];
-                        const active = teamBModel === m;
-                        return (
-                          <div
-                            key={m}
-                            className={`model-card ${active ? 'active' : ''}`}
-                            onClick={() => setTeamBModel(m)}
-                            style={{
-                              border: `1px solid ${active ? meta.color : '#1e2d45'}`,
-                              boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
-                              background: active ? `linear-gradient(135deg, ${meta.color}12, ${meta.color}06)` : '#111827',
-                            }}
-                          >
-                            <div style={{ fontSize: '1.5rem', marginBottom: '0.35rem' }}>{meta.emoji}</div>
-                            <div style={{
-                              fontSize: '0.62rem', fontWeight: 700,
-                              color: active ? meta.color : '#8896ab',
-                            }}>
-                              {meta.label}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Persona */}
-                    <label style={{
-                      display: 'block', fontSize: '0.5rem', fontWeight: 700,
-                      color: '#8896ab', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
-                    }}>
-                      Persona
-                    </label>
-                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                      {PERSONAS.map((p) => (
-                        <button
-                          key={p} type="button"
-                          className={`persona-chip ${teamBPersona === p ? 'active' : ''}`}
-                          onClick={() => setTeamBPersona(p)}
-                        >
-                          {p}
-                        </button>
-                      ))}
-                    </div>
-                    <input
-                      className="arena-input"
-                      type="text" value={teamBPersona}
-                      onChange={(e) => setTeamBPersona(e.target.value)}
-                      placeholder="or type custom persona..."
-                      style={{ fontSize: '0.65rem' }}
-                    />
-                  </div>
+                {/* Add Agent button */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <button
+                    type="button"
+                    disabled={teams.length >= 4}
+                    onClick={() => {
+                      const teamIds = ['team-a', 'team-b', 'team-c', 'team-d'];
+                      setTeams((prev) => [...prev, { id: teamIds[prev.length] ?? `team-${prev.length}`, model: 'claude' as Model, persona: 'pragmatist' }]);
+                    }}
+                    style={{
+                      fontSize: '0.6rem', fontWeight: 700, letterSpacing: '1px',
+                      padding: '0.4rem 0.85rem',
+                      background: 'none',
+                      border: '1px dashed #1e2d45',
+                      borderRadius: '6px',
+                      color: teams.length >= 4 ? '#1e2d45' : '#8896ab',
+                      cursor: teams.length >= 4 ? 'not-allowed' : 'pointer',
+                      fontFamily: FONT,
+                    }}
+                  >
+                    ＋ Add Agent
+                  </button>
                 </div>
 
                 {/* Matchup preview */}
                 <div style={{
-                  marginTop: '1.5rem', padding: '0.85rem 1rem',
+                  marginTop: '0.5rem', padding: '0.85rem 1rem',
                   background: '#0d1520', borderRadius: '8px',
                   border: '1px solid #1e2d45',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  gap: '0.75rem', flexWrap: 'wrap',
                 }}>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: MODEL_META[teamAModel].color }}>
-                    {MODEL_META[teamAModel].emoji} {teamAModel}:{teamAPersona}
-                  </span>
-                  <span style={{ fontSize: '0.8rem', color: '#4a5568', fontWeight: 800 }}>vs</span>
-                  <span style={{ fontSize: '0.72rem', fontWeight: 700, color: MODEL_META[teamBModel].color }}>
-                    {MODEL_META[teamBModel].emoji} {teamBModel}:{teamBPersona}
-                  </span>
+                  {teams.map((team, i) => (
+                    <>
+                      {i > 0 && <span key={`vs-${i}`} style={{ fontSize: '0.8rem', color: '#4a5568', fontWeight: 800 }}>vs</span>}
+                      <span key={team.id} style={{ fontSize: '0.72rem', fontWeight: 700, color: MODEL_META[team.model].color }}>
+                        {MODEL_META[team.model].emoji} {team.model}:{team.persona}
+                      </span>
+                    </>
+                  ))}
                 </div>
               </div>
             )}

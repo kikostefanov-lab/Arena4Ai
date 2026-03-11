@@ -33,7 +33,7 @@ const CreateTournamentSchema = z.object({
     }),
     expectedOutput: z.string().optional(),
   }),
-  teams: z.array(z.string()).min(2).max(4),
+  teams: z.array(z.string()).min(2).max(8),
   options: z.object({
     skipSandbox: z.boolean().optional(),
     skipSynthesis: z.boolean().optional(),

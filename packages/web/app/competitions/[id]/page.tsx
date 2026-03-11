@@ -35,8 +35,8 @@ interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale
 interface SynthesisResult { synthesis: string; overallRationale?: string; perCriterion: SynthesisPerCriterion[]; }
 interface CriterionFinding { criterionId: string; finding: string; strength: string; gap: string; }
 interface TeamPresentation { teamId: string; model: string; approach: string; criterionFindings: CriterionFinding[]; keyInsight: string; deliverableSummary: string; }
-interface ForgeArtifact { type: string; title: string; content: string; generatedAt: string; }
-interface ForgeOutput { forgeModel: string; artifacts: ForgeArtifact[]; generatedAt: string; }
+interface ForgeArtifact { type: string; title: string; content: string; generatedAt: string; universal?: boolean; }
+interface ForgeOutput { forgeModel: string; artifacts: ForgeArtifact[]; generatedAt: string; domain?: string; selectedTypes?: string[]; }
 interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: SynthesisResult | null; deliverables?: TeamDeliverable[]; presentations?: TeamPresentation[]; forge?: ForgeOutput | null; }
 
 type CompetitionState = 'PENDING' | 'RUNNING' | 'COLLECTING' | 'PRESENTING' | 'JUDGING' | 'SYNTHESIZING' | 'COMPLETE' | 'FORGING' | 'FORGE_COMPLETE' | 'ERROR' | 'FAILED' | 'CANCELLED';
@@ -54,6 +54,40 @@ const HIST_COLORS: Record<string, string> = {
 // LANE_COLORS imported from design-tokens above
 
 const MODEL_BADGE_COLORS = TOKEN_BADGE_COLORS;
+
+const ARTIFACT_EMOJI: Record<string, string> = {
+  // Universal
+  executive_summary:      '⭐',
+  next_steps:             '🎯',
+  tool_recommendations:   '🔧',
+  // Software
+  roadmap:                '🗺️',
+  task_graph:             '📊',
+  repo_blueprint:         '🏗️',
+  api_contracts:          '📡',
+  risk_register:          '⚠️',
+  decision_log:           '📋',
+  // Research
+  evaluation_matrix:      '📐',
+  vendor_scorecard:       '🏆',
+  decision_framework:     '🧭',
+  // Creative
+  content_outline:        '✍️',
+  presentation_structure: '🎨',
+  messaging_guide:        '📣',
+  // Security
+  threat_model:           '🛡️',
+  attack_surface:         '🎯',
+  remediation_plan:       '🔒',
+  // Business
+  business_case:          '💼',
+  go_to_market:           '🚀',
+  stakeholder_map:        '🗺️',
+  // Ideation
+  concept_canvas:         '💡',
+  mvp_definition:         '🏁',
+  hypothesis_backlog:     '🧪',
+};
 
 // ─── Global CSS ──────────────────────────────────────────────────────────────
 
@@ -418,7 +452,7 @@ const LanePanel = forwardRef<
             letterSpacing: '1px',
             flexShrink: 0,
           }}>
-            {teamIndex === 0 ? 'A' : 'B'}
+            {String.fromCharCode(65 + teamIndex)}
           </span>
           <ModelBadge model={team.model} />
           {team.persona && (
@@ -1321,9 +1355,9 @@ function ScoreDrawer({
                       </span>
                     </div>
 
-                    {/* Forged by badge + Download All */}
+                    {/* Forged by badge + domain badge + Download All */}
                     {result.forge && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
                         <span style={{
                           fontSize: '0.6rem', fontWeight: 700, letterSpacing: '1px',
                           color: '#eab308', background: 'rgba(234,179,8,0.1)',
@@ -1335,6 +1369,17 @@ function ScoreDrawer({
                         <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>
                           {new Date(result.forge.generatedAt).toLocaleDateString()}
                         </span>
+                        {result.forge.domain && (
+                          <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                            padding: '0.2rem 0.6rem', borderRadius: '20px',
+                            background: 'rgba(234,179,8,0.1)', border: '1px solid rgba(234,179,8,0.25)',
+                            fontSize: '0.6rem', fontWeight: 700, color: '#eab308',
+                            letterSpacing: '1px', textTransform: 'uppercase',
+                          }}>
+                            ◆ {result.forge.domain} domain
+                          </div>
+                        )}
                         <a
                           href={`/api/competitions/${competitionId}/forge/download`}
                           download
@@ -1352,63 +1397,94 @@ function ScoreDrawer({
                       </div>
                     )}
 
-                    {/* Artifact cards */}
-                    {result.forge!.artifacts.map((artifact) => (
-                      <details key={artifact.type} style={{
-                        marginBottom: '0.75rem',
-                        border: '1px solid #1e2d45',
-                        borderRadius: '8px', overflow: 'hidden',
-                        background: '#0a1628',
-                      }}>
-                        <summary style={{
-                          padding: '0.7rem 1rem',
-                          cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: '0.6rem',
-                          background: '#060e1a',
-                          fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0',
-                          listStyle: 'none',
+                    {/* Artifact cards — universal first, then domain-specific */}
+                    {(() => {
+                      const renderArtifact = (artifact: ForgeArtifact) => (
+                        <details key={artifact.type} style={{
+                          marginBottom: '0.75rem',
+                          border: '1px solid #1e2d45',
+                          borderRadius: '8px', overflow: 'hidden',
+                          background: '#0a1628',
                         }}>
-                          <span style={{ fontSize: '0.85rem' }}>
-                            {artifact.type === 'roadmap' ? '🗺️' :
-                             artifact.type === 'task_graph' ? '📊' :
-                             artifact.type === 'repo_blueprint' ? '🏗️' :
-                             artifact.type === 'api_contracts' ? '📡' :
-                             artifact.type === 'risk_register' ? '⚠️' :
-                             artifact.type === 'decision_log' ? '📋' : '📄'}
-                          </span>
-                          <span style={{ flex: 1 }}>{artifact.title}</span>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              const blob = new Blob([artifact.content], { type: 'text/markdown' });
-                              const url = URL.createObjectURL(blob);
-                              const a = document.createElement('a');
-                              a.href = url;
-                              a.download = `${artifact.type}.md`;
-                              a.click();
-                              URL.revokeObjectURL(url);
-                            }}
-                            style={{
-                              fontSize: '0.58rem', color: '#4a6080', background: 'none',
-                              border: '1px solid #1e2d45', borderRadius: '4px',
-                              padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace',
-                            }}
-                          >
-                            ⬇ download
-                          </button>
-                          <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>▼</span>
-                        </summary>
-                        <div style={{
-                          padding: '1rem', borderTop: '1px solid #1e2d45',
-                          fontFamily: "-apple-system, 'Segoe UI', sans-serif",
-                          fontSize: '0.78rem', lineHeight: 1.7, color: '#c4d4e8',
-                          whiteSpace: 'pre-wrap',
-                        }}>
-                          {artifact.content}
-                        </div>
-                      </details>
-                    ))}
+                          <summary style={{
+                            padding: '0.7rem 1rem',
+                            cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '0.6rem',
+                            background: '#060e1a',
+                            fontSize: '0.75rem', fontWeight: 700, color: '#e2e8f0',
+                            listStyle: 'none',
+                          }}>
+                            <span style={{ fontSize: '0.85rem' }}>
+                              {ARTIFACT_EMOJI[artifact.type] ?? '📄'}
+                            </span>
+                            <span style={{ flex: 1 }}>{artifact.title}</span>
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const blob = new Blob([artifact.content], { type: 'text/markdown' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `${artifact.type}.md`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                              }}
+                              style={{
+                                fontSize: '0.58rem', color: '#4a6080', background: 'none',
+                                border: '1px solid #1e2d45', borderRadius: '4px',
+                                padding: '0.15rem 0.5rem', cursor: 'pointer', fontFamily: 'monospace',
+                              }}
+                            >
+                              ⬇ download
+                            </button>
+                            <span style={{ fontSize: '0.6rem', color: '#4a5568' }}>▼</span>
+                          </summary>
+                          <div style={{
+                            padding: '1rem', borderTop: '1px solid #1e2d45',
+                            fontFamily: "-apple-system, 'Segoe UI', sans-serif",
+                            fontSize: '0.78rem', lineHeight: 1.7, color: '#c4d4e8',
+                            whiteSpace: 'pre-wrap',
+                          }}>
+                            {artifact.content}
+                          </div>
+                        </details>
+                      );
+
+                      const universalArtifacts = result.forge!.artifacts.filter((a) => a.universal);
+                      const domainArtifacts = result.forge!.artifacts.filter((a) => !a.universal);
+                      return (
+                        <>
+                          {universalArtifacts.length > 0 && (
+                            <>
+                              <div style={{
+                                fontSize: '0.55rem', color: '#8896ab', letterSpacing: '2px',
+                                textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem',
+                                marginTop: '0.25rem',
+                              }}>
+                                ◆ Universal
+                              </div>
+                              {universalArtifacts.map((artifact) => renderArtifact(artifact))}
+                            </>
+                          )}
+                          {domainArtifacts.length > 0 && (
+                            <>
+                              <div style={{
+                                fontSize: '0.55rem', color: '#8896ab', letterSpacing: '2px',
+                                textTransform: 'uppercase', fontWeight: 700, marginBottom: '0.5rem',
+                                marginTop: '1rem',
+                              }}>
+                                ◆ Domain: {result.forge!.domain ?? 'specialized'}
+                              </div>
+                              {domainArtifacts.map((artifact) => renderArtifact(artifact))}
+                            </>
+                          )}
+                          {universalArtifacts.length === 0 && domainArtifacts.length === 0 &&
+                            result.forge!.artifacts.map((artifact) => renderArtifact(artifact))
+                          }
+                        </>
+                      );
+                    })()}
 
                   </>
                 ) : (
@@ -1425,27 +1501,22 @@ function ScoreDrawer({
                         <div style={{ fontSize: '0.62rem', fontWeight: 700, letterSpacing: '2px', color: '#8896ab', marginBottom: '0.6rem' }}>
                           FORGING ARTIFACTS
                         </div>
-                        {[
-                          { type: 'roadmap', label: 'Roadmap' },
-                          { type: 'task_graph', label: 'Task Graph' },
-                          { type: 'repo_blueprint', label: 'Repo Blueprint' },
-                          { type: 'api_contracts', label: 'API Contracts' },
-                          { type: 'risk_register', label: 'Risk Register' },
-                          { type: 'decision_log', label: 'Decision Log' },
-                        ].map(({ type, label }) => {
-                          const status = forgeProgress?.[type] ?? 'queued';
-                          return (
-                            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.35rem' }}>
-                              <span style={{ fontSize: '0.75rem', color: status === 'done' ? '#22c55e' : status === 'generating' ? '#eab308' : status === 'error' ? '#ef4444' : '#4a5568', flexShrink: 0, width: '1rem', textAlign: 'center' }}>
-                                {status === 'done' ? '✓' : status === 'generating' ? '⟳' : status === 'error' ? '✗' : '○'}
+                        {forgeProgress ? (
+                          Object.entries(forgeProgress).map(([type, status]) => (
+                            <div key={type} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                              <span style={{ fontSize: '0.8rem', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'generating' ? '#f97316' : '#4a5568', flexShrink: 0, width: '1rem', textAlign: 'center' }}>
+                                {status === 'done' ? '✓' : status === 'error' ? '✗' : status === 'generating' ? '⟳' : '○'}
                               </span>
-                              <span style={{ fontSize: '0.7rem', color: status === 'queued' ? '#4a5568' : '#e2e8f0', flex: 1 }}>{label}</span>
-                              <span style={{ fontSize: '0.62rem', color: status === 'done' ? '#22c55e' : status === 'generating' ? '#eab308' : status === 'error' ? '#ef4444' : '#2d4060' }}>
-                                {status === 'done' ? 'done' : status === 'generating' ? 'generating…' : status === 'error' ? 'error' : 'queued'}
+                              <span style={{ fontSize: '0.68rem', color: status === 'done' ? '#22c55e' : status === 'error' ? '#ef4444' : status === 'generating' ? '#f97316' : '#4a5568' }}>
+                                {ARTIFACT_EMOJI[type] ?? '📄'} {type.replace(/_/g, ' ')}
                               </span>
                             </div>
-                          );
-                        })}
+                          ))
+                        ) : (
+                          <div style={{ fontSize: '0.68rem', color: '#4a5568' }}>
+                            Selecting domain artifacts…
+                          </div>
+                        )}
                       </div>
                     )}
                     <button

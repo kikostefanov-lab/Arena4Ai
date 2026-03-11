@@ -19,7 +19,7 @@ export interface StoredResult {
 export class CompetitionRepository {
   constructor(private readonly db: Db) {}
 
-  async create(id: string, brief: Brief, teams: [Team, Team]): Promise<void> {
+  async create(id: string, brief: Brief, teams: Team[]): Promise<void> {
     await this.db.insert(competitions).values({
       id,
       brief: brief as unknown as Record<string, unknown>,

@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
-import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType } from '@arena/shared';
+import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeDomain } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+import { extractJson } from '../utils/extract-json.js';
 
 type ArtifactStatus = 'queued' | 'generating' | 'done' | 'error';
 type ProgressMap = Record<string, ArtifactStatus>;
@@ -24,15 +25,94 @@ interface ArtifactSpec {
   type: ForgeArtifactType;
   title: string;
   systemPrompt: string;
+  universal?: boolean;
 }
 
-const ARTIFACT_SPECS: ArtifactSpec[] = [
+// ─── Universal artifacts (always generated) ───────────────────────────────────
+
+const UNIVERSAL_SPECS: ArtifactSpec[] = [
   {
+    type: 'executive_summary',
+    title: 'Executive Summary',
+    universal: true,
+    systemPrompt: `You are a senior strategist writing an executive summary of a competitive evaluation.
+
+Given the competition results — the brief, team presentations, scores, and synthesis — produce a concise executive summary.
+
+Include:
+- What was evaluated and why it matters (2-3 sentences)
+- Who won and what made the difference (decisive factor)
+- Key strengths of each approach (1-2 bullet points per team)
+- The single most important insight from this competition
+- A one-paragraph recommendation for stakeholders
+
+Keep the tone confident, clear, and jargon-free. Suitable for a C-suite audience who won't read further.
+
+Output clean, well-structured Markdown.`,
+  },
+  {
+    type: 'next_steps',
+    title: 'Recommended Next Steps',
+    universal: true,
+    systemPrompt: `You are an action-oriented advisor creating a next steps plan based on competition results.
+
+Given the competition context, produce a clear prioritized action plan.
+
+Structure:
+## Immediate (This Week)
+2-4 concrete actions the team/individual should take right now based on these results.
+
+## Near-Term (Next Month)
+3-5 actions to build momentum and validate the direction.
+
+## Strategic (3-6 Months)
+2-3 bigger moves that these results are pointing toward.
+
+## How to Use These Forge Documents
+Explain specifically how to consume the other artifacts in this Forge package:
+- Which document to share with which audience (e.g., "Share the Executive Summary with stakeholders")
+- How to use these docs with AI tools: Claude.ai Projects (upload all artifacts as project knowledge for ongoing planning), Claude Code (use the task graph and repo blueprint as your coding spec), Cursor/Windsurf (drop artifacts as context)
+- How to use them with a human team (kick-off meeting agenda, sprint planning input, etc.)
+
+Be specific to the competition domain — don't give generic advice. Reference actual content from the brief and results.
+
+Output clean, well-structured Markdown.`,
+  },
+  {
+    type: 'tool_recommendations',
+    title: 'Tool Recommendations',
+    universal: true,
+    systemPrompt: `You are a tools and technology advisor recommending specific tools based on competition results.
+
+Given the competition context, recommend concrete named tools — never generic categories like "a project management tool."
+
+Structure each recommendation as:
+| Category | Tool | Why This Fits | Getting Started |
+|---|---|---|---|
+
+Include 8-15 tools across relevant categories for this specific domain.
+
+Always include a section "For Working with These Forge Documents" recommending:
+- Claude.ai Projects — for uploading forge artifacts as project knowledge and having an ongoing AI conversation about them
+- Claude Code — for using task graphs and blueprints as coding specs
+- Notion or Obsidian — for organizing and sharing the markdown docs
+
+Base every other recommendation on what the competition was actually about. For software: GitHub, CI tools, monitoring platforms, hosting. For research/procurement: CRMs, evaluation platforms. For presentations: Figma, Pitch, Canva. For strategy: Miro, Notion, Airtable. Etc.
+
+Output clean Markdown with the table and short paragraphs per category.`,
+  },
+];
+
+// ─── Domain artifact catalog ───────────────────────────────────────────────────
+
+const ARTIFACT_CATALOG: Record<string, ArtifactSpec> = {
+  // Software development
+  roadmap: {
     type: 'roadmap',
     title: 'Implementation Roadmap',
     systemPrompt: `You are a senior technical program manager creating an implementation roadmap.
 
-Given the competition results — the original brief, team presentations, synthesis, and winning deliverables — produce a phased delivery plan.
+Given the competition results, produce a phased delivery plan.
 
 Include:
 - 3-5 phases with clear milestones and success gates
@@ -43,7 +123,7 @@ Include:
 
 Output clean, well-structured Markdown with headers, tables, and bullet lists.`,
   },
-  {
+  task_graph: {
     type: 'task_graph',
     title: 'Task Dependency Graph',
     systemPrompt: `You are a project planner creating a task dependency graph.
@@ -60,12 +140,12 @@ Include for each task:
 
 Output as Markdown with a table and a text-based dependency diagram.`,
   },
-  {
+  repo_blueprint: {
     type: 'repo_blueprint',
     title: 'Repository Blueprint',
     systemPrompt: `You are a software architect creating a repository blueprint.
 
-Given the competition results, design the directory structure and technology stack for implementation.
+Given the competition results, design the directory structure and technology stack.
 
 Include:
 - Full directory tree with file descriptions
@@ -76,7 +156,7 @@ Include:
 
 Output as Markdown with code blocks for the directory tree.`,
   },
-  {
+  api_contracts: {
     type: 'api_contracts',
     title: 'API Contracts',
     systemPrompt: `You are an API architect creating API contracts.
@@ -93,7 +173,7 @@ Include:
 
 Output as Markdown with code blocks for schemas and endpoint tables.`,
   },
-  {
+  risk_register: {
     type: 'risk_register',
     title: 'Risk Register',
     systemPrompt: `You are a risk analyst creating a risk register for a technical implementation.
@@ -110,12 +190,12 @@ Include for each risk:
 
 Output as Markdown with a structured table.`,
   },
-  {
+  decision_log: {
     type: 'decision_log',
     title: 'Architectural Decision Log',
     systemPrompt: `You are a software architect documenting architectural decisions (ADRs).
 
-Given the competition results, capture the key decisions made during the competition and the ones still needed for implementation.
+Given the competition results, capture key decisions made and ones needed for implementation.
 
 Include for each decision:
 - Decision ID (ADR-001, etc.)
@@ -128,11 +208,349 @@ Include for each decision:
 
 Output as Markdown following the ADR format.`,
   },
-];
+
+  // Research / procurement
+  evaluation_matrix: {
+    type: 'evaluation_matrix',
+    title: 'Evaluation Matrix',
+    systemPrompt: `You are an analyst creating a structured evaluation matrix.
+
+Given the competition results — comparing approaches, services, vendors, or options — produce a comprehensive evaluation matrix.
+
+Include:
+- All evaluated options as columns
+- Criteria as rows (drawn from the rubric and brief)
+- Scores with brief rationale in each cell
+- Weighted totals
+- Recommendation section with clear rationale
+
+Make the matrix actionable for a decision-maker who needs to justify the choice.
+
+Output clean Markdown with tables.`,
+  },
+  vendor_scorecard: {
+    type: 'vendor_scorecard',
+    title: 'Vendor / Option Scorecard',
+    systemPrompt: `You are a procurement analyst creating a detailed vendor or option scorecard.
+
+Given the competition results, produce a deep-dive scorecard for each evaluated option.
+
+For each option include:
+- Overall score and ranking
+- Strengths (3-5 bullet points)
+- Weaknesses / gaps (3-5 bullet points)
+- Best-fit scenarios (when to choose this)
+- Red flags or deal-breakers
+- Recommended next validation steps (e.g., pilot, reference check, demo)
+
+Output clean Markdown with structured sections per option.`,
+  },
+  decision_framework: {
+    type: 'decision_framework',
+    title: 'Decision Framework',
+    systemPrompt: `You are a decision consultant creating a reusable decision framework.
+
+Given the competition results, build a framework that can guide future decisions of this type.
+
+Include:
+- Key decision criteria (what matters most and why)
+- Decision tree or flowchart (text-based) for similar future choices
+- Must-have vs. nice-to-have checklist
+- Common pitfalls to avoid (drawn from the losing approaches)
+- How to validate the decision (what success looks like 30/90/180 days out)
+
+Output clean Markdown with structured sections and a text-based decision tree.`,
+  },
+
+  // Creative / communications
+  content_outline: {
+    type: 'content_outline',
+    title: 'Content Outline',
+    systemPrompt: `You are a content strategist creating a detailed content outline.
+
+Given the competition results, produce a comprehensive outline for the winning content approach.
+
+Include:
+- High-level structure with all major sections
+- Key messages and supporting points per section
+- Narrative arc / flow rationale
+- Tone and voice guidelines
+- Content gaps that need research or input
+- Word count / time estimates per section
+
+Output clean Markdown with nested bullet lists.`,
+  },
+  presentation_structure: {
+    type: 'presentation_structure',
+    title: 'Presentation Structure',
+    systemPrompt: `You are a communications expert structuring a presentation.
+
+Given the competition results (especially if this was a presentation-type competition), create a detailed presentation blueprint.
+
+Include:
+- Slide-by-slide outline (title, key message, supporting content, visual suggestion)
+- Opening hook strategy
+- Data / evidence to include per section
+- Anticipated objections and how to address them
+- Call to action and closing
+- Speaker notes guidance for key slides
+
+Output clean Markdown with a structured slide-by-slide breakdown.`,
+  },
+  messaging_guide: {
+    type: 'messaging_guide',
+    title: 'Messaging Guide',
+    systemPrompt: `You are a messaging strategist creating a communications guide.
+
+Given the competition results, produce a messaging guide for this topic or initiative.
+
+Include:
+- Core message (one sentence — the thing everyone must understand)
+- Supporting messages (3-5 pillars)
+- Audience-specific variations (tailor the message for each stakeholder type)
+- Language to use and avoid
+- Proof points and evidence
+- FAQ with suggested responses to tough questions
+
+Output clean Markdown with structured sections.`,
+  },
+
+  // Security / adversarial
+  threat_model: {
+    type: 'threat_model',
+    title: 'Threat Model',
+    systemPrompt: `You are a security architect creating a threat model.
+
+Given the competition results (especially a red vs blue or security competition), produce a comprehensive threat model.
+
+Include:
+- System / scope definition
+- Assets to protect
+- Threat actors (who might attack and why)
+- Attack vectors identified during the competition
+- STRIDE analysis (Spoofing, Tampering, Repudiation, Information Disclosure, DoS, Elevation of Privilege) where applicable
+- Prioritized threat scenarios (likelihood × impact)
+- Security controls recommended
+
+Output clean Markdown with tables and structured sections.`,
+  },
+  attack_surface: {
+    type: 'attack_surface',
+    title: 'Attack Surface Analysis',
+    systemPrompt: `You are a penetration tester documenting an attack surface analysis.
+
+Given the competition results, document the attack surface identified.
+
+Include:
+- Entry points discovered (network, application, physical, human)
+- Vulnerabilities identified with severity ratings (Critical/High/Medium/Low)
+- Exploitation paths (step-by-step for key findings)
+- Evidence and artifacts from the competition
+- Quick wins (low effort, high impact fixes)
+- Long-term hardening roadmap
+
+Output clean Markdown with structured findings in a security report format.`,
+  },
+  remediation_plan: {
+    type: 'remediation_plan',
+    title: 'Remediation Plan',
+    systemPrompt: `You are a security engineer creating a remediation plan.
+
+Given the security competition results, produce a prioritized remediation plan.
+
+Include:
+- Findings summary table (ID, severity, title, status)
+- Detailed remediation steps per finding
+- Prioritization rationale (what to fix first and why)
+- Effort estimates
+- Verification steps (how to confirm each fix worked)
+- Regression testing recommendations
+- Timeline for a 30/60/90-day remediation sprint
+
+Output clean Markdown with tables and structured sections.`,
+  },
+
+  // Business / strategy
+  business_case: {
+    type: 'business_case',
+    title: 'Business Case',
+    systemPrompt: `You are a business analyst writing a business case document.
+
+Given the competition results, produce a compelling business case for the winning approach.
+
+Include:
+- Problem statement and opportunity
+- Proposed solution (based on competition winner)
+- Benefits: quantitative (ROI, cost savings, revenue potential) and qualitative
+- Costs and resource requirements
+- Risks and mitigations
+- Alternatives considered (with brief rationale for rejection)
+- Recommendation and ask
+
+Keep it concise and evidence-based. Suitable for a budget-holder audience.
+
+Output clean Markdown with headers and tables.`,
+  },
+  go_to_market: {
+    type: 'go_to_market',
+    title: 'Go-to-Market Plan',
+    systemPrompt: `You are a GTM strategist creating a go-to-market plan.
+
+Given the competition results, produce a practical GTM plan for bringing the winning approach to market or to stakeholders.
+
+Include:
+- Target audience definition (primary and secondary)
+- Value proposition statement
+- Positioning vs. alternatives
+- Channels and tactics (prioritized)
+- Launch sequence (pre-launch, launch, post-launch)
+- Success metrics and KPIs
+- Budget considerations
+
+Output clean Markdown with structured sections.`,
+  },
+  stakeholder_map: {
+    type: 'stakeholder_map',
+    title: 'Stakeholder Map',
+    systemPrompt: `You are an organizational consultant creating a stakeholder map.
+
+Given the competition context, identify and map all relevant stakeholders.
+
+For each stakeholder group include:
+- Role / title
+- Interest in this outcome (what they care about)
+- Influence level (High / Medium / Low)
+- Current stance (Champion / Neutral / Skeptic)
+- Engagement strategy (how to bring them along)
+- Key messages for this audience
+
+Include a 2×2 influence/interest matrix (text-based).
+
+Output clean Markdown with tables and a text-based matrix.`,
+  },
+
+  // Ideation / exploration
+  concept_canvas: {
+    type: 'concept_canvas',
+    title: 'Concept Canvas',
+    systemPrompt: `You are an innovation facilitator creating a concept canvas.
+
+Given the competition results (especially an ideation or exploratory competition), produce a structured concept canvas for the winning idea.
+
+Include:
+- Concept name and one-liner
+- Problem it solves (customer/user perspective)
+- Key insight that makes this work
+- Solution approach (how it works)
+- Unique differentiators (why this vs. alternatives)
+- Assumptions to validate (what must be true for this to succeed)
+- Next experiments to run (smallest tests to validate core assumptions)
+
+Format as a visual canvas using Markdown tables and sections.`,
+  },
+  mvp_definition: {
+    type: 'mvp_definition',
+    title: 'MVP Definition',
+    systemPrompt: `You are a product manager defining an MVP.
+
+Given the competition results, define the Minimum Viable Product or Minimum Viable Approach.
+
+Include:
+- Core value hypothesis (what value must the MVP prove)
+- In-scope features / capabilities (ruthlessly minimal)
+- Out-of-scope (explicitly stated, with rationale)
+- Success criteria (how you'll know the MVP worked)
+- Build vs. buy vs. borrow decisions
+- Timeline estimate for MVP
+- Who should build/own it
+
+Output clean Markdown with structured sections.`,
+  },
+  hypothesis_backlog: {
+    type: 'hypothesis_backlog',
+    title: 'Hypothesis Backlog',
+    systemPrompt: `You are a lean startup practitioner creating a hypothesis backlog.
+
+Given the competition results, produce a structured backlog of hypotheses to test.
+
+Format each hypothesis as:
+- ID (H001, etc.)
+- We believe [assumption]
+- For [target user/stakeholder]
+- Will result in [measurable outcome]
+- We will know this is true when [validation signal]
+- Test method: [how to test — survey, prototype, A/B test, etc.]
+- Effort: Low / Medium / High
+- Priority: P0 / P1 / P2
+
+Group hypotheses by theme (e.g., Problem, Solution, Market, Business Model).
+
+Output clean Markdown with structured tables.`,
+  },
+};
+
+// ─── Domain defaults (fallback if AI selection fails) ─────────────────────────
+
+const FORMAT_DOMAIN_DEFAULTS: Record<string, { domain: ForgeDomain; types: ForgeArtifactType[] }> = {
+  SPRINT:      { domain: 'software',  types: ['roadmap', 'task_graph', 'repo_blueprint', 'api_contracts'] },
+  HACKATHON:   { domain: 'software',  types: ['roadmap', 'task_graph', 'repo_blueprint', 'decision_log'] },
+  RELAY_RACE:  { domain: 'software',  types: ['roadmap', 'task_graph', 'decision_log', 'risk_register'] },
+  RED_VS_BLUE: { domain: 'security',  types: ['threat_model', 'attack_surface', 'remediation_plan', 'risk_register'] },
+};
+
+const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
+  domain: 'software',
+  types: ['roadmap', 'task_graph', 'repo_blueprint', 'api_contracts'],
+};
+
+// ─── AI domain selection ──────────────────────────────────────────────────────
+
+const DOMAIN_SELECTION_SYSTEM_PROMPT = `You are a classifier. Given a competition brief, select the most relevant domain and 3-4 artifact types to generate.
+
+Available domains and their artifact types:
+- software: roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log
+- research: evaluation_matrix, vendor_scorecard, decision_framework
+- creative: content_outline, presentation_structure, messaging_guide
+- security: threat_model, attack_surface, remediation_plan, risk_register
+- business: business_case, go_to_market, stakeholder_map
+- ideation: concept_canvas, mvp_definition, hypothesis_backlog
+
+Respond ONLY with a JSON object. No explanation, no markdown, just JSON:
+{"domain":"<domain>","types":["<type1>","<type2>","<type3>","<type4>"]}
+
+Select 3-4 types that are most useful given what this competition was about.`;
+
+async function selectDomainArtifacts(brief: Brief): Promise<{ domain: ForgeDomain; types: ForgeArtifactType[] }> {
+  const fallback = FORMAT_DOMAIN_DEFAULTS[brief.format ?? ''] ?? GENERIC_DEFAULT;
+
+  const selectionPrompt = `Competition brief:
+Title: ${brief.title}
+Format: ${brief.format ?? 'unspecified'}
+Problem: ${brief.problem}
+Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}`;
+
+  try {
+    const raw = await runClaude(selectionPrompt, DOMAIN_SELECTION_SYSTEM_PROMPT, 30_000);
+    const json = JSON.parse(extractJson(raw)) as { domain: ForgeDomain; types: ForgeArtifactType[] };
+
+    // Validate response
+    const validDomains: ForgeDomain[] = ['software', 'research', 'creative', 'security', 'business', 'ideation'];
+    const validTypes = new Set(Object.keys(ARTIFACT_CATALOG));
+
+    if (!validDomains.includes(json.domain)) return fallback;
+    const types = (json.types ?? []).filter((t) => validTypes.has(t)).slice(0, 4) as ForgeArtifactType[];
+    if (types.length === 0) return fallback;
+
+    return { domain: json.domain, types };
+  } catch {
+    return fallback;
+  }
+}
+
+// ─── User prompt builder ──────────────────────────────────────────────────────
 
 function buildForgeUserPrompt(input: ForgeInput): string {
   const { brief, presentations, synthesis, winner, deliverables } = input;
-
   const sections: string[] = [];
 
   sections.push(`# Original Brief\n\n**Title:** ${brief.title}\n**Problem:** ${brief.problem}\n**Constraints:** ${brief.constraints.join(', ')}`);
@@ -141,7 +559,6 @@ function buildForgeUserPrompt(input: ForgeInput): string {
     sections.push(`## Judging Criteria\n${brief.rubric.criteria.map((c) => `- **${c.id}** (weight ${c.weight}): ${c.description}`).join('\n')}`);
   }
 
-  // Winning team's presentation
   const winnerPres = presentations.find((p) => p.teamId === winner.teamId);
   if (winnerPres) {
     sections.push(`# Winning Team Presentation (${winner.model})\n\n**Approach:** ${winnerPres.approach}\n**Key Insight:** ${winnerPres.keyInsight}\n**Deliverables:** ${winnerPres.deliverableSummary}`);
@@ -150,21 +567,18 @@ function buildForgeUserPrompt(input: ForgeInput): string {
     }
   }
 
-  // Other team presentations (for context)
   const otherPres = presentations.filter((p) => p.teamId !== winner.teamId);
   if (otherPres.length > 0) {
     sections.push(`# Other Team Presentations\n${otherPres.map((p) => `## ${p.teamId} (${p.model})\n**Approach:** ${p.approach}\n**Key Insight:** ${p.keyInsight}`).join('\n\n')}`);
   }
 
-  // Synthesis
   if (synthesis) {
-    sections.push(`# Synthesis (Best of Both Teams)\n\n${synthesis.synthesis}`);
+    sections.push(`# Synthesis (Best of All Teams)\n\n${synthesis.synthesis}`);
     if (synthesis.perCriterion.length > 0) {
       sections.push(`## Per-Criterion Winners\n${synthesis.perCriterion.map((pc) => `- **${pc.criterionId}**: ${pc.teamId} — ${pc.rationale}`).join('\n')}`);
     }
   }
 
-  // Winning team's deliverable files (capped at 40KB total to stay within token limits)
   const winnerDeliverables = deliverables.find((d) => d.teamId === winner.teamId);
   if (winnerDeliverables && winnerDeliverables.files.length > 0) {
     const MAX_TOTAL_BYTES = 40_000;
@@ -188,10 +602,11 @@ function buildForgeUserPrompt(input: ForgeInput): string {
   return sections.join('\n\n---\n\n');
 }
 
-/** Model label for display (uses whatever model the Claude CLI is configured with). */
+// ─── Claude runner ────────────────────────────────────────────────────────────
+
 const FORGE_MODEL_LABEL = 'claude-cli';
 
-function runClaude(prompt: string, systemPrompt: string): Promise<string> {
+function runClaude(prompt: string, systemPrompt: string, timeoutMs = 120_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const fullPrompt = `${systemPrompt}\n\n---\n\n${prompt}`;
     const proc = spawn('claude', ['-p', '-'], {
@@ -206,8 +621,8 @@ function runClaude(prompt: string, systemPrompt: string): Promise<string> {
 
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
-      reject(new Error('Claude CLI timed out after 2 minutes'));
-    }, 120_000);
+      reject(new Error(`Claude CLI timed out after ${timeoutMs / 1000}s`));
+    }, timeoutMs);
 
     proc.on('close', (code) => {
       clearTimeout(timeout);
@@ -228,24 +643,42 @@ function runClaude(prompt: string, systemPrompt: string): Promise<string> {
   });
 }
 
+// ─── Main forge orchestrator ──────────────────────────────────────────────────
+
 export async function runForge(input: ForgeInput, competitionId: string): Promise<ForgeOutput> {
   const userPrompt = buildForgeUserPrompt(input);
 
-  // Initialize all artifacts as queued
+  // Step 1: select domain artifacts (short timeout — fallback available)
+  const { domain, types: selectedTypes } = await selectDomainArtifacts(input.brief);
+
+  // Resolve domain artifact specs
+  const domainSpecs: ArtifactSpec[] = selectedTypes
+    .map((t) => ARTIFACT_CATALOG[t])
+    .filter(Boolean);
+
+  // All specs = universals first, then domain
+  const allSpecs: ArtifactSpec[] = [...UNIVERSAL_SPECS, ...domainSpecs];
+
+  // Initialize progress store
   const initial: ProgressMap = Object.fromEntries(
-    ARTIFACT_SPECS.map((s) => [s.type, 'queued' as ArtifactStatus])
+    allSpecs.map((s) => [s.type, 'queued' as ArtifactStatus])
   ) as ProgressMap;
   forgeProgressStore.set(competitionId, initial);
 
   const generateArtifact = async (spec: ArtifactSpec): Promise<ForgeArtifact> => {
-    // Mark as generating
     const prog = forgeProgressStore.get(competitionId);
     if (prog) prog[spec.type] = 'generating';
 
     try {
       const content = await runClaude(userPrompt, spec.systemPrompt);
       if (prog) prog[spec.type] = 'done';
-      return { type: spec.type, title: spec.title, content, generatedAt: new Date().toISOString() };
+      return {
+        type: spec.type,
+        title: spec.title,
+        content,
+        generatedAt: new Date().toISOString(),
+        universal: spec.universal ?? false,
+      };
     } catch (err) {
       if (prog) prog[spec.type] = 'error';
       throw err;
@@ -253,13 +686,13 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
   };
 
   try {
-    // Generate all 6 artifacts in parallel
-    const artifacts = await Promise.all(ARTIFACT_SPECS.map(generateArtifact));
-
+    const artifacts = await Promise.all(allSpecs.map(generateArtifact));
     return {
       forgeModel: FORGE_MODEL_LABEL,
       artifacts,
       generatedAt: new Date().toISOString(),
+      domain,
+      selectedTypes,
     };
   } finally {
     setTimeout(() => forgeProgressStore.delete(competitionId), 5 * 60 * 1000);
