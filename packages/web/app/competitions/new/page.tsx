@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
 import type { SavedPersona } from '../../personas/page';
 import './new-competition.css';
+import { MONOSPACE_FONT, FORM_LABEL_STYLE } from '../../../lib/design-tokens';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ const MODEL_META: Record<Model, { emoji: string; label: string; color: string; g
 
 const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'researcher', 'adversarial', 'defender', 'pioneer'];
 
-const FONT = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
+const FONT = MONOSPACE_FONT;
 
 // ─── ExampleChips ─────────────────────────────────────────────────────────────
 

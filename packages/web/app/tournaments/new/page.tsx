@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { EXAMPLE_BRIEFS } from '../../../lib/example-briefs';
-import { getModelColor } from '../../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, FORM_LABEL_STYLE } from '../../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -159,20 +159,12 @@ export default function NewTournamentPage() {
     padding: '0.6rem 0.75rem',
     color: '#c8eef8',
     fontSize: '0.78rem',
-    fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+    fontFamily: MONOSPACE_FONT,
     outline: 'none',
     boxSizing: 'border-box',
   };
 
-  const labelStyle: React.CSSProperties = {
-    display: 'block',
-    fontSize: '0.6rem',
-    color: '#4a8fa8',
-    letterSpacing: '1.5px',
-    textTransform: 'uppercase',
-    fontWeight: 700,
-    marginBottom: '0.4rem',
-  };
+  const labelStyle: React.CSSProperties = { ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.4rem' };
 
   const sectionStyle: React.CSSProperties = {
     marginBottom: '1.5rem',
@@ -182,7 +174,7 @@ export default function NewTournamentPage() {
     <div style={{
       minHeight: '100vh',
       background: '#000408',
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
       <style>{`
@@ -265,7 +257,7 @@ export default function NewTournamentPage() {
                       fontWeight: 700,
                       cursor: 'pointer',
                       textAlign: 'left',
-                      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      fontFamily: MONOSPACE_FONT,
                       letterSpacing: '0.5px',
                     }}
                   >
@@ -293,7 +285,7 @@ export default function NewTournamentPage() {
                     fontWeight: 700,
                     cursor: 'pointer',
                     textAlign: 'left',
-                    fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                    fontFamily: MONOSPACE_FONT,
                     letterSpacing: '0.5px',
                   }}
                 >
@@ -324,7 +316,7 @@ export default function NewTournamentPage() {
                           background: customModel === m ? `${getModelColor(m)}20` : 'none',
                           color: customModel === m ? getModelColor(m) : '#4a8fa8',
                           borderRadius: '4px', cursor: 'pointer',
-                          fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                          fontFamily: MONOSPACE_FONT,
                           fontWeight: 700,
                         }}
                       >
@@ -341,7 +333,7 @@ export default function NewTournamentPage() {
                       width: '100%', background: '#000408',
                       border: '1px solid #0a2235', borderRadius: '4px',
                       padding: '0.25rem 0.4rem', color: '#c8eef8',
-                      fontSize: '0.65rem', fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      fontSize: '0.65rem', fontFamily: MONOSPACE_FONT,
                       outline: 'none', boxSizing: 'border-box', marginBottom: '0.4rem',
                     }}
                   />
@@ -363,7 +355,7 @@ export default function NewTournamentPage() {
                         color: customPersona.trim() ? '#000408' : '#1e4a5a',
                         border: 'none', borderRadius: '4px',
                         cursor: customPersona.trim() ? 'pointer' : 'not-allowed',
-                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        fontFamily: MONOSPACE_FONT,
                         fontWeight: 700,
                       }}
                     >
@@ -377,7 +369,7 @@ export default function NewTournamentPage() {
                         background: 'none', color: '#1e4a5a',
                         border: '1px solid #0a2235', borderRadius: '4px',
                         cursor: 'pointer',
-                        fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                        fontFamily: MONOSPACE_FONT,
                       }}
                     >
                       Cancel
@@ -413,7 +405,7 @@ export default function NewTournamentPage() {
                       fontWeight: 700,
                       cursor: 'pointer',
                       textAlign: 'left',
-                      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+                      fontFamily: MONOSPACE_FONT,
                     }}
                   >
                     <div style={{ marginBottom: '0.25rem' }}>{label}</div>
@@ -461,7 +453,7 @@ export default function NewTournamentPage() {
                 style={{
                   fontSize: '0.6rem', color: '#4a8fa8', padding: '0.3rem 0.7rem',
                   border: '1px solid #0a2235', borderRadius: '4px', background: 'none',
-                  cursor: 'pointer', fontFamily: "'SF Mono', 'Fira Code', monospace",
+                  cursor: 'pointer', fontFamily: MONOSPACE_FONT,
                   letterSpacing: '1px',
                 }}
               >
@@ -482,7 +474,7 @@ export default function NewTournamentPage() {
                         display: 'block', width: '100%', textAlign: 'left',
                         padding: '0.55rem 0.85rem', background: 'none', border: 'none',
                         color: '#c8eef8', fontSize: '0.72rem', cursor: 'pointer',
-                        fontFamily: "'SF Mono', 'Fira Code', monospace",
+                        fontFamily: MONOSPACE_FONT,
                         borderBottom: '1px solid #0a2235',
                       }}
                     >
@@ -629,7 +621,7 @@ export default function NewTournamentPage() {
               style={{
                 fontSize: '0.6rem', color: '#4a8fa8', padding: '0.35rem 0.75rem',
                 border: '1px dashed #0a2235', borderRadius: '4px', background: 'none',
-                cursor: 'pointer', fontFamily: "'SF Mono', 'Fira Code', monospace",
+                cursor: 'pointer', fontFamily: MONOSPACE_FONT,
               }}
             >
               + Add criterion
@@ -658,7 +650,7 @@ export default function NewTournamentPage() {
               color: '#000408', border: 'none', borderRadius: '6px',
               fontSize: '0.72rem', fontWeight: 800, letterSpacing: '2px',
               textTransform: 'uppercase', cursor: submitting ? 'not-allowed' : 'pointer',
-              fontFamily: "'SF Mono', 'Fira Code', monospace",
+              fontFamily: MONOSPACE_FONT,
             }}
           >
             {submitting ? 'Creating Tournament…' : '🏆 Launch Tournament'}

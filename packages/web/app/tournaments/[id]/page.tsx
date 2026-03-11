@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getModelColor, getStateStyle } from '../../../lib/design-tokens';
+import { getModelColor, getStateStyle, MONOSPACE_FONT, KICKER_STYLE } from '../../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -99,7 +99,7 @@ export default function TournamentPage() {
 
   if (loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#000408', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'SF Mono', monospace", color: '#4a8fa8' }}>
+      <div style={{ minHeight: '100vh', background: '#000408', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONOSPACE_FONT, color: '#4a8fa8' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🏆</div>
           <p style={{ fontSize: '0.75rem' }}>Loading tournament…</p>
@@ -110,7 +110,7 @@ export default function TournamentPage() {
 
   if (fetchError || !tournament) {
     return (
-      <div style={{ minHeight: '100vh', background: '#000408', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'SF Mono', monospace", color: '#ef4444' }}>
+      <div style={{ minHeight: '100vh', background: '#000408', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: MONOSPACE_FONT, color: '#ef4444' }}>
         <div style={{ textAlign: 'center', maxWidth: '400px' }}>
           <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
           <p style={{ fontSize: '0.75rem' }}>{fetchError ?? 'Tournament not found'}</p>
@@ -135,7 +135,7 @@ export default function TournamentPage() {
     <div style={{
       minHeight: '100vh',
       background: '#000408',
-      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', monospace",
+      fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
       <style>{`
@@ -159,7 +159,7 @@ export default function TournamentPage() {
         <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <div style={{ fontSize: '0.58rem', color: '#00f0ff', letterSpacing: '4px', textTransform: 'uppercase', marginBottom: '0.4rem', fontWeight: 700 }}>
+              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
                 ◆ Tournament
               </div>
               <h1 style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0 0 0.5rem', color: '#c8eef8', lineHeight: 1.1 }}>

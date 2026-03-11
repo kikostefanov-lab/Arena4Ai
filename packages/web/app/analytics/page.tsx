@@ -1,5 +1,6 @@
 import { orchestratorUrl, orchestratorHeaders } from '../../lib/orchestrator';
 import { formatDuration } from '../../lib/format';
+import { MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
 
 interface AgentStat { model: string; wins: number; total: number; winRate: number; }
 interface FormatStat { format: string; total: number; completed: number; avgDurationMs: number | null; }
@@ -103,7 +104,7 @@ function h2hCellBg(wins: number, losses: number): string {
 export default async function AnalyticsPage() {
   const data = await getAnalytics();
 
-  const font = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
+  const font = MONOSPACE_FONT;
 
   const thStyle: React.CSSProperties = {
     textAlign: 'left',
@@ -146,10 +147,7 @@ export default async function AnalyticsPage() {
             </a>
             <span style={{ color: '#0a2235' }}>│</span>
             <div>
-              <span style={{
-                fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700,
-                letterSpacing: '3px', textTransform: 'uppercase',
-              }}>
+              <span style={{ ...KICKER_STYLE, color: '#00f0ff' }}>
                 📊 Analytics
               </span>
               <div style={{ fontSize: '0.52rem', color: '#1e4a5a', marginTop: '0.15rem', letterSpacing: '1px' }}>
