@@ -2311,7 +2311,6 @@ export default function CompetitionPage() {
         style={{
           display: 'flex', flexDirection: 'column',
           height: '100vh', overflow: 'hidden',
-          background: '#000408',
           fontFamily: MONOSPACE_FONT,
           color: '#c8eef8',
           border: isRunning ? '1px solid rgba(0,240,255,0.2)' : '1px solid transparent',

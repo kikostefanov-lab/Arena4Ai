@@ -139,7 +139,6 @@ export default function PersonasPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#000408',
       fontFamily: FONT,
       color: '#c8eef8',
     }}>
@@ -396,8 +395,7 @@ export default function PersonasPage() {
                           </p>
                         )}
                         <div style={{
-                          background: '#000408',
-                          border: '1px solid #081520',
+                                              border: '1px solid #081520',
                           borderRadius: '6px',
                           padding: '0.5rem 0.75rem',
                           fontSize: '0.65rem',

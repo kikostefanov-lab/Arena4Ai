@@ -582,7 +582,6 @@ export default function NewCompetitionPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#000408',
       color: '#c8eef8',
       fontFamily: FONT,
     }}>

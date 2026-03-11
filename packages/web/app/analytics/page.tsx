@@ -111,7 +111,6 @@ export default async function AnalyticsPage() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#000408',
       fontFamily: font,
       color: '#c8eef8',
     }}>

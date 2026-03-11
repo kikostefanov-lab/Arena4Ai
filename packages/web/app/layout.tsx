@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={orbitron.variable}>
-      <body style={{ margin: 0, padding: 0, background: '#000408' }}>
+      <body style={{ margin: 0, padding: 0, backgroundColor: '#000408' }}>
         {/* BG-006: Ambient radial glow — fixed, behind everything */}
         <div className="hero-glow-center" />
         {/* BG-003: CRT scanlines overlay */}
