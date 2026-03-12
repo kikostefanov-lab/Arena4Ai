@@ -8,7 +8,7 @@ let bundlePromise: Promise<string> | null = null;
 export function getBundle(): Promise<string> {
   if (!bundlePromise) {
     // process.cwd() = packages/web (Next.js is invoked from there)
-    const entryPoint = path.resolve(process.cwd(), '../video/src/index.ts');
+    const entryPoint = path.resolve(process.cwd(), '../video/src/Root.tsx');
     bundlePromise = bundle({ entryPoint });
   }
   return bundlePromise;
