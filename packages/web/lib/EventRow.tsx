@@ -1,6 +1,6 @@
 'use client';
 
-import { hexToRgb } from './design-tokens';
+import { hexToRgb, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT } from './design-tokens';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -284,6 +284,9 @@ export function EventRow({
           whiteSpace: 'nowrap',
           flex: 1,
           minWidth: 0,
+          fontFamily: BODY_FONT,
+          fontSize: BODY_FONT_SIZE,
+          lineHeight: BODY_LINE_HEIGHT,
         }}>
           {info.text}
         </span>
@@ -305,11 +308,12 @@ export function EventRow({
         }}>
           <p style={{
             color: '#c8eef8',
-            fontSize: '0.82rem',
-            lineHeight: 1.6,
+            fontSize: BODY_FONT_SIZE,
+            lineHeight: BODY_LINE_HEIGHT,
             margin: 0,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-word',
+            fontFamily: BODY_FONT,
           }}>
             {info.text}
           </p>
