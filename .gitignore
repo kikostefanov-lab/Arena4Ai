@@ -10,3 +10,4 @@ runs/
 # OS / tooling
 .DS_Store
 .superpowers/
+.worktrees/
