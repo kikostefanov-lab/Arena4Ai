@@ -3,13 +3,34 @@ const nextConfig = {
   serverExternalPackages: [
     '@remotion/renderer',
     '@remotion/bundler',
-    '@remotion/compositor-darwin-arm64',
-    '@remotion/compositor-darwin-x64',
-    '@rspack/binding-darwin-arm64',
-    '@rspack/binding-darwin-x64',
-    '@rspack/binding-linux-x64-gnu',
-    '@rspack/binding-win32-x64-msvc',
     'remotion',
   ],
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Prevent Remotion/rspack native binaries from being bundled.
+      // They are required at runtime via serverExternalPackages, but webpack
+      // still traverses their import graph — this stops it completely.
+      const existingExternals = Array.isArray(config.externals)
+        ? config.externals
+        : [config.externals].filter(Boolean);
+
+      config.externals = [
+        ...existingExternals,
+        ({ request }, callback) => {
+          if (
+            request?.startsWith('@remotion/') ||
+            request?.startsWith('@rspack/') ||
+            request === 'remotion' ||
+            request?.endsWith('.node')
+          ) {
+            return callback(null, `commonjs ${request}`);
+          }
+          callback();
+        },
+      ];
+    }
+    return config;
+  },
 };
+
 export default nextConfig;
