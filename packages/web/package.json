@@ -9,6 +9,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@arena/video": "*",
+    "@remotion/bundler": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
     "jszip": "^3.10.1",
     "next": "^14.2.35",
     "react": "^18.3.1",

@@ -14,7 +14,11 @@
     "isolatedModules": true,
     "incremental": true,
     "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./app/*"] }
+    "paths": {
+      "@/*": ["./app/*"],
+      "@arena/video": ["../video/src/index.ts"],
+      "@arena/video/*": ["../video/src/*"]
+    }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
