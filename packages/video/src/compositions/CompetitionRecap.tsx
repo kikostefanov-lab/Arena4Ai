@@ -1,4 +1,4 @@
-import { Sequence } from 'remotion';
+import { Sequence, Audio, staticFile, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
 import type { ReelData } from '../types';
 import { IntroBumper }  from '../scenes/IntroBumper';
 import { Matchup }      from '../scenes/Matchup';
@@ -18,10 +18,36 @@ import { Outro }        from '../scenes/Outro';
 // Winner:       from=900,  duration=90
 // GoDeeper:     from=990,  duration=180
 // Outro:        from=1170, duration=90
-// Total: 1260 frames
+// Total: 1260 frames @ 30fps = 42s
+
+const TOTAL_FRAMES = 1260;
+const FADE_IN_FRAMES = 45;   // 1.5s fade in
+const FADE_OUT_START = 1200; // begin fade out 2s before end
+
+const ThemeAudio: React.FC = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+
+  const volume = interpolate(
+    frame,
+    [0, FADE_IN_FRAMES, FADE_OUT_START, durationInFrames],
+    [0, 0.75, 0.75, 0],
+    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+  );
+
+  return (
+    <Audio
+      src={staticFile('arena4ai-theme.mp3')}
+      volume={volume}
+      // Loop if track is shorter than the reel
+      loop
+    />
+  );
+};
 
 export const CompetitionRecap: React.FC<ReelData> = (data) => (
   <div style={{ width: '100%', height: '100%', overflow: 'hidden', fontFamily: '"Orbitron", sans-serif' }}>
+    <ThemeAudio />
     <Sequence from={0}    durationInFrames={90}>  <IntroBumper /> </Sequence>
     <Sequence from={90}   durationInFrames={120}> <Matchup    data={data} /> </Sequence>
     <Sequence from={210}  durationInFrames={120}> <TheBrief   data={data} /> </Sequence>
