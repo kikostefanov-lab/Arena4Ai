@@ -1798,7 +1798,8 @@ function buildReelData(competition: any, events: any[]): ReelData {
   const reelTeams: ReelTeam[] = teams.map((team: any) => {
     const model = team.model.split(':')[0];
     const persona = team.model.split(':')[1] ?? '';
-    const scorecard = result?.teams?.find((s: any) => s.teamId === team.id);
+    // result.scorecards (not result.teams) holds the per-team scores
+    const scorecard = result?.scorecards?.find((s: any) => s.teamId === team.id);
 
     return {
       teamId: team.id,
