@@ -9,7 +9,8 @@ export function getBundle(): Promise<string> {
   if (!bundlePromise) {
     // process.cwd() = packages/web (Next.js is invoked from there)
     const entryPoint = path.resolve(process.cwd(), '../video/src/Root.tsx');
-    bundlePromise = bundle({ entryPoint });
+    const publicDir  = path.resolve(process.cwd(), '../video/public');
+    bundlePromise = bundle({ entryPoint, publicDir });
   }
   return bundlePromise;
 }
