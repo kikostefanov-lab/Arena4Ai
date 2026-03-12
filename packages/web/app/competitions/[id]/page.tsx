@@ -3,7 +3,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import type { ForgeRun, ForgeSource } from '@arena/shared';
@@ -570,7 +570,7 @@ function renderMarkdown(text: string): React.ReactNode {
     } else {
       flushList(`list-${idx}`);
       const trimmed = line.trim();
-      if (trimmed) nodes.push(<p key={idx} style={{ margin: '0.2rem 0', color: '#d8f0fa', lineHeight: 1.65 }}>{renderInline(trimmed)}</p>);
+      if (trimmed) nodes.push(<p key={idx} style={{ margin: '0.2rem 0', fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#d8f0fa' }}>{renderInline(trimmed)}</p>);
     }
   });
   flushList('list-end');
@@ -1140,13 +1140,13 @@ function ScoreDrawer({
                         {/* Approach */}
                         <div style={{ padding: '0.75rem 1rem', borderBottom: '1px solid rgba(10,34,53,0.4)' }}>
                           <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Approach</div>
-                          <div style={{ fontSize: '0.75rem', color: '#7cc6db', lineHeight: 1.6 }}>{pres.approach}</div>
+                          <div style={{ fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#7cc6db' }}>{pres.approach}</div>
                         </div>
 
                         {/* Key insight */}
                         <div style={{ padding: '0.65rem 1rem', borderBottom: '1px solid rgba(10,34,53,0.4)', background: 'rgba(0,240,255,0.03)' }}>
                           <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Key Insight</div>
-                          <div style={{ fontSize: '0.72rem', color: '#c8eef8', lineHeight: 1.6, fontStyle: 'italic' }}>{pres.keyInsight}</div>
+                          <div style={{ fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#c8eef8', fontStyle: 'italic' }}>{pres.keyInsight}</div>
                         </div>
 
                         {/* Criterion findings — click each to expand */}
@@ -1170,14 +1170,14 @@ function ScoreDrawer({
                               </div>
                               {isOpen && (
                                 <div style={{ marginTop: '0.4rem', paddingLeft: '0.9rem' }}>
-                                  <div style={{ fontSize: '0.72rem', color: '#7cc6db', lineHeight: 1.6, marginBottom: '0.3rem' }}>{cf.finding}</div>
+                                  <div style={{ fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#7cc6db', marginBottom: '0.3rem' }}>{cf.finding}</div>
                                   {cf.strength && (
-                                    <div style={{ fontSize: '0.65rem', color: '#00f0ff', marginBottom: '0.15rem' }}>
+                                    <div style={{ fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#00f0ff', marginBottom: '0.15rem' }}>
                                       <span style={{ fontWeight: 700 }}>+</span> {cf.strength}
                                     </div>
                                   )}
                                   {cf.gap && (
-                                    <div style={{ fontSize: '0.65rem', color: '#ef444488' }}>
+                                    <div style={{ fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#ef444488' }}>
                                       <span style={{ fontWeight: 700 }}>−</span> {cf.gap}
                                     </div>
                                   )}
@@ -1190,7 +1190,7 @@ function ScoreDrawer({
                         {/* Deliverable summary */}
                         <div style={{ padding: '0.65rem 1rem', marginTop: 'auto' }}>
                           <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Deliverables</div>
-                          <div style={{ fontSize: '0.68rem', color: '#4a8fa8', lineHeight: 1.6 }}>{pres.deliverableSummary}</div>
+                          <div style={{ fontFamily: BODY_FONT, fontSize: BODY_FONT_SIZE, lineHeight: BODY_LINE_HEIGHT, color: '#4a8fa8' }}>{pres.deliverableSummary}</div>
                         </div>
                       </div>
                     );
