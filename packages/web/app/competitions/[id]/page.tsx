@@ -1068,7 +1068,7 @@ function ScoreDrawer({
                                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color, letterSpacing: '0.5px', marginBottom: '0.35rem' }}>
                                   {label}
                                 </div>
-                                <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6, fontStyle: 'italic' }}>
+                                <div style={{ fontSize: '0.72rem', color: '#4a8fa8', lineHeight: 1.6, fontStyle: 'italic', fontFamily: BODY_FONT }}>
                                   {crit?.commentary || <span style={{ color: '#1e4a5a' }}>No commentary</span>}
                                 </div>
                               </div>
@@ -1081,7 +1081,7 @@ function ScoreDrawer({
                 })()}
 
                 {result.summary && (
-                  <div style={{ padding: '0.75rem 1rem', fontSize: '0.75rem', color: '#4a8fa8', lineHeight: 1.7, borderTop: '1px solid #0a2235' }}>
+                  <div style={{ padding: '0.75rem 1rem', fontSize: BODY_FONT_SIZE, color: '#4a8fa8', lineHeight: 1.7, borderTop: '1px solid #0a2235', fontFamily: BODY_FONT }}>
                     {result.summary}
                   </div>
                 )}
@@ -1432,7 +1432,7 @@ function ScoreDrawer({
                       {result.synthesis.overallRationale && (
                         <div style={{ padding: '0.85rem 1rem', background: 'rgba(0,240,255,0.04)', borderBottom: '1px solid rgba(0,240,255,0.15)', flexShrink: 0 }}>
                           <div style={{ fontSize: '0.58rem', fontWeight: 800, color: '#00f0ff', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Synthesis Thesis</div>
-                          <div style={{ fontSize: '0.72rem', color: '#c8eef8', lineHeight: 1.6 }}>{result.synthesis.overallRationale}</div>
+                          <div style={{ fontSize: '0.72rem', color: '#c8eef8', lineHeight: 1.6, fontFamily: BODY_FONT }}>{result.synthesis.overallRationale}</div>
                         </div>
                       )}
 
@@ -1511,7 +1511,7 @@ function ScoreDrawer({
                           📋 copy
                         </button>
                       </div>
-                      <div style={{ fontFamily: "-apple-system, 'Segoe UI', sans-serif", fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa' }}>
+                      <div style={{ fontFamily: BODY_FONT, fontSize: '0.78rem', lineHeight: 1.7, color: '#d8f0fa' }}>
                         {renderedSynthesis}
                       </div>
                     </div>
