@@ -1,6 +1,6 @@
 'use client';
 
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT } from '../../../lib/design-tokens';
@@ -1954,6 +1954,51 @@ export default function CompetitionPage() {
   const [notifyDenied, setNotifyDenied] = useState(false);
   const hasNotifiedRef = useRef(false);
 
+  // Reel state
+  type ReelStatus =
+    | { status: 'idle' }
+    | { status: 'rendering'; progress: number }
+    | { status: 'done'; url: string }
+    | { status: 'error'; message: string };
+
+  const [reelStatus, setReelStatus] = useState<ReelStatus>({ status: 'idle' });
+  const [reelStartTime, setReelStartTime] = useState<number | null>(null);
+  const reelPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopReelPolling = useCallback(() => {
+    if (reelPollRef.current) {
+      clearInterval(reelPollRef.current);
+      reelPollRef.current = null;
+    }
+  }, []);
+
+  const startReelPolling = useCallback(() => {
+    if (reelPollRef.current) return;
+    reelPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/competitions/${id}/reel`);
+        const s: ReelStatus = await res.json();
+        setReelStatus(s);
+        if (s.status !== 'rendering') stopReelPolling();
+      } catch {}
+    }, 1500);
+  }, [id, stopReelPolling]);
+
+  useEffect(() => {
+    if (!id) return;
+    fetch(`/api/competitions/${id}/reel`)
+      .then(r => r.json())
+      .then((s: ReelStatus) => {
+        setReelStatus(s);
+        if (s.status === 'rendering') {
+          setReelStartTime(Date.now());
+          startReelPolling();
+        }
+      })
+      .catch(() => {});
+    return () => stopReelPolling();
+  }, [id, startReelPolling, stopReelPolling]);
+
   // E4: Mobile layout
   const [isMobile, setIsMobile] = useState(false);
   useEffect(() => {
@@ -2209,6 +2254,24 @@ export default function CompetitionPage() {
       if (newId) router.push(`/competitions/${newId}`);
     } finally {
       setRematchLoading(false);
+    }
+  };
+
+  const handleGenerateReel = async () => {
+    try {
+      setReelStatus({ status: 'rendering', progress: 0 });
+      setReelStartTime(Date.now());
+      const res = await fetch(`/api/competitions/${id}/reel`, { method: 'POST' });
+      if (res.status === 409) {
+        // Already in progress — just start polling
+      } else if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setReelStatus({ status: 'error', message: (err as { error?: string }).error ?? 'Failed to start render' });
+        return;
+      }
+      startReelPolling();
+    } catch (err: unknown) {
+      setReelStatus({ status: 'error', message: err instanceof Error ? err.message : 'Unknown error' });
     }
   };
 
@@ -2469,6 +2532,60 @@ export default function CompetitionPage() {
             </a>
           )}
 
+          {/* Generate Reel button — shown when competition is complete */}
+          {isComplete && (
+            <button
+              onClick={reelStatus.status === 'idle' || reelStatus.status === 'error' ? handleGenerateReel : undefined}
+              disabled={reelStatus.status === 'rendering'}
+              style={{
+                position: 'relative', overflow: 'hidden',
+                fontSize: '0.70rem',
+                color: reelStatus.status === 'done'
+                  ? '#ff6600'
+                  : reelStatus.status === 'error'
+                  ? '#ef4444'
+                  : reelStatus.status === 'rendering'
+                  ? '#00f0ff'
+                  : '#4a8fa8',
+                background: reelStatus.status === 'done'
+                  ? 'rgba(255,102,0,0.08)'
+                  : 'transparent',
+                border: `1px solid ${
+                  reelStatus.status === 'done' ? 'rgba(255,102,0,0.4)'
+                  : reelStatus.status === 'error' ? 'rgba(239,68,68,0.4)'
+                  : reelStatus.status === 'rendering' ? 'rgba(0,240,255,0.35)'
+                  : '#0a2235'}`,
+                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
+                letterSpacing: '0.5px', fontWeight: 600,
+                cursor: reelStatus.status === 'rendering' ? 'not-allowed' : 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+                transition: 'all 0.15s ease', fontFamily: 'inherit',
+                minWidth: 120,
+              }}
+              title={reelStatus.status === 'error' ? reelStatus.message : 'Generate a shareable video reel'}
+            >
+              {/* Fill animation behind text during rendering */}
+              {reelStatus.status === 'rendering' && (
+                <div style={{
+                  position: 'absolute', left: 0, top: 0, bottom: 0,
+                  width: `${reelStatus.progress * 100}%`,
+                  background: 'rgba(0,240,255,0.08)',
+                  transition: 'width 0.5s ease',
+                  pointerEvents: 'none',
+                }} />
+              )}
+              <span style={{ position: 'relative' }}>
+                {reelStatus.status === 'rendering'
+                  ? `⟳ Rendering… ${Math.round(reelStatus.progress * 100)}%`
+                  : reelStatus.status === 'done'
+                  ? <a href={reelStatus.url} download style={{ color: 'inherit', textDecoration: 'none' }}>⬇ Download Reel</a>
+                  : reelStatus.status === 'error'
+                  ? '⚠ Reel Failed'
+                  : '🎬 Generate Reel'}
+              </span>
+            </button>
+          )}
+
           {/* Spectate link — always shown */}
           <a
             href={`/competitions/${id}/spectate`}
@@ -2525,6 +2642,46 @@ export default function CompetitionPage() {
             {formatElapsed(elapsed)}
           </div>
         </header>
+
+        {/* ── Reel progress card ───────────────────────────────────────────── */}
+        {reelStatus.status === 'rendering' && (() => {
+          const progress = reelStatus.progress;
+          const elapsed = reelStartTime ? (Date.now() - reelStartTime) : 0;
+          const estimatedTotalMs = progress > 0.05 ? (elapsed / progress) : null;
+          const remainingMs = estimatedTotalMs ? estimatedTotalMs * (1 - progress) : null;
+          const remainingSec = remainingMs ? Math.round(remainingMs / 1000) : null;
+
+          return (
+            <div style={{
+              margin: '0 1rem 0.75rem',
+              padding: '0.75rem 1rem',
+              background: '#050f1e',
+              border: '1px solid rgba(0,240,255,0.2)',
+              borderRadius: 8,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <span style={{ fontSize: '0.65rem', color: '#00f0ff', letterSpacing: '2px', fontWeight: 600 }}>
+                  ◈ RENDERING REEL
+                </span>
+                <span style={{ fontSize: '0.72rem', color: '#ff6600', fontWeight: 700 }}>
+                  {Math.round(progress * 100)}%
+                </span>
+              </div>
+              <div style={{ height: 4, background: 'rgba(0,240,255,0.1)', borderRadius: 2, overflow: 'hidden', marginBottom: 6 }}>
+                <div style={{
+                  width: `${progress * 100}%`, height: '100%',
+                  background: 'linear-gradient(90deg, #00f0ff, #0080ff)',
+                  borderRadius: 2,
+                  boxShadow: '0 0 8px rgba(0,240,255,0.5)',
+                  transition: 'width 0.5s ease',
+                }} />
+              </div>
+              <div style={{ fontSize: '0.62rem', color: '#3d7d94' }}>
+                {remainingSec !== null ? `~${remainingSec}s remaining` : 'Encoding frames…'}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── Brief panel ──────────────────────────────────────────────────── */}
         {briefOpen && brief && (
