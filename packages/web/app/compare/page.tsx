@@ -2,9 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { getModelColor } from '../../lib/design-tokens';
-
-const FONT = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
+import { getModelColor, MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -153,7 +151,7 @@ export default function ComparePage() {
     borderRadius: '6px',
     color: '#e4f8ff',
     fontSize: '0.78rem',
-    fontFamily: FONT,
+    fontFamily: MONOSPACE_FONT,
     padding: '0.55rem 0.9rem',
     outline: 'none',
     cursor: 'pointer',
@@ -169,59 +167,42 @@ export default function ComparePage() {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: '#000408', fontFamily: FONT, color: '#e4f8ff' }}>
+    <div style={{ minHeight: '100vh', fontFamily: MONOSPACE_FONT, color: '#e4f8ff' }}>
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .compare-card { transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease; }
         .compare-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,240,255,0.12); border-color: #0e3050 !important; }
         select:hover { border-color: #0e3050 !important; }
-        .nav-link { transition: color 0.15s ease, border-color 0.15s ease; }
-        .nav-link:hover { color: #e4f8ff !important; border-color: #0e3050 !important; }
       `}</style>
 
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2.5rem 2rem' }}>
 
         {/* Header */}
         <div style={{
           marginBottom: '2.25rem',
-          paddingBottom: '1.25rem',
+          padding: '1.5rem 0',
           borderBottom: '1px solid #0a2235',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-end',
           justifyContent: 'space-between',
+          gap: '2rem',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <Link
-              href="/"
-              className="nav-link"
-              style={{
-                fontSize: '0.62rem', color: '#3d7d94', textDecoration: 'none',
-                padding: '0.35rem 0.7rem', border: '1px solid #0a2235', borderRadius: '4px',
-                letterSpacing: '0.5px',
-              }}
-            >
-              ← Gallery
-            </Link>
-            <span style={{ color: '#0a2235' }}>│</span>
-            <div>
-              <div style={{ fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700, letterSpacing: '3px', textTransform: 'uppercase' }}>
-                ⚔ Model Compare
-              </div>
-              <div style={{ fontSize: '0.52rem', color: '#0e3050', marginTop: '0.15rem', letterSpacing: '1px' }}>
-                Head-to-head statistics
-              </div>
+          <div>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
+              ⚔ Model Compare
             </div>
+            <h1 style={{
+              fontSize: '2rem', fontWeight: 800, lineHeight: 1.05, margin: 0,
+              background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              fontFamily: MONOSPACE_FONT,
+            }}>
+              Head-to-Head Stats
+            </h1>
+            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>
+              Compare win rates and scores between any two models
+            </p>
           </div>
-          <Link
-            href="/competitions/new"
-            style={{
-              fontSize: '0.62rem', fontWeight: 700, padding: '0.45rem 1rem',
-              background: '#00f0ff', color: '#000408', borderRadius: '4px',
-              textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
-              display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-            }}
-          >
+          <Link href="/competitions/new" className="arena-btn arena-btn-primary new-comp-btn" style={{ flexShrink: 0 }}>
             ⚔ Run a Match
           </Link>
         </div>

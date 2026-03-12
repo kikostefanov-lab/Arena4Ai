@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { EXAMPLE_BRIEFS } from '../../../lib/example-briefs';
 import { getModelColor, MONOSPACE_FONT, FORM_LABEL_STYLE, KICKER_STYLE } from '../../../lib/design-tokens';
 
@@ -179,25 +178,20 @@ export default function NewTournamentPage() {
 
         {/* Header */}
         <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
-                ◆ New Tournament
-              </div>
-              <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#c8eef8' }}>
-                Create Tournament
-              </h1>
-              <p style={{ fontSize: '0.7rem', color: '#4a8fa8', marginTop: '0.35rem' }}>
-                Choose Round Robin or Swiss format below.
-              </p>
-            </div>
-            <Link
-              href="/"
-              className="arena-btn"
-            >
-              ← BACK
-            </Link>
+          <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
+            ◆ New Tournament
           </div>
+          <h1 style={{
+            fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.05, margin: 0,
+            background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            fontFamily: MONOSPACE_FONT,
+          }}>
+            Create Tournament
+          </h1>
+          <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem' }}>
+            Choose Round Robin or Swiss format below.
+          </p>
         </div>
 
         <form onSubmit={handleSubmit}>

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Post-Judging Redesign complete. 159 tests passing.**
+**Status: Remotion Video Reels complete. 159 tests passing.**
 
 ## Running the Stack
 
@@ -63,6 +63,7 @@ packages/
   shared/       @arena/shared       — types, Zod schemas, EventType/CompetitionState enums
   orchestrator/ @arena/orchestrator — engine, adapters, judging, HTTP API, CLI
   web/          @arena/web          — Next.js 15 App Router UI (port 3001)
+  video/        @arena/video        — Remotion composition for competition recap reels
 briefs/         — YAML brief files (fizzbuzz-cli.yml, roman-numerals.yml, etc.)
 ```
 
@@ -141,12 +142,15 @@ Enable with `--commentary` flag or `commentary: true` in RunOptions. Batches 5 e
 ### Web UI pages
 - `/` — gallery with state/model filters, health dot, auto-refresh, tournament list
 - `/competitions/new` — brief builder with AI generator (✨), example picker, YAML import (📂)
-- `/competitions/:id` — live arena + tabs: Scores, Presentations, Files, Synthesis, Forge; Rematch/Copy/Download buttons
+- `/competitions/:id` — live arena + tabs: Scores, Presentations, Files, Synthesis, Forge; Rematch/Copy/Download/🎬 Reel buttons
 - `/competitions/:id/replay` — replay viewer with scrubber and 1×–10× speed
 - `/leaderboard` — model win-rate leaderboard
 - `/analytics` — competition stats
 - `/tournaments/new` — tournament creation
 - `/tournaments/:id` — tournament standings + match history
+- `/briefs` — brief library with search + tag filters
+- `/compare` — head-to-head model stats
+- `/personas` — custom persona library (localStorage)
 
 ### DB schema (Drizzle + PostgreSQL)
 - `competitions`: id, brief (jsonb), teams (jsonb), state, startedAt, completedAt
@@ -159,6 +163,25 @@ Run migrations: `DATABASE_URL=postgresql://localhost/arena npm run db:migrate --
 ### Design tokens & shared utilities
 - `packages/web/lib/design-tokens.ts` — TRON model colors (claude `#ff6600`, codex `#0066ff`, gemini `#00f0ff`), STATE_STYLES, `hexToRgb()`. Use these everywhere — don't hardcode colors or redefine `hexToRgb`.
 - `packages/web/lib/format.ts` — `formatDuration`, `formatElapsed`, `formatTimeLimit`, `resolveTeamLabel`. Don't inline team-label resolution in components.
+
+### TopBar & responsive navigation
+- `packages/web/components/TopBar.tsx` — fixed top nav with ARENA4AI logo + 6 nav links + ⚔ New Battle CTA
+- Responsive: full inline nav ≥ 1051px; hamburger dropdown ≤ 1050px
+- Hamburger closes on outside click and route change
+- CSS classes: `.topbar`, `.topbar-logo`, `.topbar-nav`, `.topbar-desktop`, `.topbar-mobile`, `.topbar-hamburger`, `.topbar-dropdown` — all in `globals.css`
+- TopBar uses `px` units (not `rem`) for font-size/padding to bypass the `html { font-size: 120% }` scaling
+
+### Hero pattern (all pages)
+Every page uses the same hero structure — do not deviate:
+- Kicker: `KICKER_STYLE` + `color: '#00f0ff'`
+- H1: gradient text (`#c8eef8 → #00f0ff → #0080ff`), `fontFamily: MONOSPACE_FONT`, 1.8–2rem
+- Subtitle: 0.72rem, `#4a8fa8`
+- No back-navigation buttons in hero — TopBar handles all navigation
+- Page-specific CTAs (e.g., "+ New Persona", "⚔ Run a Match") are fine on the right side
+
+### Layout widths
+- Content pages use `maxWidth: '1400px'`
+- Form-heavy pages (`/competitions/new`, `/tournaments/new`, `/personas`) keep narrower widths (680–800px)
 
 ### JSON extraction from LLM output
 `packages/orchestrator/src/utils/extract-json.ts` — balanced-brace walker for extracting the first complete JSON object from LLM stdout. Use this in all places that parse Claude/Codex/Gemini output — never use the greedy `/\{[\s\S]*\}/` regex (breaks when synthesis markdown contains `}` characters).
@@ -192,6 +215,50 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 }
 ```
 
+### Remotion video reels
+On-demand ESPN-style recap video generation from completed competition pages.
+
+**Package:** `packages/video/` (`@arena/video`) — Remotion 4.x, 1080×1920 @ 30fps, 42s (1260 frames)
+
+**API routes (Next.js web):**
+- `POST /api/competitions/:id/reel` — trigger render (202 async); atomic lock via `{ flag: 'wx' }` prevents double-renders; re-POSTing a done/error reel deletes old files and re-renders
+- `GET /api/competitions/:id/reel` — poll render status → `{ status: 'idle'|'rendering'|'done'|'error', progress?, url?, message? }`
+- `GET /api/competitions/:id/reel/download` — stream MP4 via `fs.createReadStream` + `Readable.toWeb()`
+
+**Key implementation details:**
+- Bundle singleton in `packages/web/lib/remotion-bundle.ts` — `bundle()` called once per process lifetime; uses `process.cwd()` (= `packages/web/`) NOT `__dirname` (resolves to `.next/server/` in compiled output)
+- Entry point: `packages/video/src/Root.tsx` (must call `registerRoot()`) — NOT `index.ts`
+- `publicDir: path.resolve(process.cwd(), '../video/public')` passed to `bundle()` for static assets (audio)
+- webpack `externals` function in `next.config.mjs` blocks `@remotion/*`, `@rspack/*`, `remotion`, `*.node` from being bundled by Next.js — `serverExternalPackages` alone is insufficient in Next.js 14
+- `scorecard.finalScore` (not `totalScore`) holds the 0–1 score; criteria scores in `scorecard.judgeResults[0].scores` (not `scorecard.criteriaScores`)
+- `team.persona` is a separate field on the team object; `team.model` is just the model prefix without `:persona`
+- Brief rubric `description` is often a placeholder `">"` — fall back to formatting the `id` (kebab-case → Title Case)
+
+**Scene timing:**
+
+| Scene | Frames | Duration |
+|---|---|---|
+| IntroBumper | 0–90 | 3s |
+| Matchup | 90–210 | 4s |
+| TheBrief | 210–330 | 4s |
+| KeyMoments | 330–570 | 8s |
+| ScoreReveal | 570–900 | 11s |
+| Winner | 900–990 | 3s |
+| GoDeeper | 990–1170 | 6s |
+| Outro | 1170–1260 | 3s |
+
+**Scene design:**
+- **Matchup**: N-team support; each team swoops from unique direction (left/top/right by index); badge size adapts to team count
+- **TheBrief**: Description truncated to 130 chars; criteria as animated pip+icon rows
+- **KeyMoments**: Per-agent directional swoop (agent 0=left, 1=right, 2=bottom, 3=top); card layout with team color stripe
+- **ScoreReveal**: Full scores grid all N teams × all criteria with animated bars; Ken Burns pan+zoom; ranked final scores
+- **Winner**: Radiating spokes, conic score ring, top-3 criteria, pulsing glow
+
+**Audio:** `packages/video/public/arena4ai-theme.mp3` — plays via Remotion `<Audio loop>` at 75% volume, 1.5s fade-in, 2s fade-out
+
+**Stale reel files:** `/tmp/arena-reels/<id>.json` (state) + `/tmp/arena-reels/<id>.mp4`; stale renders (>10min) auto-detected by mtime
+
 ## Known Issues
 1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers)
 2. WebSocket seq counter is approximate (local, not DB serial)
+3. Reel bundle is rebuilt on first render after server restart (takes ~30–60s); cached for subsequent renders in same process

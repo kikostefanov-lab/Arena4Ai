@@ -154,7 +154,7 @@ export default function GalleryPage() {
       fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2.5rem 2rem' }}>
 
         {/* Hero Header */}
         <div style={{
@@ -162,82 +162,50 @@ export default function GalleryPage() {
           padding: '1.5rem 0',
           borderBottom: '1px solid #0a2235',
         }}>
-          {/* Single flex row: [label+title+stats] [nav] */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '2rem' }}>
-
-            {/* Left: label, title, stats */}
-            <div>
-              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.35rem' }}>
-                ◆ Tournament Lobby
-              </div>
-              <h1 style={{
-                fontSize: '2rem', fontWeight: 800, lineHeight: 1, margin: 0,
-                background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
-                WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-                fontFamily: MONOSPACE_FONT,
-              }}>
-                Arena4Ai
-              </h1>
-              <div style={{
-                marginTop: '0.4rem', fontSize: '0.65rem', color: '#4a8fa8',
-                display: 'flex', alignItems: 'center', gap: '0.45rem',
-              }}>
-                {!loading && !error && competitions.length > 0 ? (
-                  <>
-                    <span>{completedCount} battle{completedCount !== 1 ? 's' : ''} completed</span>
-                    <span style={{ color: '#0e3050' }}>·</span>
-                    <span>{uniqueModels.size} agent{uniqueModels.size !== 1 ? 's' : ''} competing</span>
-                    {runningCount > 0 && (
-                      <>
-                        <span style={{ color: '#0e3050' }}>·</span>
-                        <span style={{ color: '#00f0ff', fontWeight: 700 }}>{runningCount} live</span>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <span>AI agent competitions</span>
-                )}
-                {apiOnline !== null && (
-                  <>
-                    <span style={{ color: '#0e3050' }}>·</span>
-                    <span style={{
-                      display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
-                      color: apiOnline ? '#22c55e' : '#ef4444', fontWeight: 600,
-                    }}>
-                      <span>●</span>
-                      {apiOnline ? 'API online' : 'API offline'}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {/* Right: nav */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
-              {([
-                { href: '/briefs', label: 'Briefs' },
-                { href: '/analytics', label: 'Analytics' },
-                { href: '/compare', label: 'Compare' },
-                { href: '/leaderboard', label: 'Leaderboard' },
-                { href: '/personas', label: 'Personas' },
-                { href: '/tournaments/new', label: 'Tournaments' },
-              ] as const).map(({ href, label }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="nav-link arena-btn"
-                >
-                  {label}
-                </Link>
-              ))}
-              <Link
-                href="/competitions/new"
-                className="arena-btn arena-btn-primary new-comp-btn"
-              >
-                ⚔ New Battle
-              </Link>
+          {/* Title + stats */}
+          <div>
+            <h1 style={{
+              fontSize: '1.8rem', fontWeight: 800, lineHeight: 1, margin: 0,
+              background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              fontFamily: MONOSPACE_FONT,
+            }}>
+              Competition Gallery
+            </h1>
+            <div style={{
+              marginTop: '0.4rem', fontSize: '0.65rem', color: '#4a8fa8',
+              display: 'flex', alignItems: 'center', gap: '0.45rem',
+            }}>
+              {!loading && !error && competitions.length > 0 ? (
+                <>
+                  <span>{completedCount} battle{completedCount !== 1 ? 's' : ''} completed</span>
+                  <span style={{ color: '#0e3050' }}>·</span>
+                  <span>{uniqueModels.size} agent{uniqueModels.size !== 1 ? 's' : ''} competing</span>
+                  {runningCount > 0 && (
+                    <>
+                      <span style={{ color: '#0e3050' }}>·</span>
+                      <span style={{ color: '#00f0ff', fontWeight: 700 }}>{runningCount} live</span>
+                    </>
+                  )}
+                </>
+              ) : (
+                <span>AI agent competitions</span>
+              )}
+              {apiOnline !== null && (
+                <>
+                  <span style={{ color: '#0e3050' }}>·</span>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                    color: apiOnline ? '#22c55e' : '#ef4444', fontWeight: 600,
+                  }}>
+                    <span>●</span>
+                    {apiOnline ? 'API online' : 'API offline'}
+                  </span>
+                </>
+              )}
             </div>
           </div>
+
         </div>
 
         {/* Filter Bar */}

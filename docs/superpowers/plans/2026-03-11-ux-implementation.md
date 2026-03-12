@@ -1,6 +1,8 @@
 # Arena4Ai UX Implementation Plan
 
-> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: COMPLETE** — All 28 findings implemented. Additional work done post-plan: hero standardization across all pages, responsive TopBar with hamburger menu, content width standardization to 1400px.
+
+> **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Implement all 28 UX audit findings to unify the web app's TRON aesthetic with the marketing landing page, touching globals.css, layout.tsx, design-tokens.ts, 7 page files, and one new TopBar component.
 
@@ -43,7 +45,7 @@ Fixes all 8 BG findings + consolidates all CSS (CP-007) + adds the shared CSS cl
 **Files:**
 - Modify: `packages/web/app/globals.css`
 
-- [ ] **Step 1: Verify current file contents**
+- [x] **Step 1: Verify current file contents**
 
 ```bash
 cat "/Users/kstefano/Personal Projects/agentarena/packages/web/app/globals.css"
@@ -51,7 +53,7 @@ cat "/Users/kstefano/Personal Projects/agentarena/packages/web/app/globals.css"
 
 Expected: 30 lines — @tailwind directives, body grid, html font-size, and 3 keyframes.
 
-- [ ] **Step 2: Write the new globals.css**
+- [x] **Step 2: Write the new globals.css**
 
 Replace the entire file with:
 
@@ -333,7 +335,7 @@ html {
 .lb-row:hover { background: rgba(10,34,53,0.6) !important; border-color: #0e3050 !important; }
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -341,7 +343,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -369,11 +371,11 @@ EOF
 **Files:**
 - Modify: `packages/web/app/competitions/[id]/page.tsx` (lines 93–229)
 
-- [ ] **Step 5: Read the GLOBAL_STYLES section to confirm exact boundaries**
+- [x] **Step 5: Read the GLOBAL_STYLES section to confirm exact boundaries**
 
 Read lines 93–230 of `packages/web/app/competitions/[id]/page.tsx` to confirm `const GLOBAL_STYLES` starts at line 95 and the closing `\`;` is at line 228. Also confirm `<style>{GLOBAL_STYLES}</style>` is present somewhere in the JSX.
 
-- [ ] **Step 6: Remove GLOBAL_STYLES const and the style injection**
+- [x] **Step 6: Remove GLOBAL_STYLES const and the style injection**
 
 Find and remove:
 1. The entire `const GLOBAL_STYLES = \`...\`;` block (lines 95–228 inclusive, including the `// ─── Global CSS ──` comment at line 93)
@@ -381,7 +383,7 @@ Find and remove:
 
 The CSS classes and keyframes now live in globals.css — no replacement needed.
 
-- [ ] **Step 7: Typecheck**
+- [x] **Step 7: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -389,7 +391,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors. If there are errors about GLOBAL_STYLES not being defined, you missed the style injection — search for `GLOBAL_STYLES` in the file and remove all references.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -408,15 +410,15 @@ EOF
 - Modify: `packages/web/app/page.tsx` (lines 162–209)
 - Modify: `packages/web/app/leaderboard/page.tsx` (lines 106–135)
 
-- [ ] **Step 9: Remove inline `<style>` block from gallery page**
+- [x] **Step 9: Remove inline `<style>` block from gallery page**
 
 In `packages/web/app/page.tsx`, remove the entire `<style>{`...`}</style>` block (lines 162–209). The keyframes (`pulse`, `liveBorder`, `fadeIn`) and CSS classes (`.arena-card`, `.delete-btn`, `.replay-link`, `.nav-link`, `.new-comp-btn`) now live in globals.css.
 
-- [ ] **Step 10: Remove inline `<style>` block from leaderboard page**
+- [x] **Step 10: Remove inline `<style>` block from leaderboard page**
 
 In `packages/web/app/leaderboard/page.tsx`, remove the entire `<style>{`...`}</style>` block (lines 106–135). Same classes now in globals.css.
 
-- [ ] **Step 11: Typecheck**
+- [x] **Step 11: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -424,7 +426,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors.
 
-- [ ] **Step 12: Commit**
+- [x] **Step 12: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -442,7 +444,7 @@ EOF
 **Files:**
 - Modify: `packages/web/app/layout.tsx`
 
-- [ ] **Step 13: Rewrite layout.tsx**
+- [x] **Step 13: Rewrite layout.tsx**
 
 Replace the entire file with:
 
@@ -483,7 +485,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-- [ ] **Step 14: Typecheck**
+- [x] **Step 14: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -491,7 +493,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors.
 
-- [ ] **Step 15: Commit**
+- [x] **Step 15: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -515,7 +517,7 @@ Adds new exports to `design-tokens.ts` covering TY-004, TY-005, TY-007, TY-008, 
 **Files:**
 - Modify: `packages/web/lib/design-tokens.ts`
 
-- [ ] **Step 1: Ensure React type import is present in design-tokens.ts**
+- [x] **Step 1: Ensure React type import is present in design-tokens.ts**
 
 Check the top of `packages/web/lib/design-tokens.ts`:
 ```bash
@@ -524,7 +526,7 @@ head -5 "/Users/kstefano/Personal Projects/agentarena/packages/web/lib/design-to
 
 If `import type React from 'react';` is not already the first line, add it now. This must exist before appending the new exports in Step 2, because those exports use `React.CSSProperties`.
 
-- [ ] **Step 2: Append new exports to design-tokens.ts**
+- [x] **Step 2: Append new exports to design-tokens.ts**
 
 Add the following block at the end of the file (after the `glowShadow` function):
 
@@ -621,7 +623,7 @@ export const KICKER_STYLE: React.CSSProperties = {
 };
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -629,7 +631,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors. If `React.CSSProperties` errors, add `import type React from 'react';` to design-tokens.ts.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -663,7 +665,7 @@ Applies `MONOSPACE_FONT` (which includes Orbitron) to all 6 main pages, fixes th
 **Files:**
 - Modify: `packages/web/app/page.tsx`
 
-- [ ] **Step 1: Update fontFamily import and usage in page.tsx**
+- [x] **Step 1: Update fontFamily import and usage in page.tsx**
 
 First, find all hardcoded monospace font strings in the file:
 ```bash
@@ -687,7 +689,7 @@ Note every line number. Replace each occurrence in the following steps.
 
 3. Find all other hardcoded `"'SF Mono', 'Fira Code', 'Cascadia Code', monospace"` strings in the file — replace each with `MONOSPACE_FONT`.
 
-- [ ] **Step 2: Apply KICKER_STYLE to the gallery kicker element**
+- [x] **Step 2: Apply KICKER_STYLE to the gallery kicker element**
 
 Find the kicker/stamp above the page title (the element with `letterSpacing: '4px'` — around line 225). Import and spread `KICKER_STYLE`:
 ```tsx
@@ -698,7 +700,7 @@ import { ..., KICKER_STYLE } from '../lib/design-tokens';
 </div>
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -711,7 +713,7 @@ Expected: no errors.
 **Files:**
 - Modify: `packages/web/app/leaderboard/page.tsx`
 
-- [ ] **Step 4: Update leaderboard fontFamily + h1 Orbitron + rank badge colors**
+- [x] **Step 4: Update leaderboard fontFamily + h1 Orbitron + rank badge colors**
 
 1. Add a new import (this file currently only imports `getModelColor` from design-tokens — extend it):
    ```ts
@@ -729,7 +731,7 @@ Expected: no errors.
 
 5. Apply `KICKER_STYLE` to the leaderboard kicker element (line ~150).
 
-- [ ] **Step 5: Typecheck** — same command as before.
+- [x] **Step 5: Typecheck** — same command as before.
 
 ### Task 8: Apply MONOSPACE_FONT to analytics, tournaments, and form pages
 
@@ -739,7 +741,7 @@ Expected: no errors.
 - Modify: `packages/web/app/competitions/new/page.tsx`
 - Modify: `packages/web/app/tournaments/new/page.tsx`
 
-- [ ] **Step 6: Update analytics/page.tsx**
+- [x] **Step 6: Update analytics/page.tsx**
 
 This file does not currently import from `design-tokens`. Add a new import block near the top:
 ```ts
@@ -749,7 +751,7 @@ import { MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
 1. Replace the `fontFamily` constant (line ~106): `const font = MONOSPACE_FONT;`
 2. Apply `KICKER_STYLE` to the analytics kicker element (line ~151).
 
-- [ ] **Step 7: Update tournaments/[id]/page.tsx**
+- [x] **Step 7: Update tournaments/[id]/page.tsx**
 
 This file already imports `{ getModelColor, getStateStyle }` from `'../../../lib/design-tokens'`. Extend it:
 ```ts
@@ -759,7 +761,7 @@ import { getModelColor, getStateStyle, MONOSPACE_FONT, KICKER_STYLE } from '../.
 1. Replace `fontFamily: "'SF Mono'..."` with `fontFamily: MONOSPACE_FONT` on the root div and any other occurrences.
 2. Check whether a kicker/stamp label exists above the tournament title. If so, apply `KICKER_STYLE` to it (TY-003/004).
 
-- [ ] **Step 8: Update competitions/new/page.tsx**
+- [x] **Step 8: Update competitions/new/page.tsx**
 
 This file does not currently import from `design-tokens`. Add a new import (note 3-level path from `app/competitions/new/`):
 ```ts
@@ -770,7 +772,7 @@ import { MONOSPACE_FONT, FORM_LABEL_STYLE } from '../../../lib/design-tokens';
 2. Find `const labelStyle` (lines ~109–117) — delete the local const entirely. Then do a find-and-replace of all `style={labelStyle}` usages to `style={FORM_LABEL_STYLE}`.
 3. Also check all `textTransform: 'uppercase'` usage on kicker/stamp elements — if any element has `letterSpacing` or `fontWeight: 800` but no `textTransform: 'uppercase'`, add it (TY-006).
 
-- [ ] **Step 9: Update tournaments/new/page.tsx**
+- [x] **Step 9: Update tournaments/new/page.tsx**
 
 This file does not currently import from `design-tokens`. Add a new import:
 ```ts
@@ -781,7 +783,7 @@ import { MONOSPACE_FONT, FORM_LABEL_STYLE } from '../../lib/design-tokens';
 2. Find the `labelStyle` object (lines ~167–175) — delete the local const entirely. Then do a find-and-replace of all `labelStyle` usages to `FORM_LABEL_STYLE`.
 3. Check all kicker/stamp elements for missing `textTransform: 'uppercase'` — add if absent (TY-006).
 
-- [ ] **Step 10: Audit TY-006 — text-transform consistency across all 5 pages**
+- [x] **Step 10: Audit TY-006 — text-transform consistency across all 5 pages**
 
 For each of these files, run:
 ```bash
@@ -794,7 +796,7 @@ For any element with high letter-spacing or heavy font weight but no `textTransf
 - `competitions/new` label elements (already handled by FORM_LABEL_STYLE which includes uppercase)
 - `tournaments/new` label elements (same)
 
-- [ ] **Step 11: Typecheck**
+- [x] **Step 11: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -802,7 +804,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors.
 
-- [ ] **Step 12: Commit all typography changes**
+- [x] **Step 12: Commit all typography changes**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -840,13 +842,13 @@ Creates the shared TopBar, applies .arena-btn across pages, uses glowShadow on c
 - Create: `packages/web/components/TopBar.tsx`
 - Modify: `packages/web/app/layout.tsx`
 
-- [ ] **Step 1: Create the components directory if it doesn't exist**
+- [x] **Step 1: Create the components directory if it doesn't exist**
 
 ```bash
 mkdir -p "/Users/kstefano/Personal Projects/agentarena/packages/web/components"
 ```
 
-- [ ] **Step 2: Create TopBar.tsx**
+- [x] **Step 2: Create TopBar.tsx**
 
 ```tsx
 'use client';
@@ -906,7 +908,7 @@ export function TopBar() {
 }
 ```
 
-- [ ] **Step 3: Add TopBar to layout.tsx**
+- [x] **Step 3: Add TopBar to layout.tsx**
 
 In `packages/web/app/layout.tsx`, add the TopBar import and render it inside `<body>` above `<main>`:
 
@@ -920,7 +922,7 @@ import { TopBar } from '../components/TopBar';
 
 Note: `paddingTop: '3.5rem'` prevents page content from starting under the fixed nav bar.
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -928,7 +930,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors. If `usePathname` causes issues with server/client mismatch, ensure TopBar has `'use client'` at the top (already included above).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -950,7 +952,7 @@ EOF
 - Modify: `packages/web/app/competitions/new/page.tsx`
 - Modify: `packages/web/app/tournaments/new/page.tsx`
 
-- [ ] **Step 6: Set up usePathname in gallery page**
+- [x] **Step 6: Set up usePathname in gallery page**
 
 Check whether `page.tsx` already imports `usePathname`. If not, add it:
 ```ts
@@ -964,7 +966,7 @@ const pathname = usePathname();
 
 This enables active-state detection for nav links in the steps below.
 
-- [ ] **Step 7: Replace inline button styles with .arena-btn in gallery page**
+- [x] **Step 7: Replace inline button styles with .arena-btn in gallery page**
 
 In `packages/web/app/page.tsx`, find all nav link `<button>` or `<Link>` elements with inline button styles (around lines 282–307). Replace inline styles with `className="arena-btn"` or `className="arena-btn-primary"` as appropriate:
 
@@ -991,7 +993,7 @@ In `packages/web/app/page.tsx`, find all nav link `<button>` or `<Link>` element
 
 If the inline style is fully static and duplicates what `.arena-btn` already provides (border, padding, font, letter-spacing, text-transform), remove it entirely and keep only the className. If the style has truly dynamic parts (computed from state), keep just the dynamic parts and add the className.
 
-- [ ] **Step 8: Apply .arena-card className to gallery competition cards**
+- [x] **Step 8: Apply .arena-card className to gallery competition cards**
 
 In `packages/web/app/page.tsx`, verify the competition card elements already use `className="arena-card"`:
 ```bash
@@ -1000,19 +1002,19 @@ grep -n "arena-card" "/Users/kstefano/Personal Projects/agentarena/packages/web/
 
 If no matches (the CSS class in globals.css handles hover glow), find the card div at lines 536–540 and add `className="arena-card"`. Remove inline style properties that duplicate what `.arena-card` provides (background, border). Keep any dynamic `style` props that set per-competition colors.
 
-- [ ] **Step 9: Apply .arena-btn in leaderboard page**
+- [x] **Step 9: Apply .arena-btn in leaderboard page**
 
 In `packages/web/app/leaderboard/page.tsx`, find nav link buttons and the "New Battle" CTA (lines ~185–204). Apply same className+style pattern as gallery. Also add `import { usePathname } from 'next/navigation';` and `const pathname = usePathname();` if not already present, to enable active-state styling.
 
-- [ ] **Step 10: Apply .arena-btn in analytics page**
+- [x] **Step 10: Apply .arena-btn in analytics page**
 
 In `packages/web/app/analytics/page.tsx`, find the back-link and nav buttons (lines ~140–177). Apply `className="arena-btn"` following the same pattern.
 
-- [ ] **Step 11: Apply .arena-btn to form page submit buttons**
+- [x] **Step 11: Apply .arena-btn to form page submit buttons**
 
 CP-002 also covers form pages. In `packages/web/app/competitions/new/page.tsx` and `packages/web/app/tournaments/new/page.tsx`, find the submit/CTA buttons (typically `<button type="submit">`). Apply `className="arena-btn-primary"`. Do NOT change form input styles (those are handled by `.arena-form` CSS class from globals.css).
 
-- [ ] **Step 12: Typecheck**
+- [x] **Step 12: Typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -1020,7 +1022,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors.
 
-- [ ] **Step 13: Commit**
+- [x] **Step 13: Commit**
 
 ```bash
 cd "/Users/kstefano/Personal Projects/agentarena"
@@ -1040,7 +1042,7 @@ EOF
 
 ### Task 11: Final typecheck + visual verification
 
-- [ ] **Step 14: Full typecheck**
+- [x] **Step 14: Full typecheck**
 
 ```bash
 npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
@@ -1048,7 +1050,7 @@ npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/t
 
 Expected: no errors.
 
-- [ ] **Step 15: Visual verification checklist**
+- [x] **Step 15: Visual verification checklist**
 
 Start the dev server and verify:
 
@@ -1071,7 +1073,7 @@ Open http://localhost:3001 and check:
 | New Battle CTA | Filled cyan button |
 | Competition cards | Hover glow effect |
 
-- [ ] **Step 16: Commit any final cleanup**
+- [x] **Step 16: Commit any final cleanup**
 
 If any visual issues required small fixes during verification, commit those now:
 
@@ -1090,15 +1092,15 @@ EOF
 
 ## Success Criteria
 
-- [ ] `npx tsc --noEmit` passes with zero errors
-- [ ] Grid is 48px × 48px, opacity 0.025, fixed (BG-001,002)
-- [ ] Scanlines overlay visible on all pages (BG-003)
-- [ ] Corner brackets visible in all 4 corners (BG-004)
-- [ ] TopBar fixed at top on all pages with logo + nav (CP-001)
-- [ ] Orbitron font used on all page headings (TY-001)
-- [ ] `GLOBAL_STYLES` removed from `[id]/page.tsx` (CP-007)
-- [ ] No inline `<style>` blocks in gallery or leaderboard (CP-007)
-- [ ] `.arena-btn` used for nav links and CTAs across all 5 pages (CP-002)
-- [ ] `text-transform: uppercase` applied consistently on all kicker/stamp elements (TY-006)
-- [ ] All animation keyframes defined once in globals.css (CP-007)
-- [ ] `design-tokens.ts` exports MONOSPACE_FONT, SPACING, FORM_LABEL_STYLE, STAMP_STYLE, KICKER_STYLE, ACCENT_GOLD/SILVER/BRONZE (Chunk 2)
+- [x] `npx tsc --noEmit` passes with zero errors
+- [x] Grid is 48px × 48px, opacity 0.025, fixed (BG-001,002)
+- [x] Scanlines overlay visible on all pages (BG-003)
+- [x] Corner brackets visible in all 4 corners (BG-004)
+- [x] TopBar fixed at top on all pages with logo + nav (CP-001)
+- [x] Orbitron font used on all page headings (TY-001)
+- [x] `GLOBAL_STYLES` removed from `[id]/page.tsx` (CP-007)
+- [x] No inline `<style>` blocks in gallery or leaderboard (CP-007)
+- [x] `.arena-btn` used for nav links and CTAs across all 5 pages (CP-002)
+- [x] `text-transform: uppercase` applied consistently on all kicker/stamp elements (TY-006)
+- [x] All animation keyframes defined once in globals.css (CP-007)
+- [x] `design-tokens.ts` exports MONOSPACE_FONT, SPACING, FORM_LABEL_STYLE, STAMP_STYLE, KICKER_STYLE, ACCENT_GOLD/SILVER/BRONZE (Chunk 2)
