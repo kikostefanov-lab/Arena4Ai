@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getModelColor, getStateStyle, FORMAT_BADGES, MONOSPACE_FONT, HOVER_DARK, HOVER_TEXT, KICKER_STYLE } from '../lib/design-tokens';
+import { getModelColor, getStateStyle, FORMAT_BADGES, MONOSPACE_FONT, HOVER_DARK, HOVER_TEXT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../lib/design-tokens';
 import { formatTimeLimit, resolveTeamLabel } from '../lib/format';
 
 interface TournamentSummary {
@@ -173,7 +173,7 @@ export default function GalleryPage() {
               Competition Gallery
             </h1>
             <div style={{
-              marginTop: '0.4rem', fontSize: '0.65rem', color: '#4a8fa8',
+              marginTop: '0.4rem', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8',
               display: 'flex', alignItems: 'center', gap: '0.45rem',
             }}>
               {!loading && !error && competitions.length > 0 ? (
@@ -263,7 +263,7 @@ export default function GalleryPage() {
               )}
             </div>
             {searchQuery.trim() && (
-              <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: '0 0 0.15rem', fontFamily: MONOSPACE_FONT }}>
+              <p style={{ fontSize: BODY_FONT_SIZE_SM, color: '#1e4a5a', margin: '0 0 0.15rem', fontFamily: BODY_FONT }}>
                 Showing {filteredCompetitions.length} of {competitions.length} competition{competitions.length !== 1 ? 's' : ''}
               </p>
             )}
@@ -277,7 +277,7 @@ export default function GalleryPage() {
                     key={s}
                     onClick={() => setStateFilter(s)}
                     style={{
-                      fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
+                      fontSize: '0.65rem', fontWeight: 700, padding: '0.18rem 0.6rem',
                       borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
                       border: `1px solid ${active ? 'transparent' : '#0a2235'}`,
                       background: active ? style.bg : 'transparent',
@@ -300,7 +300,7 @@ export default function GalleryPage() {
                     key={m}
                     onClick={() => setModelFilter(m)}
                     style={{
-                      fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
+                      fontSize: '0.65rem', fontWeight: 700, padding: '0.18rem 0.6rem',
                       borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
                       border: `1px solid ${active ? 'transparent' : '#0a2235'}`,
                       background: active ? (m === 'ALL' ? '#0a2235' : `${color}22`) : 'transparent',
@@ -323,7 +323,7 @@ export default function GalleryPage() {
                       key={cat}
                       onClick={() => setCategoryFilter(cat)}
                       style={{
-                        fontSize: '0.52rem', fontWeight: 700, padding: '0.18rem 0.6rem',
+                        fontSize: '0.65rem', fontWeight: 700, padding: '0.18rem 0.6rem',
                         borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
                         border: `1px solid ${active ? 'rgba(0,128,255,0.4)' : '#0a2235'}`,
                         background: active ? 'rgba(0,128,255,0.15)' : 'transparent',
@@ -387,7 +387,7 @@ export default function GalleryPage() {
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
               No battles yet
             </h2>
-            <p style={{ fontSize: '0.75rem', color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
               Pit two AI agents against each other in a head-to-head coding competition.
               Create your first battle to see who comes out on top.
             </p>
@@ -663,7 +663,7 @@ export default function GalleryPage() {
               padding: '2.5rem', textAlign: 'center',
               background: '#050f1e', border: '1px dashed #0a2235', borderRadius: '8px',
             }}>
-              <p style={{ fontSize: '0.72rem', color: '#1e4a5a', margin: 0 }}>
+              <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#1e4a5a', margin: 0 }}>
                 No tournaments yet — start a round-robin to compare multiple agents head-to-head.
               </p>
             </div>
@@ -691,7 +691,7 @@ export default function GalleryPage() {
                         <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#c8eef8', marginBottom: '0.3rem' }}>
                           {t.name || t.brief?.title || t.id}
                         </div>
-                        <div style={{ fontSize: '0.62rem', color: '#4a8fa8', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           <span>{t.teams.length} teams</span>
                           <span style={{ color: '#0a2235' }}>·</span>
                           <span>{t.matchIds.length} match{t.matchIds.length !== 1 ? 'es' : ''}</span>

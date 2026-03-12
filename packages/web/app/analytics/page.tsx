@@ -1,6 +1,6 @@
 import { orchestratorUrl, orchestratorHeaders } from '../../lib/orchestrator';
 import { formatDuration } from '../../lib/format';
-import { MONOSPACE_FONT, KICKER_STYLE, getModelColor } from '../../lib/design-tokens';
+import { MONOSPACE_FONT, KICKER_STYLE, getModelColor, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../lib/design-tokens';
 
 interface AgentStat { model: string; wins: number; total: number; winRate: number; }
 interface FormatStat { format: string; total: number; completed: number; avgDurationMs: number | null; }
@@ -137,7 +137,7 @@ export default async function AnalyticsPage() {
             }}>
               Analytics
             </h1>
-            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>
               Performance dashboard across all completed competitions
             </p>
           </div>
@@ -490,11 +490,11 @@ export default async function AnalyticsPage() {
                           <FormatBadge format={f.format} />
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT }}>
                             <span style={{ color: '#4a8fa8' }}>Total</span>
                             <span style={{ color: '#c8eef8', fontWeight: 700 }}>{f.total}</span>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT }}>
                             <span style={{ color: '#4a8fa8' }}>Completed</span>
                             <span style={{ color: '#0066ff', fontWeight: 700 }}>{f.completed}</span>
                           </div>
@@ -508,7 +508,7 @@ export default async function AnalyticsPage() {
                               width: `${completionPct}%`,
                             }} />
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT }}>
                             <span style={{ color: '#4a8fa8' }}>Avg Duration</span>
                             <span style={{ color: '#c8eef8' }}>{formatDuration(f.avgDurationMs)}</span>
                           </div>

@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
 import type { SavedPersona } from '../../personas/page';
 import './new-competition.css';
-import { MONOSPACE_FONT, FORM_LABEL_STYLE } from '../../../lib/design-tokens';
+import { MONOSPACE_FONT, FORM_LABEL_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../../lib/design-tokens';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -621,7 +621,7 @@ export default function NewCompetitionPage() {
           <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8eef8', margin: 0, lineHeight: 1.2 }}>
             Launch a Competition
           </h1>
-          <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.5rem', lineHeight: 1.6 }}>
+          <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.5rem', lineHeight: 1.6 }}>
             Configure your brief, set scoring criteria, and choose your fighters.
           </p>
         </div>
@@ -692,7 +692,7 @@ export default function NewCompetitionPage() {
                 <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#c8eef8' }}>
                   Quick start from example
                 </span>
-                <span style={{ fontSize: '0.6rem', color: '#1e4a5a', marginLeft: '0.5rem' }}>
+                <span style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#1e4a5a', marginLeft: '0.5rem' }}>
                   load a pre-built brief as your starting point
                 </span>
               </div>
@@ -920,7 +920,7 @@ export default function NewCompetitionPage() {
                         padding: '0.85rem 1rem',
                         animation: 'slideDown 0.25s ease-out',
                       }}>
-                        <p style={{ fontSize: '0.6rem', color: '#4a8fa8', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
+                        <p style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
                           Describe your idea in plain English and AI will expand it into a full brief.
                         </p>
                         <textarea

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getModelColor, MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -166,7 +166,7 @@ export default function PersonasPage() {
             }}>
               Persona Library
             </h1>
-            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem', lineHeight: 1.5 }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.4rem', lineHeight: 1.5 }}>
               Define custom agent personas with system prompts. Pick them when creating a competition.
             </p>
           </div>
@@ -310,7 +310,7 @@ export default function PersonasPage() {
             <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
               No custom personas yet
             </div>
-            <p style={{ fontSize: '0.7rem', color: '#4a8fa8', marginBottom: '1.25rem', maxWidth: '380px', margin: '0 auto 1.25rem' }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginBottom: '1.25rem', maxWidth: '380px', margin: '0 auto 1.25rem' }}>
               Create personas with custom system prompts to control how each AI agent approaches problems.
             </p>
             <button
@@ -382,7 +382,7 @@ export default function PersonasPage() {
                           </span>
                         </div>
                         {persona.description && (
-                          <p style={{ fontSize: '0.68rem', color: '#4a8fa8', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
+                          <p style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
                             {persona.description}
                           </p>
                         )}
@@ -390,14 +390,14 @@ export default function PersonasPage() {
                                               border: '1px solid #081520',
                           borderRadius: '6px',
                           padding: '0.5rem 0.75rem',
-                          fontSize: '0.65rem',
+                          fontSize: BODY_FONT_SIZE_SM,
                           color: '#3d7d94',
                           lineHeight: 1.5,
                           maxHeight: '4.5rem',
                           overflow: 'hidden',
                           position: 'relative',
                         }}>
-                          <pre style={{ margin: 0, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          <pre style={{ margin: 0, fontFamily: BODY_FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                             {persona.systemPrompt.length > 200
                               ? persona.systemPrompt.slice(0, 200) + '…'
                               : persona.systemPrompt}
@@ -495,7 +495,8 @@ export default function PersonasPage() {
             background: 'rgba(0,240,255,0.04)',
             border: '1px solid rgba(0,240,255,0.12)',
             borderRadius: '8px',
-            fontSize: '0.65rem',
+            fontSize: BODY_FONT_SIZE,
+            fontFamily: BODY_FONT,
             color: '#3d7d94',
             lineHeight: 1.6,
           }}>

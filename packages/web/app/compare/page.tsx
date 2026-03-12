@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { getModelColor, MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../lib/design-tokens';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -80,7 +80,7 @@ function StatCard({
       borderRadius: '8px',
       padding: '1rem 1.25rem',
     }}>
-      <div style={{ fontSize: '0.52rem', color: '#3d7d94', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 700, marginBottom: '0.75rem' }}>
+      <div style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#3d7d94', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: 700, marginBottom: '0.75rem' }}>
         {label}
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
@@ -198,7 +198,7 @@ export default function ComparePage() {
             }}>
               Head-to-Head Stats
             </h1>
-            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>
               Compare win rates and scores between any two models
             </p>
           </div>
@@ -315,7 +315,7 @@ export default function ComparePage() {
                 animation: 'fadeIn 0.3s ease both',
               }}>
                 <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
-                <p style={{ color: '#3d7d94', fontSize: '0.78rem', marginBottom: '1.25rem' }}>
+                <p style={{ color: '#3d7d94', fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, marginBottom: '1.25rem' }}>
                   No completed head-to-head matches between <span style={{ color: colorA }}>{modelA}</span> and <span style={{ color: colorB }}>{modelB}</span> yet.
                 </p>
                 <Link
@@ -521,7 +521,7 @@ export default function ComparePage() {
                               <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: colorB, fontWeight: 600 }}>
                                 {match.modelBScore !== null ? `${(match.modelBScore * 100).toFixed(1)}%` : '—'}
                               </td>
-                              <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#3d7d94', fontSize: '0.62rem' }}>
+                              <td style={{ padding: '0.65rem 1rem', textAlign: 'right', color: '#3d7d94', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT }}>
                                 {timeAgo(match.completedAt)}
                               </td>
                             </tr>
