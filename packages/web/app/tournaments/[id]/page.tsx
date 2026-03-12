@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getModelColor, getStateStyle, MONOSPACE_FONT, KICKER_STYLE } from '../../../lib/design-tokens';
+import { getModelColor, getStateStyle, MONOSPACE_FONT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -159,7 +159,7 @@ export default function TournamentPage() {
                   )}
                   {tournament.state}
                 </span>
-                <span style={{ fontSize: '0.65rem', color: '#4a8fa8' }}>
+                <span style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8' }}>
                   {tournament.teams.length} teams ·{' '}
                   {tournament.type === 'SWISS' && tournament.swissMeta
                     ? `Round ${tournament.swissMeta.currentRound}/${tournament.swissMeta.totalRounds} · `
@@ -241,7 +241,7 @@ export default function TournamentPage() {
             }}>
               {winner.model}
             </div>
-            <div style={{ fontSize: '0.65rem', color: '#4a8fa8', marginTop: '0.3rem' }}>
+            <div style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.3rem' }}>
               {winner.wins}W · {winner.losses}L · {winner.draws}D · {Math.round(winner.totalScore * 100)}%
             </div>
           </div>
@@ -259,7 +259,7 @@ export default function TournamentPage() {
             <div style={{ fontSize: '0.6rem', color: '#ef4444', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '0.35rem', fontWeight: 700 }}>
               Tournament Failed
             </div>
-            <p style={{ fontSize: '0.72rem', color: '#ef4444', margin: 0 }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#ef4444', margin: 0 }}>
               {tournament.error ?? 'An unexpected error occurred.'}
             </p>
           </div>
@@ -283,7 +283,7 @@ export default function TournamentPage() {
             }}>
               LIVE
             </span>
-            <span style={{ fontSize: '0.72rem', color: '#4a8fa8' }}>Current match:</span>
+            <span style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8' }}>Current match:</span>
             <span style={{ color: getModelColor(tournament.currentMatch.teamA.split(':')[0]), fontWeight: 700, fontSize: '0.75rem' }}>
               {tournament.currentMatch.teamA}
             </span>
@@ -323,7 +323,7 @@ export default function TournamentPage() {
             }}>
               SWISS
             </span>
-            <span style={{ fontSize: '0.68rem', color: '#4a8fa8' }}>
+            <span style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8' }}>
               Round{' '}
               <strong style={{ color: '#c8eef8' }}>
                 {tournament.swissMeta.currentRound}
@@ -333,7 +333,7 @@ export default function TournamentPage() {
                 {tournament.swissMeta.totalRounds}
               </strong>
             </span>
-            <span style={{ fontSize: '0.6rem', color: '#1e4a5a' }}>
+            <span style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#1e4a5a' }}>
               · {tournament.matchIds.length} matches played
             </span>
           </div>
@@ -469,10 +469,10 @@ export default function TournamentPage() {
                     animation: `fadeIn 0.3s ease ${i * 0.04}s both`,
                   }}
                 >
-                  <span style={{ fontSize: '0.65rem', color: '#4a8fa8' }}>
+                  <span style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8' }}>
                     Match {i + 1}
                   </span>
-                  <span style={{ fontSize: '0.58rem', color: '#1e4a5a', fontFamily: MONOSPACE_FONT }}>
+                  <span style={{ fontSize: BODY_FONT_SIZE_SM, color: '#1e4a5a', fontFamily: BODY_FONT }}>
                     {matchId.slice(0, 8)}…
                   </span>
                   <Link

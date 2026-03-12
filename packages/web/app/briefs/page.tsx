@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FORMAT_BADGES, MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
+import { FORMAT_BADGES, MONOSPACE_FONT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../lib/design-tokens';
 import { formatTimeLimit } from '../../lib/format';
 
 interface BriefSummary {
@@ -86,7 +86,7 @@ export default function BriefsPage() {
           }}>
             Competition Briefs
           </h1>
-          <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.6rem' }}>
+          <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.6rem' }}>
             {loading ? 'Loading…' : `${briefs.length} brief${briefs.length !== 1 ? 's' : ''} available`}
           </p>
         </div>
@@ -149,7 +149,7 @@ export default function BriefsPage() {
                     className="cat-btn"
                     onClick={() => setCategoryFilter(cat)}
                     style={{
-                      fontSize: '0.52rem', fontWeight: 700, padding: '0.2rem 0.65rem',
+                      fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.65rem',
                       borderRadius: '3px', letterSpacing: '1px', cursor: 'pointer',
                       border: `1px solid ${active ? 'rgba(0,128,255,0.4)' : '#0a2235'}`,
                       background: active ? 'rgba(0,128,255,0.15)' : 'transparent',
@@ -165,7 +165,7 @@ export default function BriefsPage() {
           )}
 
           {(searchQuery.trim() || categoryFilter !== 'ALL') && (
-            <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: 0, fontFamily: MONOSPACE_FONT }}>
+            <p style={{ fontSize: BODY_FONT_SIZE_SM, color: '#1e4a5a', margin: 0, fontFamily: BODY_FONT }}>
               Showing {filtered.length} of {briefs.length} brief{briefs.length !== 1 ? 's' : ''}
             </p>
           )}
@@ -274,7 +274,7 @@ export default function BriefsPage() {
                   {/* Problem snippet */}
                   {brief.problemSnippet && (
                     <p style={{
-                      fontSize: '0.65rem', color: '#3d7d94', lineHeight: 1.55,
+                      fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#3d7d94', lineHeight: 1.55,
                       margin: 0, flex: 1,
                       display: '-webkit-box',
                       WebkitLineClamp: 3,

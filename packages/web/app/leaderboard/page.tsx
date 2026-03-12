@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getModelColor, MONOSPACE_FONT, ACCENT_GOLD, ACCENT_SILVER, ACCENT_BRONZE, KICKER_STYLE, TEXT_MUTED } from '../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, ACCENT_GOLD, ACCENT_SILVER, ACCENT_BRONZE, KICKER_STYLE, TEXT_MUTED, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../lib/design-tokens';
 
 interface LeaderboardEntry {
   rank: number;
@@ -131,7 +131,8 @@ export default function LeaderboardPage() {
             </h1>
             {!loading && !error && (
               <p style={{
-                fontSize: '0.72rem',
+                fontSize: BODY_FONT_SIZE,
+                fontFamily: BODY_FONT,
                 color: '#4a8fa8',
                 marginTop: '0.6rem',
               }}>
@@ -267,7 +268,8 @@ export default function LeaderboardPage() {
                         {entry.model}
                       </div>
                       <div style={{
-                        fontSize: '0.55rem',
+                        fontSize: BODY_FONT_SIZE_SM,
+                        fontFamily: BODY_FONT,
                         color: '#1e4a5a',
                         marginTop: '0.1rem',
                         letterSpacing: '0.5px',
@@ -341,7 +343,8 @@ export default function LeaderboardPage() {
         {!loading && !error && entries.length > 0 && (
           <p style={{
             marginTop: '1rem',
-            fontSize: '0.58rem',
+            fontSize: BODY_FONT_SIZE_SM,
+            fontFamily: BODY_FONT,
             color: '#0e3050',
             textAlign: 'center',
             letterSpacing: '0.5px',
