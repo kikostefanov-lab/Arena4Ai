@@ -46,13 +46,34 @@ export function createApp(): Application {
     legacyHeaders: false,
   });
 
+  // Tighter limit for expensive post-completion operations (forge, synthesis)
+  const forgeSynthesisLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 5,
+    message: { error: 'Too many requests. Try again in a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
+  // Limit for AI brief generation
+  const generateBriefLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    message: { error: 'Too many brief generation requests. Try again in a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
+
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use('/competitions', createLimiter, competitionsRouter);
+  // Apply tighter limits to expensive post-completion routes
+  app.post('/competitions/:id/forge', forgeSynthesisLimiter);
+  app.post('/competitions/:id/synthesis', forgeSynthesisLimiter);
   app.use('/analytics/criteria', criteriaRouter);
   app.use('/analytics', analyticsRouter);
   app.use('/compare', compareRouter);
   app.use('/leaderboard', leaderboardRouter);
-  app.use('/generate-brief', generateBriefRouter);
+  app.use('/generate-brief', generateBriefLimiter, generateBriefRouter);
   app.use('/tournaments', tournamentsRouter);
   app.use('/briefs', briefsRouter);
 

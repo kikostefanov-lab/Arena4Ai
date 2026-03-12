@@ -424,6 +424,28 @@ export default function NewCompetitionPage() {
       .catch(() => {});
   }, [searchParams]);
 
+  // Pre-fill from a brief library entry if ?briefSlug=<id>
+  useEffect(() => {
+    const briefSlug = searchParams.get('briefSlug');
+    if (!briefSlug) return;
+    fetch('/api/briefs')
+      .then(r => r.ok ? r.json() : [])
+      .then((briefs: Array<{ id: string; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; tags?: string[] }>) => {
+        const brief = briefs.find((b) => b.id === briefSlug);
+        if (!brief) return;
+        if (brief.title) setTitle(brief.title);
+        if (brief.format && ['SPRINT','HACKATHON','RELAY_RACE','RED_VS_BLUE'].includes(brief.format)) setFormat(brief.format as Format);
+        if (brief.timeLimitMs) setTimeLimitMins(Math.round(brief.timeLimitMs / 60000));
+        if (brief.problem) setProblem(brief.problem);
+        if (brief.constraints?.length) setConstraints(brief.constraints.join('\n'));
+        if (brief.deliverables?.length) setDeliverables(brief.deliverables.join('\n'));
+        if (brief.rubric?.criteria?.length) setCriteria(brief.rubric.criteria);
+        setExpandedStep(3); // jump to teams step since brief is pre-filled
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const applyPreset = (f: Format) => {
     setFormat(f);
     const p = FORMAT_PRESETS[f];

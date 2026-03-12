@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Remotion Video Reels complete. 159 tests passing.**
+**Status: V2 sprint complete. 159 tests passing.**
 
 ## Running the Stack
 
@@ -107,7 +107,7 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 - `POST /generate-brief` — Claude expands rough idea → structured brief JSON
 - `GET /health`
 
-Rate limiting: 10 POST /competitions per minute per IP.
+Rate limiting: 10/min on `POST /competitions`; 5/min on `POST /competitions/:id/forge` and `POST /competitions/:id/synthesis`; 20/min on `POST /generate-brief`.
 
 ### Presentation layer
 After collecting deliverables, `presentation-generator.ts` calls Claude (in parallel per team) to generate human-readable `TeamPresentation` objects that map deliverables back to rubric criteria. This runs BEFORE judging (PRESENTING state).
@@ -258,7 +258,15 @@ On-demand ESPN-style recap video generation from completed competition pages.
 
 **Stale reel files:** `/tmp/arena-reels/<id>.json` (state) + `/tmp/arena-reels/<id>.mp4`; stale renders (>10min) auto-detected by mtime
 
+**Reel UI buttons:** Competition detail page shows `🎬 Generate Reel` when idle/error; `⬇ Download Reel` + `🔄 Regenerate` when done. Regenerate re-POSTs and resets polling.
+
+**GoDeeper scene:** Synthesis and Forge promo cards only render when `hasSynthesis`/`hasForge` are true in `ReelData`. Both are passed from the reel API route based on competition result data.
+
+**Bundle pre-warm:** `packages/web/instrumentation.ts` calls `getBundle()` on server startup (Next.js `register()` hook, Node.js runtime only). First reel render is no longer cold.
+
+### Brief pre-select from library
+`/briefs` Launch button links to `/competitions/new?briefSlug={brief.id}`. On mount, `competitions/new/page.tsx` reads `?briefSlug`, fetches `/api/briefs`, finds the matching brief, and pre-populates all form fields. Jumps to step 3 (teams).
+
 ## Known Issues
 1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers)
 2. WebSocket seq counter is approximate (local, not DB serial)
-3. Reel bundle is rebuilt on first render after server restart (takes ~30–60s); cached for subsequent renders in same process

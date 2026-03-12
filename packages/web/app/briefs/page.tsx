@@ -287,7 +287,7 @@ export default function BriefsPage() {
 
                   {/* Launch button */}
                   <Link
-                    href={`/competitions/new`}
+                    href={`/competitions/new?briefSlug=${encodeURIComponent(brief.id)}`}
                     className="launch-btn"
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
