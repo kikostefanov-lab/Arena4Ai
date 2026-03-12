@@ -106,6 +106,23 @@ export function glowShadow(color: string, intensity: number = 1): string {
 /** Font family — Orbitron first, monospace fallbacks. Use everywhere. (TY-001,005) */
 export const MONOSPACE_FONT = "var(--font-orbitron), 'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
 
+/**
+ * Body font — SF Mono first, no Orbitron.
+ * Use for: event feed text, presentation paragraphs, file paths,
+ * system prompt previews, descriptions, any sentence-length copy.
+ * Rule: if it's a label/heading/badge → MONOSPACE_FONT. If it reads as a sentence → BODY_FONT.
+ */
+export const BODY_FONT = "'SF Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace";
+
+/** Body copy font size — event feed, descriptions, paragraphs (13.8px at 120% scale) */
+export const BODY_FONT_SIZE = '0.72rem';
+
+/** Small body font size — timestamps, metadata (13.1px at 120% scale) */
+export const BODY_FONT_SIZE_SM = '0.68rem';
+
+/** Line height for body copy — generous for readability */
+export const BODY_LINE_HEIGHT = 1.65;
+
 /** Label / kicker letter-spacing — matches marketing .stamp (TY-004) */
 export const LABEL_LETTER_SPACING = '5px';
 
@@ -126,7 +143,7 @@ export const FORM_LABEL_STYLE: React.CSSProperties = {
   textTransform: 'uppercase' as const,
   letterSpacing: '1.5px',
   fontWeight: 700,
-  fontSize: '0.6rem',
+  fontSize: '0.72rem',
 };
 
 // ─── Accent colors ────────────────────────────────────────────────────────────
@@ -185,7 +202,7 @@ export const STAMP_STYLE: React.CSSProperties = {
  * (TY-003,004)
  */
 export const KICKER_STYLE: React.CSSProperties = {
-  fontSize: '0.55rem',
+  fontSize: '0.70rem',
   fontWeight: 800,
   letterSpacing: LABEL_LETTER_SPACING,
   color: TEXT_DIM,
