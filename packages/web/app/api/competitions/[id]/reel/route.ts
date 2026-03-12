@@ -78,25 +78,27 @@ function buildReelData(competition: any, events: any[]): ReelData {
   // Build teams
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const reelTeams: ReelTeam[] = teams.map((team: any) => {
+    // team.model may be "claude:architect" or just "claude"; persona may be separate field
     const model = team.model.split(':')[0];
-    const persona = team.model.split(':')[1] ?? '';
-    // result.scorecards (not result.teams) holds the per-team scores
+    const persona = team.persona ?? team.model.split(':')[1] ?? '';
+    // result.scorecards holds per-team scores
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scorecard = result?.scorecards?.find((s: any) => s.teamId === team.id);
+    // AI judge scores live in judgeResults[0].scores; each has score/10, criterionId, commentary
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const judgeScores: any[] = scorecard?.judgeResults?.[0]?.scores ?? [];
 
     return {
       teamId: team.id,
-      label: team.model,
+      label: `${model}:${persona}`,
       model,
       persona,
       color: getModelColor(model),
-      // totalScore (= finalScore from score-aggregator.ts) is already 0–1
-      score: scorecard?.totalScore ?? 0,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      criteriaScores: (scorecard?.criteriaScores ?? []).map((cs: any) => ({
+      // finalScore is already 0–1
+      score: scorecard?.finalScore ?? 0,
+      criteriaScores: judgeScores.map((cs: any) => ({
         name: criteriaMap[cs.criterionId] ?? cs.criterionId,
-        // cs.score is raw (0–maxScore), cs.maxScore typically 10
-        score: cs.maxScore > 0 ? cs.score / cs.maxScore : cs.score,
+        score: cs.score / 10,
         commentary: cs.commentary ?? '',
       })),
     };
