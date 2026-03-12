@@ -1765,7 +1765,7 @@ function ScoreDrawer({
               ].map(({ label, content }) => (
                 <div key={label}>
                   <div style={{ fontSize: '0.58rem', color: '#3d7d94', letterSpacing: '1.5px', marginBottom: '0.35rem' }}>{label}</div>
-                  <div style={{ fontSize: '0.78rem', color: '#e4f8ff', lineHeight: 1.7 }}>{content}</div>
+                  <div style={{ fontSize: BODY_FONT_SIZE, color: '#e4f8ff', lineHeight: BODY_LINE_HEIGHT, fontFamily: BODY_FONT }}>{content}</div>
                 </div>
               ))}
               {(presentationModal.criterionFindings ?? []).length > 0 && (
@@ -1774,9 +1774,9 @@ function ScoreDrawer({
                   {presentationModal.criterionFindings.map((f) => (
                     <div key={f.criterionId} style={{ marginBottom: '0.85rem', paddingLeft: '0.7rem', borderLeft: '2px solid #0a2235' }}>
                       <div style={{ fontSize: '0.68rem', fontWeight: 800, color: '#00f0ff', marginBottom: '0.25rem' }}>{f.criterionId}</div>
-                      <div style={{ fontSize: '0.72rem', color: '#e4f8ff', lineHeight: 1.6, marginBottom: '0.2rem' }}>{f.finding}</div>
-                      {f.strength && <div style={{ fontSize: '0.65rem', color: '#7cc6db' }}>Strength: {f.strength}</div>}
-                      {f.gap && <div style={{ fontSize: '0.65rem', color: '#7cc6db' }}>Gap: {f.gap}</div>}
+                      <div style={{ fontSize: BODY_FONT_SIZE, color: '#e4f8ff', lineHeight: BODY_LINE_HEIGHT, marginBottom: '0.2rem', fontFamily: BODY_FONT }}>{f.finding}</div>
+                      {f.strength && <div style={{ fontSize: BODY_FONT_SIZE, color: '#7cc6db', fontFamily: BODY_FONT }}>Strength: {f.strength}</div>}
+                      {f.gap && <div style={{ fontSize: BODY_FONT_SIZE, color: '#7cc6db', fontFamily: BODY_FONT }}>Gap: {f.gap}</div>}
                     </div>
                   ))}
                 </div>
