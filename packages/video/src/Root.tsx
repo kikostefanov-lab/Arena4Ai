@@ -1,4 +1,4 @@
-import { Composition, delayRender, continueRender } from 'remotion';
+import { Composition, delayRender, continueRender, registerRoot } from 'remotion';
 import { useState, useEffect } from 'react';
 import { loadFont } from '@remotion/google-fonts/Orbitron';
 import { CompetitionRecap } from './compositions/CompetitionRecap';
@@ -34,3 +34,5 @@ export const RemotionRoot: React.FC = () => (
     />
   </FontLoader>
 );
+
+registerRoot(RemotionRoot);
