@@ -65,15 +65,25 @@ function buildReelData(competition: any, events: any[]): ReelData {
   const { brief, teams, startedAt, result } = competition;
   const startMs = new Date(startedAt).getTime();
 
-  // Build criteria name list from brief rubric
+  // Build criteria name list from brief rubric.
+  // description is sometimes a placeholder (e.g. ">") — fall back to formatting the id.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function criterionLabel(c: any): string {
+    const desc = (c.description ?? '').trim();
+    if (desc.length > 2) return desc;
+    return (c.id as string)
+      .split('-')
+      .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const criteriaMap: Record<string, string> = {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (brief.rubric?.criteria ?? []).forEach((c: any) => {
-    criteriaMap[c.id] = c.description;
+    criteriaMap[c.id] = criterionLabel(c);
   });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const criteriaNames = (brief.rubric?.criteria ?? []).map((c: any) => c.description);
+  const criteriaNames = (brief.rubric?.criteria ?? []).map((c: any) => criterionLabel(c));
 
   // Build teams
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
