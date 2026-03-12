@@ -105,7 +105,7 @@ export default function LeaderboardPage() {
       fontFamily: MONOSPACE_FONT,
       color: '#c8eef8',
     }}>
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2.5rem 2rem' }}>
 
         {/* Hero Header */}
         <div style={{
@@ -113,49 +113,33 @@ export default function LeaderboardPage() {
           padding: '2rem 0',
           borderBottom: '1px solid #0a2235',
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.6rem' }}>
-                ◆ Model Rankings
-              </div>
-              <h1 style={{
-                fontSize: '2.4rem',
-                fontWeight: 800,
-                lineHeight: 1.05,
-                margin: 0,
-                fontFamily: MONOSPACE_FONT,
-                background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #00f0ff 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
+          <div>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.6rem' }}>
+              ◆ Model Rankings
+            </div>
+            <h1 style={{
+              fontSize: '2.4rem',
+              fontWeight: 800,
+              lineHeight: 1.05,
+              margin: 0,
+              fontFamily: MONOSPACE_FONT,
+              background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #00f0ff 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}>
+              Leaderboard
+            </h1>
+            {!loading && !error && (
+              <p style={{
+                fontSize: '0.72rem',
+                color: '#4a8fa8',
+                marginTop: '0.6rem',
               }}>
-                Leaderboard
-              </h1>
-              {!loading && !error && (
-                <p style={{
-                  fontSize: '0.72rem',
-                  color: '#4a8fa8',
-                  marginTop: '0.6rem',
-                }}>
-                  {entries.length > 0
-                    ? `${entries.length} model${entries.length !== 1 ? 's' : ''} ranked by win rate across all completed competitions`
-                    : 'No completed competitions yet'}
-                </p>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.5rem' }}>
-              <Link
-                href="/"
-                className="nav-link arena-btn"
-              >
-                ← GALLERY
-              </Link>
-              <Link
-                href="/competitions/new"
-                className="arena-btn arena-btn-primary new-comp-btn"
-              >
-                ⚔️ New Battle
-              </Link>
-            </div>
+                {entries.length > 0
+                  ? `${entries.length} model${entries.length !== 1 ? 's' : ''} ranked by win rate across all completed competitions`
+                  : 'No completed competitions yet'}
+              </p>
+            )}
           </div>
         </div>
 

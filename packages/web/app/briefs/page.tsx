@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { FORMAT_BADGES } from '../../lib/design-tokens';
+import { FORMAT_BADGES, MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
 import { formatTimeLimit } from '../../lib/format';
 
 interface BriefSummary {
@@ -47,116 +47,48 @@ export default function BriefsPage() {
     return true;
   });
 
-  const font = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
-
   return (
     <div style={{
       minHeight: '100vh',
-      fontFamily: font,
+      fontFamily: MONOSPACE_FONT,
       color: '#e4f8ff',
     }}>
       <style>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .brief-card {
-          transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
-        }
-        .brief-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 24px rgba(0,240,255,0.15);
-          border-color: #0e3050 !important;
-        }
-        .launch-btn {
-          transition: background 0.15s ease, transform 0.1s ease;
-        }
-        .launch-btn:hover {
-          background: #33f5ff !important;
-          transform: translateY(-1px);
-        }
-        .nav-link {
-          transition: color 0.15s ease, border-color 0.15s ease;
-        }
-        .nav-link:hover {
-          color: #c8eef8 !important;
-          border-color: #0e3050 !important;
-        }
-        .cat-btn {
-          transition: all 0.15s ease;
-        }
-        .cat-btn:hover {
-          border-color: rgba(0,128,255,0.4) !important;
-          color: #7cc6db !important;
-        }
-        .search-input:focus {
-          border-color: #0e3050 !important;
-          outline: none;
-        }
+        .brief-card { transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease; }
+        .brief-card:hover { transform: translateY(-2px); box-shadow: 0 4px 24px rgba(0,240,255,0.15); border-color: #0e3050 !important; }
+        .launch-btn { transition: background 0.15s ease, transform 0.1s ease; }
+        .launch-btn:hover { background: #33f5ff !important; transform: translateY(-1px); }
+        .cat-btn { transition: all 0.15s ease; }
+        .cat-btn:hover { border-color: rgba(0,128,255,0.4) !important; color: #7cc6db !important; }
+        .search-input:focus { border-color: #0e3050 !important; outline: none; }
       `}</style>
 
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2.5rem 2rem' }}>
 
         {/* Header */}
         <div style={{
           marginBottom: '2.5rem',
-          padding: '2rem 0',
+          padding: '1.5rem 0',
           borderBottom: '1px solid #0a2235',
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
-            <div>
-              <div style={{
-                fontSize: '0.6rem',
-                color: '#00f0ff',
-                letterSpacing: '4px',
-                textTransform: 'uppercase',
-                marginBottom: '0.6rem',
-                fontWeight: 700,
-              }}>
-                ◆ Brief Library
-              </div>
-              <h1 style={{
-                fontSize: '2rem',
-                fontWeight: 800,
-                lineHeight: 1.05,
-                margin: 0,
-                background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                fontFamily: font,
-              }}>
-                Competition Briefs
-              </h1>
-              <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.6rem' }}>
-                {loading ? 'Loading…' : `${briefs.length} brief${briefs.length !== 1 ? 's' : ''} available`}
-              </p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.5rem' }}>
-              <Link
-                href="/"
-                className="nav-link"
-                style={{
-                  fontSize: '0.62rem', color: '#4a8fa8', padding: '0.45rem 0.85rem',
-                  border: '1px solid #0a2235', borderRadius: '4px', textDecoration: 'none',
-                  letterSpacing: '1px', fontWeight: 600,
-                }}
-              >
-                ← GALLERY
-              </Link>
-              <Link
-                href="/competitions/new"
-                style={{
-                  fontSize: '0.62rem', fontWeight: 700, padding: '0.45rem 1.1rem',
-                  background: '#00f0ff', color: '#000408', borderRadius: '4px',
-                  textDecoration: 'none', letterSpacing: '1px', textTransform: 'uppercase',
-                  display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
-                }}
-                className="launch-btn"
-              >
-                ⚔️ New Battle
-              </Link>
-            </div>
+          <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
+            ◆ Brief Library
           </div>
+          <h1 style={{
+            fontSize: '2rem',
+            fontWeight: 800,
+            lineHeight: 1.05,
+            margin: 0,
+            background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+            fontFamily: MONOSPACE_FONT,
+          }}>
+            Competition Briefs
+          </h1>
+          <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.6rem' }}>
+            {loading ? 'Loading…' : `${briefs.length} brief${briefs.length !== 1 ? 's' : ''} available`}
+          </p>
         </div>
 
         {/* Filters */}
@@ -181,7 +113,7 @@ export default function BriefsPage() {
                 borderRadius: '6px',
                 color: '#e4f8ff',
                 fontSize: '0.72rem',
-                fontFamily: font,
+                fontFamily: MONOSPACE_FONT,
                 padding: '0.5rem 2rem 0.5rem 2rem',
                 boxSizing: 'border-box',
               }}
@@ -222,7 +154,7 @@ export default function BriefsPage() {
                       border: `1px solid ${active ? 'rgba(0,128,255,0.4)' : '#0a2235'}`,
                       background: active ? 'rgba(0,128,255,0.15)' : 'transparent',
                       color: active ? '#7cc6db' : '#1e4a5a',
-                      fontFamily: font,
+                      fontFamily: MONOSPACE_FONT,
                     }}
                   >
                     {cat}
@@ -233,7 +165,7 @@ export default function BriefsPage() {
           )}
 
           {(searchQuery.trim() || categoryFilter !== 'ALL') && (
-            <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: 0, fontFamily: font }}>
+            <p style={{ fontSize: '0.62rem', color: '#1e4a5a', margin: 0, fontFamily: MONOSPACE_FONT }}>
               Showing {filtered.length} of {briefs.length} brief{briefs.length !== 1 ? 's' : ''}
             </p>
           )}

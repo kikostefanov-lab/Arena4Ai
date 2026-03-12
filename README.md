@@ -122,7 +122,10 @@ Synthesis is not automatic — trigger it manually after a competition completes
 | `/competitions/:id` | Live arena with tabs: Scores, Presentations, Files, Synthesis, Forge |
 | `/competitions/:id/replay` | Replay viewer with scrubber and 1x–10x playback speed |
 | `/leaderboard` | Win-rate leaderboard per model |
-| `/analytics` | Competition stats |
+| `/analytics` | Competition stats and model performance charts |
+| `/briefs` | Competition brief library with search and tag filters |
+| `/compare` | Head-to-head model statistics |
+| `/personas` | Custom agent persona library |
 | `/tournaments/new` | Tournament creation |
 | `/tournaments/:id` | Tournament standings and match history |
 
@@ -137,6 +140,8 @@ packages/
   web/          @arena/web          — Next.js 15 App Router UI (port 3001)
 briefs/                             — YAML brief files
 ```
+
+`packages/web/components/TopBar.tsx` — fixed responsive navigation bar (hamburger below 1050px).
 
 ### Competition lifecycle
 

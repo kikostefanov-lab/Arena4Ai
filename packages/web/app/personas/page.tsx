@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { getModelColor } from '../../lib/design-tokens';
+import { getModelColor, MONOSPACE_FONT, KICKER_STYLE } from '../../lib/design-tokens';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -15,7 +15,7 @@ export interface SavedPersona {
   systemPrompt: string;
 }
 
-const FONT = "'SF Mono', 'Fira Code', 'Cascadia Code', monospace";
+const FONT = MONOSPACE_FONT;
 const STORAGE_KEY = 'arena4ai:personas';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -153,38 +153,30 @@ export default function PersonasPage() {
       <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
 
         {/* Header */}
-        <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                <Link
-                  href="/"
-                  style={{ fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}
-                >
-                  {'◆'} ARENA
-                </Link>
-                <span style={{ color: '#0a2235' }}>{'│'}</span>
-                <span style={{ fontSize: '0.6rem', color: '#4a8fa8', letterSpacing: '1px' }}>PERSONAS</span>
-              </div>
-              <h1 style={{ fontSize: '1.6rem', fontWeight: 800, margin: 0, color: '#c8eef8' }}>
-                Persona Library
-              </h1>
-              <p style={{ fontSize: '0.7rem', color: '#4a8fa8', marginTop: '0.4rem', lineHeight: 1.5 }}>
-                Define custom agent personas with system prompts. Pick them when creating a competition.
-              </p>
+        <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem' }}>
+          <div>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
+              ◆ Personas
             </div>
-            <button
-              onClick={() => { setShowForm(true); setEditingId(null); setForm(emptyForm()); }}
-              style={{
-                fontSize: '0.65rem', fontWeight: 700, padding: '0.5rem 1rem',
-                background: '#00f0ff', color: '#000408', border: 'none',
-                borderRadius: '6px', cursor: 'pointer', fontFamily: FONT,
-                letterSpacing: '1px', flexShrink: 0, whiteSpace: 'nowrap',
-              }}
-            >
-              + New Persona
-            </button>
+            <h1 style={{
+              fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.05, margin: 0,
+              background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              fontFamily: MONOSPACE_FONT,
+            }}>
+              Persona Library
+            </h1>
+            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem', lineHeight: 1.5 }}>
+              Define custom agent personas with system prompts. Pick them when creating a competition.
+            </p>
           </div>
+          <button
+            onClick={() => { setShowForm(true); setEditingId(null); setForm(emptyForm()); }}
+            className="arena-btn arena-btn-primary"
+            style={{ flexShrink: 0, whiteSpace: 'nowrap' }}
+          >
+            + New Persona
+          </button>
         </div>
 
         {/* Create / Edit Form */}

@@ -114,7 +114,7 @@ export default async function AnalyticsPage() {
       fontFamily: font,
       color: '#c8eef8',
     }}>
-      <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '2.5rem 2rem' }}>
 
         {/* Header */}
         <div style={{
@@ -125,19 +125,21 @@ export default async function AnalyticsPage() {
           paddingBottom: '1.25rem',
           borderBottom: '1px solid #0a2235',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <a href="/" className="arena-btn" style={{ textDecoration: 'none' }}>
-              ← Gallery
-            </a>
-            <span style={{ color: '#0a2235' }}>│</span>
-            <div>
-              <span style={{ ...KICKER_STYLE, color: '#00f0ff' }}>
-                📊 Analytics
-              </span>
-              <div style={{ fontSize: '0.52rem', color: '#1e4a5a', marginTop: '0.15rem', letterSpacing: '1px' }}>
-                Performance dashboard
-              </div>
+          <div>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
+              📊 Analytics
             </div>
+            <h1 style={{
+              fontSize: '2rem', fontWeight: 800, lineHeight: 1.05, margin: 0,
+              background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+              fontFamily: 'var(--font-orbitron), monospace',
+            }}>
+              Analytics
+            </h1>
+            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', marginTop: '0.4rem', margin: '0.4rem 0 0' }}>
+              Performance dashboard across all completed competitions
+            </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <a href="/analytics/criteria" className="arena-btn" style={{ textDecoration: 'none' }}>
