@@ -2586,6 +2586,26 @@ export default function CompetitionPage() {
             </button>
           )}
 
+          {/* Regenerate Reel button — shown when a reel is already done */}
+          {isComplete && reelStatus.status === 'done' && (
+            <button
+              onClick={handleGenerateReel}
+              style={{
+                fontSize: '0.70rem', color: '#4a8fa8',
+                background: 'transparent',
+                border: '1px solid #0a2235',
+                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
+                letterSpacing: '0.5px', fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+                transition: 'all 0.15s ease', fontFamily: 'inherit',
+              }}
+              title="Re-generate the reel with latest data"
+            >
+              🔄 Regenerate
+            </button>
+          )}
+
           {/* Spectate link — always shown */}
           <a
             href={`/competitions/${id}/spectate`}

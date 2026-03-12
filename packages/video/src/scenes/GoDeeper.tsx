@@ -22,9 +22,8 @@ export const GoDeeper: React.FC<GoDeeperProps> = ({ data }) => {
   // CTA fades in at frame 100
   const ctaOpacity = interpolate(frame, [100, 130], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
-  // hasSynthesis / hasForge reserved for future conditional rendering
-  void data.hasSynthesis;
-  void data.hasForge;
+  const { hasSynthesis, hasForge } = data;
+  const showEither = hasSynthesis || hasForge;
 
   return (
     <div style={{
@@ -39,51 +38,55 @@ export const GoDeeper: React.FC<GoDeeperProps> = ({ data }) => {
           ✦ GO DEEPER
         </div>
         <div style={{ fontSize: 30, color: TEXT_DIM }}>
-          Unlock premium analysis
+          {showEither ? 'Unlock premium analysis' : 'Explore more on arena4.ai'}
         </div>
       </div>
 
-      {/* Synthesis card */}
-      <div style={{
-        padding: '28px 32px',
-        background: `rgba(0,240,255,0.07)`,
-        border: `1.5px solid rgba(0,240,255,0.25)`,
-        borderRadius: 12,
-        marginBottom: 20,
-        opacity: synthOpacity,
-        transform: `translateY(${synthY}px)`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
-          <div style={{ fontSize: 32 }}>◈</div>
-          <div style={{ fontFamily: ORBITRON, fontSize: 32, fontWeight: 700, color: ACCENT_CYAN, letterSpacing: '2px' }}>
-            SYNTHESIS
+      {/* Synthesis card — only shown when synthesis exists */}
+      {hasSynthesis && (
+        <div style={{
+          padding: '28px 32px',
+          background: `rgba(0,240,255,0.07)`,
+          border: `1.5px solid rgba(0,240,255,0.25)`,
+          borderRadius: 12,
+          marginBottom: 20,
+          opacity: synthOpacity,
+          transform: `translateY(${synthY}px)`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
+            <div style={{ fontSize: 32 }}>◈</div>
+            <div style={{ fontFamily: ORBITRON, fontSize: 32, fontWeight: 700, color: ACCENT_CYAN, letterSpacing: '2px' }}>
+              SYNTHESIS
+            </div>
+          </div>
+          <div style={{ fontSize: 26, color: TEXT_MUTED, lineHeight: 1.5 }}>
+            AI cross-analysis of what each approach got right — per criterion
           </div>
         </div>
-        <div style={{ fontSize: 26, color: TEXT_MUTED, lineHeight: 1.5 }}>
-          AI cross-analysis of what each approach got right — per criterion
-        </div>
-      </div>
+      )}
 
-      {/* Forge card */}
-      <div style={{
-        padding: '28px 32px',
-        background: `rgba(255,102,0,0.07)`,
-        border: `1.5px solid rgba(255,102,0,0.25)`,
-        borderRadius: 12,
-        marginBottom: 40,
-        opacity: forgeOpacity,
-        transform: `translateY(${forgeY}px)`,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
-          <div style={{ fontSize: 32 }}>⚡</div>
-          <div style={{ fontFamily: ORBITRON, fontSize: 32, fontWeight: 700, color: ACCENT_ORANGE, letterSpacing: '2px' }}>
-            FORGE
+      {/* Forge card — only shown when forge artifacts exist */}
+      {hasForge && (
+        <div style={{
+          padding: '28px 32px',
+          background: `rgba(255,102,0,0.07)`,
+          border: `1.5px solid rgba(255,102,0,0.25)`,
+          borderRadius: 12,
+          marginBottom: 40,
+          opacity: forgeOpacity,
+          transform: `translateY(${forgeY}px)`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 10 }}>
+            <div style={{ fontSize: 32 }}>⚡</div>
+            <div style={{ fontFamily: ORBITRON, fontSize: 32, fontWeight: 700, color: ACCENT_ORANGE, letterSpacing: '2px' }}>
+              FORGE
+            </div>
+          </div>
+          <div style={{ fontSize: 26, color: TEXT_MUTED, lineHeight: 1.5 }}>
+            Turn the winner's solution into a full project blueprint
           </div>
         </div>
-        <div style={{ fontSize: 26, color: TEXT_MUTED, lineHeight: 1.5 }}>
-          Turn the winner's solution into a full project blueprint
-        </div>
-      </div>
+      )}
 
       {/* CTA */}
       <div style={{ fontSize: 26, color: ACCENT_GOLD, letterSpacing: '3px', opacity: ctaOpacity, fontFamily: ORBITRON }}>
