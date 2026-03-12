@@ -1,10 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: [
-    '@remotion/renderer',
-    '@remotion/bundler',
-    'remotion',
-  ],
   webpack: (config, { isServer }) => {
     if (isServer) {
       // Prevent Remotion/rspack native binaries from being bundled.
