@@ -7,12 +7,14 @@
 
 ## Overview
 
-Three focused sprints, each independently shippable:
+Four focused sprints, each independently shippable:
 
 | Sprint | Name | Focus | Scope |
 |--------|------|-------|-------|
-| **Sprint 1** | Polish & Naming | Typography, brand, UX, file naming, forge catalog | ~2–3 days |
+| **Sprint 1** | Polish & Naming | Typography, brand, UX, file naming, forge catalog foundations | ~2–3 days |
 | **Sprint 2** | Brief Intelligence | `deliverableType` schema, domain hints, brief creation UI | ~1–2 days |
+| **Sprint 3** | Agent Armory | DB-backed agent profiles, card gallery, stats, emoji avatars | ~4–5 days |
+| **Sprint 4** | Forge as Product Factory | Structured non-markdown outputs, per-domain artifacts, code consumption | ~3–4 days |
 | **Sprint 3** | Agent Armory | DB-backed agent profiles, card gallery, stats, emoji avatars | ~4–5 days |
 
 ---
@@ -467,15 +469,50 @@ In `packages/web/app/competitions/new/page.tsx`, Step 3 (Teams):
 
 ---
 
+## Sprint 4 — Forge as Product Factory (planned, post-Armory)
+
+**Depends on:** Sprint 1 (catalog pattern + `DOMAIN_TYPE_DEFAULTS`) and Sprint 2 (`deliverableType` + `domainHint` signals)
+
+### Goals
+With reliable domain signals from Sprint 2 and the catalog pattern established in Sprint 1, Sprint 4 focuses entirely on making Forge output genuinely human-usable products — not just markdown planning docs.
+
+### Scope (to be fully specced before Sprint 4 begins)
+
+- **Structured artifact outputs per domain:**
+  - Software: `.sql` schema files, `.env.example`, Dockerfile, GitHub Actions YAML (runnable, not markdown)
+  - Creative: slide deck outlines with actual copy per slide, brand guidelines with color/font specs
+  - Research: `.csv` comparison matrices importable to Google Sheets, bibliography with live URLs
+  - Business: financial model template (formula-ready), Gantt timeline data, org chart (Mermaid)
+
+- **Forge output format routing:** Each artifact spec declares its `outputFormat: 'markdown' | 'sql' | 'json' | 'csv' | 'yaml'`; the ZIP organizes by format and the UI renders/previews accordingly
+
+- **Forge consuming code files more deeply:** For software briefs, Forge reads the winning team's actual code and produces a cleaned reference implementation + test suite template based on it (currently code is included in context but the artifacts don't reference it meaningfully)
+
+- **Per-artifact download:** UI adds individual download buttons per artifact (not just "Download All") with correct file extensions (`.sql`, `.csv`, `.md`)
+
+### Dependencies
+```
+Sprint 1 — establishes DOMAIN_TYPE_DEFAULTS, catalog pattern, 4 new types
+    ↓
+Sprint 2 — adds deliverableType + domainHint signals; Forge knows its domain reliably
+    ↓
+Sprint 4 — builds structured output types on top of reliable domain routing
+```
+
+Sprint 3 (Armory) is independent and can run before or after Sprint 4.
+
+---
+
 ## Cross-Sprint Dependencies
 
 ```
 Sprint 1 ──────────────────────────────▶ independent
 Sprint 2 ──────────────────────────────▶ independent (can run in parallel with S1)
 Sprint 3 ──────────────────────────────▶ independent (builds on existing personas page)
+Sprint 4 ──────────────────────────────▶ requires Sprint 1 + Sprint 2 complete first
 ```
 
-No sprint blocks another. They can be executed sequentially or in parallel tracks.
+Recommended execution order: S1 → S2 → S3 → S4  (or S1+S2 in parallel, then S3, then S4)
 
 ---
 
