@@ -175,7 +175,14 @@ export default function AgentArmoryPage() {
         {TABS.map(tab => (
           <button
             key={tab.id}
-            onClick={() => setActiveTab(tab.id as Tab)}
+            onClick={() => {
+              // Clicking Builder tab manually always resets to "New Agent" mode
+              if (tab.id === 'builder') {
+                setBuilderAgent(null);
+                setBuilderForkId(null);
+              }
+              setActiveTab(tab.id as Tab);
+            }}
             style={{
               padding: '0.6rem 1.4rem',
               background: 'none',
@@ -401,7 +408,11 @@ export default function AgentArmoryPage() {
               setBuilderForkId(null);
               setActiveTab('roster');
             }}
-            onCancel={() => setActiveTab('roster')}
+            onCancel={() => {
+              setBuilderAgent(null);
+              setBuilderForkId(null);
+              setActiveTab('roster');
+            }}
           />
         </div>
       )}
