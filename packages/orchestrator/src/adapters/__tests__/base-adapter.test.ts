@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -120,5 +120,72 @@ describe('BaseAdapter.collectDeliverables', () => {
     const d = await a.collectDeliverables();
     expect(d.files[0].path).not.toContain(tmpDir);
     expect(d.files[0].path).toBe(join('output', 'report.md'));
+  });
+});
+
+const makeBrief = (overrides: Partial<import('@arena/shared').Brief> = {}): import('@arena/shared').Brief => ({
+  id: 'test-brief',
+  title: 'Test Brief',
+  problem: 'Solve the problem.',
+  constraints: ['No external libraries'],
+  deliverables: ['solution.py'],
+  rubric: { criteria: [{ id: 'correctness', weight: 1.0, maxScore: 10, description: 'Correct output' }] },
+  format: 'SPRINT' as any,
+  timeLimitMs: 300_000,
+  deliverableType: 'code',
+  ...overrides,
+});
+
+describe('BaseAdapter.injectBrief() deliverable format injection', () => {
+  let adapter: TestAdapter;
+
+  beforeEach(() => {
+    adapter = new TestAdapter('team-a', '/tmp/test', 'comp-1');
+  });
+
+  it('injects [DELIVERABLE FORMAT] section for code type', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'code' }), 'architect');
+    expect(adapter.getPrompt()).toContain('[DELIVERABLE FORMAT]');
+    expect(adapter.getPrompt()).toContain('runnable code files');
+  });
+
+  it('injects document guidance for document type', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'document' }), 'researcher');
+    expect(adapter.getPrompt()).toContain('Do NOT write code files');
+  });
+
+  it('injects analysis guidance for analysis type', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'analysis' }), 'analyst');
+    expect(adapter.getPrompt()).toContain('data analysis output');
+  });
+
+  it('injects presentation guidance for presentation type', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'presentation' }), 'designer');
+    expect(adapter.getPrompt()).toContain('presentation outline');
+  });
+
+  it('injects plan guidance for plan type', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'plan' }), 'architect');
+    expect(adapter.getPrompt()).toContain('strategic plan');
+  });
+
+  it('injects mixed guidance for mixed type', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'mixed' }), 'pioneer');
+    expect(adapter.getPrompt()).toContain('combination of code and documents');
+  });
+
+  it('defaults to code guidance when deliverableType is undefined', async () => {
+    const brief = makeBrief();
+    delete (brief as any).deliverableType;
+    await adapter.injectBrief(brief, 'architect');
+    expect(adapter.getPrompt()).toContain('runnable code files');
+  });
+
+  it('[DELIVERABLE FORMAT] section appears before [DELIVERABLES]', async () => {
+    await adapter.injectBrief(makeBrief({ deliverableType: 'document' }), 'researcher');
+    const formatIdx = adapter.getPrompt().indexOf('[DELIVERABLE FORMAT]');
+    const deliverablesIdx = adapter.getPrompt().indexOf('[DELIVERABLES]');
+    expect(formatIdx).toBeGreaterThan(-1);
+    expect(formatIdx).toBeLessThan(deliverablesIdx);
   });
 });
