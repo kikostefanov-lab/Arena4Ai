@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'crypto';
-import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
+import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeOutputFormat, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { extractJson } from '../utils/extract-json.js';
 
@@ -28,7 +28,9 @@ interface ArtifactSpec {
   type: ForgeArtifactType;
   title: string;
   systemPrompt: string;
-  universal?: boolean;
+  universal?: boolean;      // existing — preserve
+  outputFormat: ForgeOutputFormat;  // NEW
+  filename: string;                  // NEW
 }
 
 // ─── Universal artifacts (always generated) ───────────────────────────────────
@@ -38,6 +40,8 @@ const UNIVERSAL_SPECS: ArtifactSpec[] = [
     type: 'executive_summary',
     title: 'Executive Summary',
     universal: true,
+    outputFormat: 'markdown',
+    filename: 'executive_summary.md',
     systemPrompt: `You are a senior strategist writing an executive summary of a competitive evaluation.
 
 Given the competition results — the brief, team presentations, scores, and synthesis — produce a concise executive summary.
@@ -57,6 +61,8 @@ Output clean, well-structured Markdown.`,
     type: 'next_steps',
     title: 'Recommended Next Steps',
     universal: true,
+    outputFormat: 'markdown',
+    filename: 'next_steps.md',
     systemPrompt: `You are an action-oriented advisor creating a next steps plan based on competition results.
 
 Given the competition context, produce a clear prioritized action plan.
@@ -85,6 +91,8 @@ Output clean, well-structured Markdown.`,
     type: 'tool_recommendations',
     title: 'Tool Recommendations',
     universal: true,
+    outputFormat: 'markdown',
+    filename: 'tool_recommendations.md',
     systemPrompt: `You are a tools and technology advisor recommending specific tools based on competition results.
 
 Given the competition context, recommend concrete named tools — never generic categories like "a project management tool."
@@ -108,11 +116,13 @@ Output clean Markdown with the table and short paragraphs per category.`,
 
 // ─── Domain artifact catalog ───────────────────────────────────────────────────
 
-const ARTIFACT_CATALOG: Record<string, ArtifactSpec> = {
+export const ARTIFACT_CATALOG: Record<string, ArtifactSpec> = {
   // Software development
   roadmap: {
     type: 'roadmap',
     title: 'Implementation Roadmap',
+    outputFormat: 'markdown',
+    filename: 'roadmap.md',
     systemPrompt: `You are a senior technical program manager creating an implementation roadmap.
 
 Given the competition results, produce a phased delivery plan.
@@ -129,6 +139,8 @@ Output clean, well-structured Markdown with headers, tables, and bullet lists.`,
   task_graph: {
     type: 'task_graph',
     title: 'Task Dependency Graph',
+    outputFormat: 'markdown',
+    filename: 'task_graph.md',
     systemPrompt: `You are a project planner creating a task dependency graph.
 
 Given the competition results, decompose the solution into actionable tasks.
@@ -146,6 +158,8 @@ Output as Markdown with a table and a text-based dependency diagram.`,
   repo_blueprint: {
     type: 'repo_blueprint',
     title: 'Repository Blueprint',
+    outputFormat: 'markdown',
+    filename: 'repo_blueprint.md',
     systemPrompt: `You are a software architect creating a repository blueprint.
 
 Given the competition results, design the directory structure and technology stack.
@@ -162,6 +176,8 @@ Output as Markdown with code blocks for the directory tree.`,
   api_contracts: {
     type: 'api_contracts',
     title: 'API Contracts',
+    outputFormat: 'markdown',
+    filename: 'api_contracts.md',
     systemPrompt: `You are an API architect creating API contracts.
 
 Given the competition results, define the API surface of the solution.
@@ -179,6 +195,8 @@ Output as Markdown with code blocks for schemas and endpoint tables.`,
   risk_register: {
     type: 'risk_register',
     title: 'Risk Register',
+    outputFormat: 'markdown',
+    filename: 'risk_register.md',
     systemPrompt: `You are a risk analyst creating a risk register for a technical implementation.
 
 Given the competition results, identify risks and mitigation strategies.
@@ -196,6 +214,8 @@ Output as Markdown with a structured table.`,
   decision_log: {
     type: 'decision_log',
     title: 'Architectural Decision Log',
+    outputFormat: 'markdown',
+    filename: 'decision_log.md',
     systemPrompt: `You are a software architect documenting architectural decisions (ADRs).
 
 Given the competition results, capture key decisions made and ones needed for implementation.
@@ -216,6 +236,8 @@ Output as Markdown following the ADR format.`,
   evaluation_matrix: {
     type: 'evaluation_matrix',
     title: 'Evaluation Matrix',
+    outputFormat: 'markdown',
+    filename: 'evaluation_matrix.md',
     systemPrompt: `You are an analyst creating a structured evaluation matrix.
 
 Given the competition results — comparing approaches, services, vendors, or options — produce a comprehensive evaluation matrix.
@@ -234,6 +256,8 @@ Output clean Markdown with tables.`,
   vendor_scorecard: {
     type: 'vendor_scorecard',
     title: 'Vendor / Option Scorecard',
+    outputFormat: 'markdown',
+    filename: 'vendor_scorecard.md',
     systemPrompt: `You are a procurement analyst creating a detailed vendor or option scorecard.
 
 Given the competition results, produce a deep-dive scorecard for each evaluated option.
@@ -251,6 +275,8 @@ Output clean Markdown with structured sections per option.`,
   decision_framework: {
     type: 'decision_framework',
     title: 'Decision Framework',
+    outputFormat: 'markdown',
+    filename: 'decision_framework.md',
     systemPrompt: `You are a decision consultant creating a reusable decision framework.
 
 Given the competition results, build a framework that can guide future decisions of this type.
@@ -269,6 +295,8 @@ Output clean Markdown with structured sections and a text-based decision tree.`,
   content_outline: {
     type: 'content_outline',
     title: 'Content Outline',
+    outputFormat: 'markdown',
+    filename: 'content_outline.md',
     systemPrompt: `You are a content strategist creating a detailed content outline.
 
 Given the competition results, produce a comprehensive outline for the winning content approach.
@@ -286,6 +314,8 @@ Output clean Markdown with nested bullet lists.`,
   presentation_structure: {
     type: 'presentation_structure',
     title: 'Presentation Structure',
+    outputFormat: 'markdown',
+    filename: 'presentation_structure.md',
     systemPrompt: `You are a communications expert structuring a presentation.
 
 Given the competition results (especially if this was a presentation-type competition), create a detailed presentation blueprint.
@@ -303,6 +333,8 @@ Output clean Markdown with a structured slide-by-slide breakdown.`,
   messaging_guide: {
     type: 'messaging_guide',
     title: 'Messaging Guide',
+    outputFormat: 'markdown',
+    filename: 'messaging_guide.md',
     systemPrompt: `You are a messaging strategist creating a communications guide.
 
 Given the competition results, produce a messaging guide for this topic or initiative.
@@ -322,6 +354,8 @@ Output clean Markdown with structured sections.`,
   threat_model: {
     type: 'threat_model',
     title: 'Threat Model',
+    outputFormat: 'markdown',
+    filename: 'threat_model.md',
     systemPrompt: `You are a security architect creating a threat model.
 
 Given the competition results (especially a red vs blue or security competition), produce a comprehensive threat model.
@@ -340,6 +374,8 @@ Output clean Markdown with tables and structured sections.`,
   attack_surface: {
     type: 'attack_surface',
     title: 'Attack Surface Analysis',
+    outputFormat: 'markdown',
+    filename: 'attack_surface.md',
     systemPrompt: `You are a penetration tester documenting an attack surface analysis.
 
 Given the competition results, document the attack surface identified.
@@ -357,6 +393,8 @@ Output clean Markdown with structured findings in a security report format.`,
   remediation_plan: {
     type: 'remediation_plan',
     title: 'Remediation Plan',
+    outputFormat: 'markdown',
+    filename: 'remediation_plan.md',
     systemPrompt: `You are a security engineer creating a remediation plan.
 
 Given the security competition results, produce a prioritized remediation plan.
@@ -377,6 +415,8 @@ Output clean Markdown with tables and structured sections.`,
   business_case: {
     type: 'business_case',
     title: 'Business Case',
+    outputFormat: 'markdown',
+    filename: 'business_case.md',
     systemPrompt: `You are a business analyst writing a business case document.
 
 Given the competition results, produce a compelling business case for the winning approach.
@@ -397,6 +437,8 @@ Output clean Markdown with headers and tables.`,
   go_to_market: {
     type: 'go_to_market',
     title: 'Go-to-Market Plan',
+    outputFormat: 'markdown',
+    filename: 'go_to_market.md',
     systemPrompt: `You are a GTM strategist creating a go-to-market plan.
 
 Given the competition results, produce a practical GTM plan for bringing the winning approach to market or to stakeholders.
@@ -415,6 +457,8 @@ Output clean Markdown with structured sections.`,
   stakeholder_map: {
     type: 'stakeholder_map',
     title: 'Stakeholder Map',
+    outputFormat: 'markdown',
+    filename: 'stakeholder_map.md',
     systemPrompt: `You are an organizational consultant creating a stakeholder map.
 
 Given the competition context, identify and map all relevant stakeholders.
@@ -436,6 +480,8 @@ Output clean Markdown with tables and a text-based matrix.`,
   concept_canvas: {
     type: 'concept_canvas',
     title: 'Concept Canvas',
+    outputFormat: 'markdown',
+    filename: 'concept_canvas.md',
     systemPrompt: `You are an innovation facilitator creating a concept canvas.
 
 Given the competition results (especially an ideation or exploratory competition), produce a structured concept canvas for the winning idea.
@@ -454,6 +500,8 @@ Format as a visual canvas using Markdown tables and sections.`,
   mvp_definition: {
     type: 'mvp_definition',
     title: 'MVP Definition',
+    outputFormat: 'markdown',
+    filename: 'mvp_definition.md',
     systemPrompt: `You are a product manager defining an MVP.
 
 Given the competition results, define the Minimum Viable Product or Minimum Viable Approach.
@@ -472,6 +520,8 @@ Output clean Markdown with structured sections.`,
   hypothesis_backlog: {
     type: 'hypothesis_backlog',
     title: 'Hypothesis Backlog',
+    outputFormat: 'markdown',
+    filename: 'hypothesis_backlog.md',
     systemPrompt: `You are a lean startup practitioner creating a hypothesis backlog.
 
 Given the competition results, produce a structured backlog of hypotheses to test.
@@ -495,6 +545,8 @@ Output clean Markdown with structured tables.`,
   sql_schema: {
     type: 'sql_schema',
     title: 'Database Schema (SQL)',
+    outputFormat: 'sql',
+    filename: 'schema.sql',
     systemPrompt: `You are a database architect generating a production-ready SQL schema.
 
 Given the competition results (especially the winning team's code and API contracts), produce a complete SQL schema.
@@ -511,6 +563,8 @@ The output must be valid SQL that can be piped directly to psql.`,
   environment_template: {
     type: 'environment_template',
     title: 'Environment Variables Template',
+    outputFormat: 'text',
+    filename: '.env.example',
     systemPrompt: `You are a DevOps engineer creating a .env.example template.
 
 Given the competition results, identify all environment variables the solution requires.
@@ -529,6 +583,8 @@ No markdown, no JSON wrapper — just the .env file content.`,
   slide_deck: {
     type: 'slide_deck',
     title: 'Presentation Slide Deck',
+    outputFormat: 'markdown',
+    filename: 'slide_deck.md',
     systemPrompt: `You are a presentation expert creating a complete slide deck outline with full copy.
 
 Given the competition results (especially if this was a creative or communications brief), create a ready-to-build slide deck.
@@ -547,6 +603,8 @@ Output clean, well-structured Markdown. Each slide as a ## heading.`,
   spreadsheet_export: {
     type: 'spreadsheet_export',
     title: 'Decision Matrix (Spreadsheet)',
+    outputFormat: 'csv',
+    filename: 'data.csv',
     systemPrompt: `You are a data analyst creating a spreadsheet-ready decision matrix.
 
 Given the competition results (especially for research or procurement briefs), produce a structured CSV comparison matrix.
@@ -564,6 +622,48 @@ Criteria,Option A,Option B,Option C
 Performance,9 (fast response),7 (moderate),6 (slow)
 ...
 TOTAL (weighted),8.2,6.8,5.9`,
+  },
+
+  // New Sprint 4 entries
+  dockerfile: {
+    type: 'dockerfile',
+    title: 'Dockerfile',
+    outputFormat: 'dockerfile',
+    filename: 'Dockerfile',
+    systemPrompt: `You are a DevOps expert. Generate a production-ready multi-stage Dockerfile based on the competition brief and any code context provided.
+Requirements:
+- Use an appropriate base image for the language/framework
+- Stage 1: build/compile dependencies
+- Stage 2: minimal runtime image
+- Expose the correct port
+- Set a sensible CMD/ENTRYPOINT`,
+  },
+
+  github_actions: {
+    type: 'github_actions',
+    title: 'CI Pipeline',
+    outputFormat: 'yaml',
+    filename: '.github/workflows/ci.yml',
+    systemPrompt: `You are a DevOps expert. Generate a GitHub Actions CI workflow for the project described in the competition brief.
+Requirements:
+- Trigger on push and pull_request to main
+- Install dependencies
+- Run tests
+- Run a build step if applicable
+- Use appropriate language/runtime versions`,
+  },
+
+  gantt_timeline: {
+    type: 'gantt_timeline',
+    title: 'Project Timeline',
+    outputFormat: 'markdown',
+    filename: 'gantt_timeline.md',
+    systemPrompt: `You are a project manager. Generate a Mermaid gantt chart as a markdown document showing key milestones and phases for this project.
+Requirements:
+- Extract real milestones and phases from the brief and competition context
+- Include at least 3 sections (phases) with named tasks and durations
+- Use realistic date ranges
+Format: a markdown document with a single mermaid gantt code block, followed by a brief legend.`,
   },
 };
 
@@ -583,13 +683,13 @@ const FORMAT_DOMAIN_DEFAULTS: Record<string, { domain: ForgeDomain; types: Forge
  * Default artifact types per ForgeDomain.
  * Pre-populated for Sprint 2's selectDomainArtifacts() expansion and brief.domainHint support.
  */
-const DOMAIN_TYPE_DEFAULTS: Record<ForgeDomain, ForgeArtifactType[]> = {
-  software:  ['roadmap', 'task_graph', 'repo_blueprint', 'decision_log'],
-  research:  ['evaluation_matrix', 'vendor_scorecard', 'decision_framework', 'decision_log'],
-  creative:  ['presentation_structure', 'messaging_guide', 'content_outline', 'concept_canvas'],
-  security:  ['threat_model', 'attack_surface', 'remediation_plan', 'risk_register'],
-  business:  ['business_case', 'go_to_market', 'stakeholder_map', 'decision_framework'],
+export const DOMAIN_TYPE_DEFAULTS: Record<ForgeDomain, ForgeArtifactType[]> = {
+  software:  ['roadmap', 'sql_schema', 'environment_template', 'dockerfile', 'github_actions', 'api_contracts'],
+  research:  ['evaluation_matrix', 'spreadsheet_export', 'decision_framework', 'decision_log'],
+  creative:  ['slide_deck', 'concept_canvas', 'messaging_guide'],
+  business:  ['roadmap', 'gantt_timeline', 'risk_register', 'decision_log'],
   ideation:  ['concept_canvas', 'mvp_definition', 'hypothesis_backlog', 'decision_framework'],
+  security:  ['risk_register', 'api_contracts', 'repo_blueprint', 'decision_log'],
 };
 
 const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
@@ -602,18 +702,12 @@ const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
 const DOMAIN_SELECTION_SYSTEM_PROMPT = `You are a classifier. Given a competition brief, select the most relevant domain and 3-4 artifact types to generate.
 
 Available domains and their artifact types:
-- software: roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log, sql_schema, environment_template
-- research: evaluation_matrix, vendor_scorecard, decision_framework, spreadsheet_export
-- creative: content_outline, presentation_structure, messaging_guide, slide_deck
-- security: threat_model, attack_surface, remediation_plan, risk_register
-- business: business_case, go_to_market, stakeholder_map
-- ideation: concept_canvas, mvp_definition, hypothesis_backlog
-
-Notes on new types:
-- sql_schema — raw PostgreSQL schema for software domain
-- environment_template — .env.example template for software domain
-- slide_deck — slide-by-slide outline for creative/pitch domain
-- spreadsheet_export — CSV comparison matrix for research domain
+- software: roadmap, sql_schema, environment_template, dockerfile, github_actions, api_contracts
+- research: evaluation_matrix, spreadsheet_export, decision_framework, decision_log
+- creative: slide_deck, concept_canvas, messaging_guide
+- business: roadmap, gantt_timeline, risk_register, decision_log
+- ideation: concept_canvas, mvp_definition, hypothesis_backlog, decision_framework
+- security: risk_register, api_contracts, repo_blueprint, decision_log
 
 Respond ONLY with a JSON object. No explanation, no markdown, just JSON:
 {"domain":"<domain>","types":["<type1>","<type2>","<type3>","<type4>"]}
@@ -664,6 +758,20 @@ Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}${deliverableTyp
   } catch {
     return GENERIC_DEFAULT;
   }
+}
+
+// ─── Format-aware prompt builder ─────────────────────────────────────────────
+
+export function buildPrompt(spec: ArtifactSpec): string {
+  const formatInstructions: Partial<Record<ForgeOutputFormat, string>> = {
+    sql:        'Respond with raw SQL DDL only — no markdown fences, no explanations.',
+    csv:        'Respond with raw CSV only — a header row followed by data rows. No markdown fences.',
+    yaml:       'Respond with raw YAML only — no markdown fences.',
+    dockerfile: 'Respond with a raw Dockerfile only — no markdown fences, no explanations.',
+    text:       'Respond with the file contents only — no markdown fences, no explanations.',
+  };
+  const extra = formatInstructions[spec.outputFormat];
+  return extra ? `${spec.systemPrompt}\n\n${extra}` : spec.systemPrompt;
 }
 
 // ─── User prompt builder ──────────────────────────────────────────────────────
@@ -803,7 +911,7 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
     if (prog) prog[spec.type] = 'generating';
 
     try {
-      const content = await runClaude(userPrompt, spec.systemPrompt);
+      const content = await runClaude(userPrompt, buildPrompt(spec));
       if (prog) prog[spec.type] = 'done';
       return {
         type: spec.type,
@@ -811,6 +919,8 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
         content,
         generatedAt: new Date().toISOString(),
         universal: spec.universal ?? false,
+        outputFormat: spec.outputFormat,
+        filename: spec.filename,
       };
     } catch (err) {
       if (prog) prog[spec.type] = 'error';
