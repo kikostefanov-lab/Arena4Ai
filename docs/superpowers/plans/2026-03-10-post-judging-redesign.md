@@ -1,5 +1,7 @@
 # Post-Judging Redesign Implementation Plan
 
+> **Status: COMPLETE**
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make all post-judging actions (presentations download/modal, files ZIP+preview, synthesis, forge) user-triggered and independent, plus improve global readability.

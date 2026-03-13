@@ -1,6 +1,8 @@
 
 # Sprint 3 — Agent Armory Implementation Plan
 
+> **Status: COMPLETE**
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the localStorage-only `/personas` page with a DB-backed Agent Armory, migrate existing localStorage personas on first visit, seed 9 built-in system agents, show win/loss stats on agent cards, support fork/retire/tags/model variant, and wire the Armory picker into competition creation Step 3.

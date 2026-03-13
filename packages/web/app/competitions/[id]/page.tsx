@@ -2535,7 +2535,7 @@ export default function CompetitionPage() {
             gap: '0.8rem', flexWrap: 'nowrap', overflow: 'hidden',
           }}>
             {briefTitle && (
-              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#c8eef8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#c8eef8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                 {briefTitle}
               </span>
             )}

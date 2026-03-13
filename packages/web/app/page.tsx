@@ -88,7 +88,7 @@ export default function GalleryPage() {
       if (document.visibilityState !== 'visible') return;
       fetch('/api/competitions')
         .then((r) => r.json())
-        .then((data: CompetitionSummary[]) => setCompetitions(Array.isArray(data) ? data : []))
+        .then((data: CompetitionSummary[]) => { if (Array.isArray(data)) setCompetitions(data); })
         .catch(() => { /* silently ignore refresh errors */ });
     };
     const interval = setInterval(refresh, 10_000);
