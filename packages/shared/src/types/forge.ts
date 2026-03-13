@@ -29,7 +29,12 @@ export type ForgeArtifactType =
   // Ideation / exploration
   | 'concept_canvas'
   | 'mvp_definition'
-  | 'hypothesis_backlog';
+  | 'hypothesis_backlog'
+  // Structured / domain-specific outputs (Sprint 1)
+  | 'sql_schema'           // raw SQL schema for software domain
+  | 'environment_template' // .env.example template for software domain
+  | 'slide_deck'           // slide-by-slide outline with copy for creative domain
+  | 'spreadsheet_export';  // CSV comparison matrix for research domain
 
 export type ForgeDomain =
   | 'software'
