@@ -10,7 +10,7 @@ Competitive AI orchestration platform. Two or more AI agents race to solve a str
 - **Presentation download & expand** — download each team's presentation as markdown or view it in a full modal
 - **Files tab** — inline file preview with syntax tinting, full-file modal, and per-team ZIP download
 - **On-demand synthesis** — manually trigger AI synthesis to blend the best ideas from all teams
-- **The Forge** — post-completion artifact generation with source picker (winner / loser / synthesis); stacked runs, each downloadable as ZIP
+- **The Forge** — post-completion artifact factory with domain detection (software/business/research/creative); generates up to 12 artifact types including starter kits; stacked runs, each downloadable as full ZIP or individual files
 - **Live event stream** — WebSocket-backed real-time view of agent actions (tool calls, file writes, reasoning) per team
 - **Commentary agent** — optional live AI commentary batched from the event stream
 - **Replay viewer** — scrub through any competition at 1x–10x speed
@@ -184,16 +184,17 @@ After a competition reaches `COMPLETE`, trigger The Forge via the web UI or API.
 - **Loser** — uses the losing team's deliverables as context
 - **Synthesis** — uses the synthesis result as context (requires synthesis to be run first)
 
-Each forge run generates six build artifacts in parallel using Claude:
+The Forge auto-detects the brief's domain (software / business / research / creative) and selects the most relevant artifact types. Up to 12 artifact types available:
 
-- **Roadmap** — phased development plan
-- **Task graph** — dependency-aware task breakdown
-- **Repo blueprint** — recommended repository structure
-- **API contracts** — interface definitions
-- **Risk register** — identified risks and mitigations
-- **Decision log** — key architectural decisions
+**Core** (all domains): roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log
 
-Forge runs stack — each is stored and downloadable as a ZIP. Results are displayed in the Forge tab.
+**Domain-specific**: dockerfile and github_actions (software), gantt_timeline (business)
+
+**Starter kit** (always generated): reference_implementation, test_suite_template, project_readme
+
+Each artifact has a typed output format (markdown, dockerfile, yaml, sql, csv, json, text) and is downloadable individually or as a full ZIP. Results are displayed in the Forge tab with format badges and per-artifact download buttons.
+
+Forge runs stack — each is stored as a separate `ForgeRun` with its own source, model, and artifact set.
 
 ## Marketing Site (arena4.ai)
 
@@ -218,7 +219,7 @@ See `marketing/README.md` for first-time setup (D1 create, schema migration, ADM
 ## Tests
 
 ```bash
-# Orchestrator tests (159 tests)
+# Orchestrator tests (211 tests)
 npm run test --workspace=packages/orchestrator
 
 # Type checking

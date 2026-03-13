@@ -1,5 +1,7 @@
 # Polish Sprint Implementation Plan
 
+> **Status: COMPLETE**
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Extract a shared EventRow component with Option-B expand, add replay keyboard shortcuts, add real per-artifact forge progress, and add a forge zip download + "Forged by" badge.

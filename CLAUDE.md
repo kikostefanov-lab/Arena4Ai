@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: V2 sprint complete. 159 tests passing.**
+**Status: Sprint 4 complete. 211 tests passing.**
 
 ## Running the Stack
 
@@ -51,7 +51,7 @@ npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml 
 ## Tests
 
 ```bash
-npm run test --workspace=packages/orchestrator   # 159 tests
+npm run test --workspace=packages/orchestrator   # 211 tests
 npm run typecheck --workspace=packages/orchestrator
 npx tsc --noEmit -p packages/web/tsconfig.json
 ```
@@ -101,6 +101,8 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 - `GET /analytics/summary` — competition stats
 - `POST /competitions/:id/forge` — trigger forge (requires COMPLETE/FORGE_COMPLETE state, `ANTHROPIC_API_KEY`); body: `{ source: 'winner'|'loser'|'synthesis' }`
 - `GET /competitions/:id/forge` — get forge runs → `{ status: 'forging'|'complete'|'idle', runs: ForgeRun[] }`
+- `GET /competitions/:id/forge/:runId/download` — download full forge run as ZIP
+- `GET /competitions/:id/forge/:runId/artifacts/:type/download` — download single artifact (raw file with correct Content-Type)
 - `POST /competitions/:id/synthesis` — trigger on-demand synthesis (202 async, requires COMPLETE state)
 - `GET /competitions/:id/synthesis` — synthesis status
 - `GET /competitions/:id/deliverables/:teamId/download` — ZIP of team deliverables
@@ -113,7 +115,7 @@ Rate limiting: 10/min on `POST /competitions`; 5/min on `POST /competitions/:id/
 After collecting deliverables, `presentation-generator.ts` calls Claude (in parallel per team) to generate human-readable `TeamPresentation` objects that map deliverables back to rubric criteria. This runs BEFORE judging (PRESENTING state).
 
 ### The Forge (post-completion)
-Human-triggered via `POST /competitions/:id/forge`. Uses `@anthropic-ai/sdk` directly to generate 6 build artifacts (roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log) in parallel. Requires `ANTHROPIC_API_KEY`.
+Human-triggered via `POST /competitions/:id/forge`. Uses `@anthropic-ai/sdk` directly to generate artifacts in parallel. Requires `ANTHROPIC_API_KEY`.
 
 Forge runs are **stacked** — each trigger appends a new `ForgeRun` to `results.forge`. Source picker: `winner` | `loser` | `synthesis`. The `ForgeRun` type (in `@arena/shared`):
 ```ts
@@ -129,6 +131,17 @@ interface ForgeRun {
 }
 ```
 Legacy single `ForgeOutput` records are wrapped into a 1-element array on read (backward-compat in `repository.ts`).
+
+**Sprint 4 — Forge as Product Factory:**
+- `ForgeOutputFormat` type: `'markdown' | 'sql' | 'csv' | 'yaml' | 'json' | 'text' | 'dockerfile'`
+- `ForgeArtifact` has `outputFormat: ForgeOutputFormat` and `filename: string`; legacy records normalized on read via `normalizeArtifact()` (backfills `outputFormat: 'markdown'`, `filename: '{type}.md'`)
+- **Domain detection** — auto-selects 'software' | 'business' | 'research' | 'creative' from brief; `DOMAIN_TYPE_DEFAULTS` maps domain → default artifact types
+- **12 artifact types**: roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log, dockerfile, github_actions, gantt_timeline, reference_implementation, test_suite_template, project_readme
+- **Starter kit** — `generateStarterKit()` runs in parallel with domain artifacts, producing `reference_implementation`, `test_suite_template`, `project_readme` (3 extra artifacts, always appended)
+- **ZIP routing** — `packages/web/lib/forge-zip-utils.ts` exports `resolveZipPath(artifact)` and `expandMultiFileArtifact(zip, artifact)` for correct folder placement and multi-file expansion
+- **Per-artifact download button** on each artifact card in the Forge tab
+- **Format badges** (top-right corner of each card) showing outputFormat
+- **Format-aware modal** — CSV → table, multi-file JSON → file tree, sql/yaml/dockerfile/text → `<pre>`, markdown → unchanged
 
 ### Judging pipeline
 1. **AI cross-judge** (`ai-judge.ts`) — PRIMARY scorer. Claude reads actual deliverables and scores against rubric criteria with real analysis.
@@ -160,9 +173,12 @@ Enable with `--commentary` flag or `commentary: true` in RunOptions. Batches 5 e
 
 Run migrations: `DATABASE_URL=postgresql://localhost/arena npm run db:migrate --workspace=packages/orchestrator`
 
+**Delete is transactional** — `repo.delete()` wraps events/results/competitions deletes in a single transaction to prevent orphaned rows.
+
 ### Design tokens & shared utilities
 - `packages/web/lib/design-tokens.ts` — TRON model colors (claude `#ff6600`, codex `#0066ff`, gemini `#00f0ff`), STATE_STYLES, `hexToRgb()`. Use these everywhere — don't hardcode colors or redefine `hexToRgb`.
 - `packages/web/lib/format.ts` — `formatDuration`, `formatElapsed`, `formatTimeLimit`, `resolveTeamLabel`. Don't inline team-label resolution in components.
+- `packages/web/lib/forge-zip-utils.ts` — `resolveZipPath(artifact)` and `expandMultiFileArtifact(zip, artifact)`. Use these in any code building forge ZIPs — don't duplicate the routing tables.
 
 ### TopBar & responsive navigation
 - `packages/web/components/TopBar.tsx` — fixed top nav with ARENA4AI logo + 6 nav links + ⚔ New Battle CTA

@@ -191,10 +191,12 @@ export class CompetitionRepository {
   }
 
   async delete(id: string): Promise<boolean> {
-    // cascade: events and results first (FK), then competition row
-    await this.db.delete(events).where(eq(events.competitionId, id));
-    await this.db.delete(results).where(eq(results.competitionId, id));
-    const deleted = await this.db.delete(competitions).where(eq(competitions.id, id)).returning({ id: competitions.id });
+    // cascade: events and results first (FK), then competition row — all in one transaction
+    const deleted = await this.db.transaction(async (tx) => {
+      await tx.delete(events).where(eq(events.competitionId, id));
+      await tx.delete(results).where(eq(results.competitionId, id));
+      return tx.delete(competitions).where(eq(competitions.id, id)).returning({ id: competitions.id });
+    });
     return deleted.length > 0;
   }
 }
