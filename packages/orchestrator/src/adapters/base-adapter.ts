@@ -9,6 +9,15 @@ import type { SandboxManager } from '../sandbox/sandbox-manager.js';
 const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
 
+const DELIVERABLE_GUIDE: Record<string, string> = {
+  code:         'Produce runnable code files. The output should be executable.',
+  document:     'Produce written documents (.md, .txt). Do NOT write code files unless explicitly required.',
+  analysis:     'Produce data analysis output (.csv, .md tables). Focus on data, not code.',
+  presentation: 'Produce a presentation outline or slide content. Written format preferred.',
+  plan:         'Produce a strategic plan, roadmap, or architecture document in Markdown.',
+  mixed:        'Produce whichever combination of code and documents best addresses the brief.',
+};
+
 /** Recursively walk `dir`, returning all text files under size limits. */
 async function walkDir(
   dir: string,
@@ -81,6 +90,8 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       .map((c) => `- ${c.id} (weight ${Math.round(c.weight * 100)}%): ${c.description}`)
       .join('\n');
 
+    const deliverableFormatGuidance = `[DELIVERABLE FORMAT]\n${DELIVERABLE_GUIDE[brief.deliverableType ?? 'code']}`;
+
     this.promptText = [
       `[PERSONA]\n${persona}`,
       `[COMPETITION RULES]`,
@@ -90,6 +101,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       `[BRIEF: ${brief.title}]`,
       brief.problem,
       constraints,
+      deliverableFormatGuidance,
       [
         '[DELIVERABLES]',
         '⚠️  CRITICAL: A judge will collect files from your current working directory after the timer ends.',
