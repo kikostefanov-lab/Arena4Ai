@@ -98,6 +98,11 @@ BEGIN
     LEFT JOIN personas p ON p.name = ap.name AND p.retired = FALSE
     ON CONFLICT (id) DO NOTHING;
 
+    -- Fix: gemini standard agent must point to persona-standard-gemini, not persona-standard
+    UPDATE agents SET persona_id = 'persona-standard-gemini'
+    WHERE id = 'agent-gemini-standard'
+      AND persona_id = 'persona-standard';
+
     -- Step 5: Drop agent_profiles
     DROP TABLE agent_profiles;
   END IF;
