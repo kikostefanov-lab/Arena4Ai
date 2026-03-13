@@ -50,6 +50,13 @@
       "when": 1741910400000,
       "tag": "0008_agent_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1741996800000,
+      "tag": "0009_personas_agents",
+      "breakpoints": true
     }
   ]
 }
