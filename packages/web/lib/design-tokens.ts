@@ -65,7 +65,7 @@ export function getStateStyle(state: string): { bg: string; color: string } {
 export const FORMAT_BADGES: Record<string, { bg: string; color: string; label: string; icon: string }> = {
   SPRINT:      { bg: 'rgba(0,212,255,0.12)',  color: '#00d4ff', label: 'SPRINT',    icon: '⚡' },
   HACKATHON:   { bg: 'rgba(0,128,255,0.12)',  color: '#0080ff', label: 'HACKATHON', icon: '🔨' },
-  RED_VS_BLUE: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', label: 'RED×BLUE',  icon: '⚔️' },
+  RED_VS_BLUE: { bg: 'rgba(239,68,68,0.12)',  color: '#ef4444', label: 'RED×BLUE',  icon: '⚔' },
   RELAY_RACE:  { bg: 'rgba(0,240,255,0.12)',  color: '#00f0ff', label: 'RELAY',     icon: '🔄' },
 };
 

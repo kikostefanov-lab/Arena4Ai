@@ -95,7 +95,7 @@ const FORMAT_META: Record<Format, { emoji: string; label: string; subtitle: stri
   SPRINT:      { emoji: '⚡', label: 'Sprint',       subtitle: 'Quick 15-min challenge',   color: '#06b6d4', glowColor: 'rgba(6,182,212,0.35)'   },
   HACKATHON:   { emoji: '🔨', label: 'Hackathon',    subtitle: 'Deep 2-hour build',        color: '#00f0ff', glowColor: 'rgba(168,85,247,0.35)'  },
   RELAY_RACE:  { emoji: '🔄', label: 'Relay Race',   subtitle: 'Pass the baton',           color: '#0066ff', glowColor: 'rgba(34,197,94,0.35)'   },
-  RED_VS_BLUE: { emoji: '⚔️', label: 'Red vs Blue',  subtitle: 'Attack & Defend',           color: '#ef4444', glowColor: 'rgba(239,68,68,0.35)'   },
+  RED_VS_BLUE: { emoji: '⚔', label: 'Red vs Blue',  subtitle: 'Attack & Defend',           color: '#ef4444', glowColor: 'rgba(239,68,68,0.35)'   },
 };
 
 const MODEL_META: Record<Model, { emoji: string; label: string; color: string; glowColor: string }> = {

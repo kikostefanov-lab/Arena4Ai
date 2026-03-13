@@ -139,7 +139,7 @@ function PreBattleScreen({ color, label }: { color: string; label: string }) {
       }} />
 
       <div style={{ fontSize: '3.5rem', filter: `drop-shadow(0 0 22px ${color})`, animation: 'pulse 2s ease-in-out infinite', zIndex: 1 }}>
-        ⚔️
+        ⚔
       </div>
 
       <div style={{ textAlign: 'center', zIndex: 1 }}>

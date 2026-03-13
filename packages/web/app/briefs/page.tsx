@@ -187,7 +187,7 @@ export default function BriefsPage() {
           }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📭</div>
             <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>
-              No briefs found — is the API server running?
+              Brief archive is empty — forge a new competition or import a preset.
             </p>
           </div>
         )}
@@ -297,7 +297,7 @@ export default function BriefsPage() {
                       marginTop: 'auto',
                     }}
                   >
-                    ⚔️ Launch →
+                    ⚔ Launch →
                   </Link>
                 </div>
               );
