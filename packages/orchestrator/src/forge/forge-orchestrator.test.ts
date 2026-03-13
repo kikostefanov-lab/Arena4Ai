@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import type { ForgeArtifactType } from '@arena/shared';
-import { selectDomainArtifacts } from './forge-orchestrator.js';
+import type { ForgeArtifactType, ForgeOutputFormat } from '@arena/shared';
+import { selectDomainArtifacts, buildPrompt, ARTIFACT_CATALOG, DOMAIN_TYPE_DEFAULTS } from './forge-orchestrator.js';
 
 describe('ForgeArtifactType', () => {
   it('includes sql_schema', () => {
@@ -47,7 +47,7 @@ describe('selectDomainArtifacts — domainHint and deliverableType signals', () 
     };
     const result = await selectDomainArtifacts(brief);
     expect(result.domain).toBe('creative');
-    expect(result.types).toContain('presentation_structure');
+    expect(result.types).toContain('messaging_guide');
   });
 
   it('domainHint "security" returns security artifacts', async () => {
@@ -58,7 +58,7 @@ describe('selectDomainArtifacts — domainHint and deliverableType signals', () 
     };
     const result = await selectDomainArtifacts(brief);
     expect(result.domain).toBe('security');
-    expect(result.types).toContain('threat_model');
+    expect(result.types).toContain('risk_register');
   });
 
   it('domainHint "business" returns business artifacts', async () => {
@@ -69,6 +69,92 @@ describe('selectDomainArtifacts — domainHint and deliverableType signals', () 
     };
     const result = await selectDomainArtifacts(brief);
     expect(result.domain).toBe('business');
-    expect(result.types).toContain('business_case');
+    expect(result.types).toContain('gantt_timeline');
+  });
+});
+
+describe('buildPrompt', () => {
+  it('appends SQL instruction for sql outputFormat', () => {
+    const spec = {
+      type: 'sql_schema' as ForgeArtifactType,
+      title: 'Schema',
+      systemPrompt: 'You are a DB expert.',
+      outputFormat: 'sql' as ForgeOutputFormat,
+      filename: 'schema.sql',
+    };
+    const result = buildPrompt(spec);
+    expect(result).toContain('You are a DB expert.');
+    expect(result).toContain('raw SQL DDL only');
+  });
+
+  it('returns systemPrompt unchanged for markdown outputFormat', () => {
+    const spec = {
+      type: 'roadmap' as ForgeArtifactType,
+      title: 'Roadmap',
+      systemPrompt: 'You are a planner.',
+      outputFormat: 'markdown' as ForgeOutputFormat,
+      filename: 'roadmap.md',
+    };
+    expect(buildPrompt(spec)).toBe('You are a planner.');
+  });
+});
+
+describe('ARTIFACT_CATALOG completeness', () => {
+  it('every catalog entry has outputFormat and filename', () => {
+    for (const [key, entry] of Object.entries(ARTIFACT_CATALOG)) {
+      expect(entry.outputFormat, `${key} missing outputFormat`).toBeDefined();
+      expect(entry.filename, `${key} missing filename`).toBeDefined();
+    }
+  });
+});
+
+describe('new artifact catalog entries', () => {
+  it('dockerfile entry exists with correct outputFormat and filename', () => {
+    expect(ARTIFACT_CATALOG['dockerfile']).toMatchObject({
+      type: 'dockerfile',
+      outputFormat: 'dockerfile',
+      filename: 'Dockerfile',
+    });
+  });
+
+  it('github_actions entry exists with yaml outputFormat', () => {
+    expect(ARTIFACT_CATALOG['github_actions']).toMatchObject({
+      type: 'github_actions',
+      outputFormat: 'yaml',
+      filename: '.github/workflows/ci.yml',
+    });
+  });
+
+  it('gantt_timeline entry exists with markdown outputFormat', () => {
+    expect(ARTIFACT_CATALOG['gantt_timeline']).toMatchObject({
+      type: 'gantt_timeline',
+      outputFormat: 'markdown',
+      filename: 'gantt_timeline.md',
+    });
+  });
+});
+
+describe('DOMAIN_TYPE_DEFAULTS', () => {
+  it('software domain includes dockerfile and github_actions', () => {
+    const softwareTypes = DOMAIN_TYPE_DEFAULTS['software'];
+    expect(softwareTypes).toContain('dockerfile');
+    expect(softwareTypes).toContain('github_actions');
+    expect(softwareTypes).toContain('sql_schema');
+    expect(softwareTypes).toContain('environment_template');
+  });
+
+  it('business domain includes gantt_timeline', () => {
+    expect(DOMAIN_TYPE_DEFAULTS['business']).toContain('gantt_timeline');
+  });
+
+  it('all DOMAIN_TYPE_DEFAULTS types exist in ARTIFACT_CATALOG', () => {
+    for (const [domain, types] of Object.entries(DOMAIN_TYPE_DEFAULTS)) {
+      for (const t of types) {
+        expect(
+          Object.keys(ARTIFACT_CATALOG),
+          `${domain}.${t} not in ARTIFACT_CATALOG`
+        ).toContain(t);
+      }
+    }
   });
 });
