@@ -397,7 +397,7 @@ export default function PersonasPage() {
                           overflow: 'hidden',
                           position: 'relative',
                         }}>
-                          <pre style={{ margin: 0, fontFamily: BODY_FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          <pre style={{ margin: 0, fontFamily: FONT, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                             {persona.systemPrompt.length > 200
                               ? persona.systemPrompt.slice(0, 200) + '…'
                               : persona.systemPrompt}
