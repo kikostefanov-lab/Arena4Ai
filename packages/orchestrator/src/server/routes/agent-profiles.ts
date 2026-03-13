@@ -87,7 +87,8 @@ export function createAgentProfilesRouter(repo: AgentRepository): Router {
         return;
       }
       const retired = await repo.retire(req.params.id);
-      res.json({ ok: retired !== null });
+      if (!retired) { res.status(404).json({ error: 'Not found' }); return; }
+      res.json({ ok: true });
     } catch (_err) {
       res.status(500).json({ error: 'Failed to retire agent profile' });
     }
