@@ -69,8 +69,13 @@ export function PersonaForm({ initial, onSave, onCancel, saveLabel = 'Save Perso
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'full', idea: idea.trim() }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = 'Generation failed';
+        try { msg = (JSON.parse(text) as { error?: string }).error ?? msg; } catch {}
+        throw new Error(msg);
+      }
+      const data = await res.json() as { name?: string; description?: string; systemPrompt?: string; avatar?: string; tags?: string[] };
       setName(data.name ?? '');
       setDescription(data.description ?? '');
       setSystemPrompt(data.systemPrompt ?? '');
@@ -94,8 +99,13 @@ export function PersonaForm({ initial, onSave, onCancel, saveLabel = 'Save Perso
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mode: 'expand', systemPrompt: systemPrompt.trim() }),
       });
-      if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
+      if (!res.ok) {
+        const text = await res.text();
+        let msg = 'Expansion failed';
+        try { msg = (JSON.parse(text) as { error?: string }).error ?? msg; } catch {}
+        throw new Error(msg);
+      }
+      const data = await res.json() as { systemPrompt?: string };
       setSystemPrompt(data.systemPrompt ?? systemPrompt);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Expansion failed');
@@ -224,16 +234,16 @@ export function PersonaForm({ initial, onSave, onCancel, saveLabel = 'Save Perso
           <button
             type="button"
             onClick={handleExpandPrompt}
-            disabled={expanding || !systemPrompt.trim()}
+            disabled={expanding || generating || !systemPrompt.trim()}
             style={{
               fontSize: '0.58rem',
-              color: expanding ? TEXT_DIM : ACCENT_CYAN,
+              color: expanding || generating ? TEXT_DIM : ACCENT_CYAN,
               background: 'none',
               border: 'none',
-              cursor: expanding || !systemPrompt.trim() ? 'not-allowed' : 'pointer',
+              cursor: expanding || generating || !systemPrompt.trim() ? 'not-allowed' : 'pointer',
               padding: 0,
               fontFamily: MONOSPACE_FONT,
-              opacity: expanding || !systemPrompt.trim() ? 0.5 : 1,
+              opacity: expanding || generating || !systemPrompt.trim() ? 0.5 : 1,
             }}
           >
             {expanding ? '⟳ Expanding…' : '✨ Expand'}
