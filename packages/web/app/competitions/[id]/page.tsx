@@ -2394,8 +2394,7 @@ export default function CompetitionPage() {
             letterSpacing: '2.5px', textDecoration: 'none', flexShrink: 0,
             display: 'flex', alignItems: 'center', gap: '0.4rem',
           }}>
-            <span style={{ fontSize: '0.9rem' }}>🎮</span>
-            ARENA
+            ◆ ARENA4AI | ARENA
           </a>
 
           <span style={{ color: '#0a2235', fontSize: '1.1rem' }}>│</span>

@@ -188,7 +188,7 @@ export default function ComparePage() {
         }}>
           <div>
             <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
-              ⚔ Model Compare
+              ◆ ARENA4AI | COMPARE
             </div>
             <h1 style={{
               fontSize: '2rem', fontWeight: 800, lineHeight: 1.05, margin: 0,

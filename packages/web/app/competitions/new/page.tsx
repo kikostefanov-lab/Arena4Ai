@@ -611,12 +611,10 @@ export default function NewCompetitionPage() {
 
         {/* Header */}
         <div style={{ marginBottom: '2.5rem', animation: 'fadeInUp 0.4s ease-out' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.2rem' }}>
+          <div style={{ marginBottom: '1.2rem' }}>
             <a href="/" style={{ fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}>
-              {'◆'} ARENA
+              ◆ ARENA4AI | NEW BATTLE
             </a>
-            <span style={{ color: '#0a2235' }}>{'│'}</span>
-            <span style={{ fontSize: '0.6rem', color: '#4a8fa8', letterSpacing: '1px' }}>NEW COMPETITION</span>
           </div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8eef8', margin: 0, lineHeight: 1.2 }}>
             Launch a Competition
