@@ -490,6 +490,81 @@ Group hypotheses by theme (e.g., Problem, Solution, Market, Business Model).
 
 Output clean Markdown with structured tables.`,
   },
+
+  // Structured / domain-specific outputs
+  sql_schema: {
+    type: 'sql_schema',
+    title: 'Database Schema (SQL)',
+    systemPrompt: `You are a database architect generating a production-ready SQL schema.
+
+Given the competition results (especially the winning team's code and API contracts), produce a complete SQL schema.
+
+Requirements:
+- Use PostgreSQL syntax
+- Include CREATE TABLE statements with all columns, types, and constraints
+- Add indexes for foreign keys and commonly queried columns
+- Include comments on each table explaining its purpose
+- Output raw SQL only — no markdown fences, no explanation text
+
+The output must be valid SQL that can be piped directly to psql.`,
+  },
+  environment_template: {
+    type: 'environment_template',
+    title: 'Environment Variables Template',
+    systemPrompt: `You are a DevOps engineer creating a .env.example template.
+
+Given the competition results, identify all environment variables the solution requires.
+
+For each variable include:
+- The variable name in SCREAMING_SNAKE_CASE
+- A comment explaining what it is and where to get the value
+- A safe placeholder value (never a real secret)
+
+Output format: raw .env file content only. Example:
+# Database connection string
+DATABASE_URL=postgresql://localhost/myapp
+
+No markdown, no JSON wrapper — just the .env file content.`,
+  },
+  slide_deck: {
+    type: 'slide_deck',
+    title: 'Presentation Slide Deck',
+    systemPrompt: `You are a presentation expert creating a complete slide deck outline with full copy.
+
+Given the competition results (especially if this was a creative or communications brief), create a ready-to-build slide deck.
+
+For each slide provide:
+- Slide number and title
+- Headline (the one sentence a viewer should remember)
+- 3-5 bullet points or body copy
+- Visual suggestion (what image, chart, or diagram would work here)
+- Speaker notes (2-3 sentences for the presenter)
+
+Create 10-15 slides. Include: title slide, agenda, problem statement, solution overview, key evidence slides, differentiators, call to action, and closing.
+
+Output clean, well-structured Markdown. Each slide as a ## heading.`,
+  },
+  spreadsheet_export: {
+    type: 'spreadsheet_export',
+    title: 'Decision Matrix (Spreadsheet)',
+    systemPrompt: `You are a data analyst creating a spreadsheet-ready decision matrix.
+
+Given the competition results (especially for research or procurement briefs), produce a structured CSV comparison matrix.
+
+Format:
+- First row: column headers (Option/Vendor names)
+- First column: evaluation criteria (from rubric)
+- Body cells: scores (1-10) with a brief justification in parentheses
+- Final rows: weighted totals and recommendation
+
+Output: raw CSV only — no markdown fences. The output must open correctly in Excel or Google Sheets.
+
+Example format:
+Criteria,Option A,Option B,Option C
+Performance,9 (fast response),7 (moderate),6 (slow)
+...
+TOTAL (weighted),8.2,6.8,5.9`,
+  },
 };
 
 // ─── Domain defaults (fallback if AI selection fails) ─────────────────────────
@@ -499,6 +574,22 @@ const FORMAT_DOMAIN_DEFAULTS: Record<string, { domain: ForgeDomain; types: Forge
   HACKATHON:   { domain: 'software',  types: ['roadmap', 'task_graph', 'repo_blueprint', 'decision_log'] },
   RELAY_RACE:  { domain: 'software',  types: ['roadmap', 'task_graph', 'decision_log', 'risk_register'] },
   RED_VS_BLUE: { domain: 'security',  types: ['threat_model', 'attack_surface', 'remediation_plan', 'risk_register'] },
+  BRAINSTORM:  { domain: 'ideation',  types: ['concept_canvas', 'mvp_definition', 'hypothesis_backlog', 'decision_framework'] },
+  RESEARCH:    { domain: 'research',  types: ['evaluation_matrix', 'vendor_scorecard', 'decision_framework', 'decision_log'] },
+  PITCH:       { domain: 'creative',  types: ['presentation_structure', 'messaging_guide', 'content_outline', 'concept_canvas'] },
+};
+
+/**
+ * Default artifact types per ForgeDomain.
+ * Pre-populated for Sprint 2's selectDomainArtifacts() expansion and brief.domainHint support.
+ */
+const DOMAIN_TYPE_DEFAULTS: Record<ForgeDomain, ForgeArtifactType[]> = {
+  software:  ['roadmap', 'task_graph', 'repo_blueprint', 'decision_log'],
+  research:  ['evaluation_matrix', 'vendor_scorecard', 'decision_framework', 'decision_log'],
+  creative:  ['presentation_structure', 'messaging_guide', 'content_outline', 'concept_canvas'],
+  security:  ['threat_model', 'attack_surface', 'remediation_plan', 'risk_register'],
+  business:  ['business_case', 'go_to_market', 'stakeholder_map', 'decision_framework'],
+  ideation:  ['concept_canvas', 'mvp_definition', 'hypothesis_backlog', 'decision_framework'],
 };
 
 const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
@@ -511,12 +602,18 @@ const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
 const DOMAIN_SELECTION_SYSTEM_PROMPT = `You are a classifier. Given a competition brief, select the most relevant domain and 3-4 artifact types to generate.
 
 Available domains and their artifact types:
-- software: roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log
-- research: evaluation_matrix, vendor_scorecard, decision_framework
-- creative: content_outline, presentation_structure, messaging_guide
+- software: roadmap, task_graph, repo_blueprint, api_contracts, risk_register, decision_log, sql_schema, environment_template
+- research: evaluation_matrix, vendor_scorecard, decision_framework, spreadsheet_export
+- creative: content_outline, presentation_structure, messaging_guide, slide_deck
 - security: threat_model, attack_surface, remediation_plan, risk_register
 - business: business_case, go_to_market, stakeholder_map
 - ideation: concept_canvas, mvp_definition, hypothesis_backlog
+
+Notes on new types:
+- sql_schema — raw PostgreSQL schema for software domain
+- environment_template — .env.example template for software domain
+- slide_deck — slide-by-slide outline for creative/pitch domain
+- spreadsheet_export — CSV comparison matrix for research domain
 
 Respond ONLY with a JSON object. No explanation, no markdown, just JSON:
 {"domain":"<domain>","types":["<type1>","<type2>","<type3>","<type4>"]}
@@ -533,16 +630,16 @@ Problem: ${brief.problem}
 Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}`;
 
   try {
-    const raw = await runClaude(selectionPrompt, DOMAIN_SELECTION_SYSTEM_PROMPT, 30_000);
+    const raw = await runClaude(selectionPrompt, DOMAIN_SELECTION_SYSTEM_PROMPT, 60_000);
     const json = JSON.parse(extractJson(raw)) as { domain: ForgeDomain; types: ForgeArtifactType[] };
 
     // Validate response
     const validDomains: ForgeDomain[] = ['software', 'research', 'creative', 'security', 'business', 'ideation'];
     const validTypes = new Set(Object.keys(ARTIFACT_CATALOG));
 
-    if (!validDomains.includes(json.domain)) return fallback;
+    if (!validDomains.includes(json.domain)) return GENERIC_DEFAULT;
     const types = (json.types ?? []).filter((t) => validTypes.has(t)).slice(0, 4) as ForgeArtifactType[];
-    if (types.length === 0) return fallback;
+    if (types.length === 0) return GENERIC_DEFAULT;
 
     return { domain: json.domain, types };
   } catch {
