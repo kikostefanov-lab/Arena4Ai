@@ -114,9 +114,8 @@ export class PersonaRepository {
   async retire(id: string): Promise<{ retired: boolean; blockedByAgents?: number; notFound?: boolean }> {
     const existing = await this.get(id);
     if (!existing) return { retired: false, notFound: true };
-    const activeAgentCount = await this.getAgentCount(id);
-    if (activeAgentCount > 0) {
-      return { retired: false, blockedByAgents: activeAgentCount };
+    if (existing.agentCount > 0) {
+      return { retired: false, blockedByAgents: existing.agentCount };
     }
     await this.db.update(personas)
       .set({ retired: true, updatedAt: new Date() })
