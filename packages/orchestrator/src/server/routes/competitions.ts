@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import archiver from 'archiver';
 import { briefSchema, CompetitionFormat, CompetitionState } from '@arena/shared';
-import type { BriefInput, Team, TeamPresentation, ForgeOutput, ForgeRun, ForgeSource, Brief, Deliverable } from '@arena/shared';
+import type { BriefInput, Team, TeamPresentation, ForgeRun, ForgeSource, Brief, Deliverable } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
@@ -261,9 +261,13 @@ competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response
 
   const brief = comp?.brief as Brief | null;
   // Use the most recent forge run for the filename (stacked runs; last = newest)
-  const forgeRun = Array.isArray(result?.forge) ? result.forge.at(-1) : null;
+  const latestRun = Array.isArray(result.forge) ? result.forge.at(-1) as ForgeRun | undefined : undefined;
+  if (!latestRun) {
+    res.status(404).json({ error: 'No forge run found' });
+    return;
+  }
   const forgeFilename = brief
-    ? buildForgeFilename(brief, forgeRun?.source ?? 'winner', forgeRun?.generatedAt)
+    ? buildForgeFilename(brief, latestRun.source, latestRun.generatedAt)
     : `arena4ai_unknown_${id}_forge-run.zip`;
 
   res.setHeader('Content-Type', 'application/zip');
@@ -273,10 +277,47 @@ competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response
   archive.on('error', (err) => { console.error(`[arena] forge zip error for ${id}:`, err.message); res.destroy(err); });
   archive.pipe(res);
 
-  const forge = result.forge as unknown as ForgeOutput;
-  for (const artifact of forge.artifacts) {
-    archive.append(artifact.content, { name: `${artifact.type}.md` });
+  const TYPE_OVERRIDES_INLINE: Partial<Record<string, string | null>> = {
+    project_readme:           'README.md',
+    environment_template:     'infrastructure/.env.example',
+    github_actions:           '.github/workflows/ci.yml',
+    reference_implementation: null,
+    test_suite_template:      null,
+  };
+  const FORMAT_FOLDERS_INLINE: Record<string, string> = {
+    markdown: 'docs/', sql: 'infrastructure/', yaml: 'infrastructure/',
+    dockerfile: 'infrastructure/', csv: 'data/', json: 'data/', text: 'infrastructure/',
+  };
+
+  for (const artifact of latestRun.artifacts) {
+    // Multi-file types: expand from JSON file map
+    if (artifact.type === 'reference_implementation' || artifact.type === 'test_suite_template') {
+      const folder = artifact.type === 'reference_implementation' ? 'src/' : 'tests/';
+      let fileMap: Record<string, string> = {};
+      try { fileMap = JSON.parse(artifact.content) as Record<string, string>; } catch {}
+      for (const [filename, content] of Object.entries(fileMap)) {
+        archive.append(content, { name: `${folder}${filename}` });
+      }
+      continue;
+    }
+    // Type override
+    if (artifact.type in TYPE_OVERRIDES_INLINE) {
+      const override = TYPE_OVERRIDES_INLINE[artifact.type];
+      if (override) archive.append(artifact.content, { name: override });
+      continue;
+    }
+    // Format fallback
+    const folder = FORMAT_FOLDERS_INLINE[artifact.outputFormat ?? 'markdown'] ?? 'docs/';
+    archive.append(artifact.content, { name: `${folder}${artifact.filename ?? artifact.type + '.md'}` });
   }
+
+  archive.append(JSON.stringify({
+    competitionId: id,
+    forgeSource: latestRun.source,
+    forgeModel: latestRun.forgeModel,
+    generatedAt: latestRun.generatedAt,
+    arena4aiVersion: '2.0',
+  }, null, 2), { name: '_metadata.json' });
 
   await archive.finalize();
 });
