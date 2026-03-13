@@ -25,7 +25,7 @@ export function createAgentsRouter(repo: AgentRepository): Router {
     try {
       const { name, personaId, provider, modelVariant, providerOptions } = req.body as {
         name?: string; personaId?: string; provider?: 'claude' | 'codex' | 'gemini';
-        modelVariant?: string; providerOptions?: Record<string, unknown>; tags?: string[];
+        modelVariant?: string; providerOptions?: Record<string, unknown>;
       };
       if (!name || !provider || !modelVariant) {
         res.status(400).json({ error: 'name, provider, and modelVariant are required' });
