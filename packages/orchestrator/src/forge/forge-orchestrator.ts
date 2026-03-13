@@ -643,7 +643,7 @@ Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}`;
 
     return { domain: json.domain, types };
   } catch {
-    return fallback;
+    return GENERIC_DEFAULT;
   }
 }
 
