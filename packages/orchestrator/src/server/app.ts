@@ -105,7 +105,6 @@ export function createApp(): Application {
   app.use('/agents', createAgentsRouter(agentRepo));
   app.use('/generate-persona', generatePersonaLimiter, generatePersonaRouter);
   // Keep agent-profiles for backward compat (now backed by AgentRepository)
-  app.post('/agent-profiles/:id/fork', forgeSynthesisLimiter);
   app.use('/agent-profiles', createAgentProfilesRouter(agentRepo));
 
   return app;

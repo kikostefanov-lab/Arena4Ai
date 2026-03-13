@@ -378,14 +378,16 @@ export class CompetitionRunner extends EventEmitter {
       // Fire-and-forget stats update — does not block competition flow
       if (this.agentRepo) {
         const winnerId = scorecards.find(sc => sc.rank === 1)?.teamId ?? null;
-        for (const team of teams) {
-          if (team.agentId) {
-            const scorecard = scorecards.find(s => s.teamId === team.id);
-            const won = scorecard?.teamId === winnerId;
-            const score = scorecard?.finalScore ?? 0;
-            await this.agentRepo.incrementStats(team.agentId, { won, score }).catch(() => {});
-          }
-        }
+        void Promise.all(
+          teams
+            .filter(t => t.agentId)
+            .map(team => {
+              const scorecard = scorecards.find(s => s.teamId === team.id);
+              const won = scorecard?.teamId === winnerId;
+              const score = scorecard?.finalScore ?? 0;
+              return this.agentRepo!.incrementStats(team.agentId!, { won, score }).catch(() => {});
+            }),
+        );
       }
 
       // ── COMPLETE ──────────────────────────────────────────────────────────
