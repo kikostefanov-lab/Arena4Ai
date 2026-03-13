@@ -3,7 +3,7 @@
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import type { ForgeRun, ForgeSource } from '@arena/shared';
@@ -36,7 +36,7 @@ interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale
 interface SynthesisResult { synthesis: string; overallRationale?: string; perCriterion: SynthesisPerCriterion[]; }
 interface CriterionFinding { criterionId: string; finding: string; strength: string; gap: string; }
 interface TeamPresentation { teamId: string; model: string; approach: string; criterionFindings: CriterionFinding[]; keyInsight: string; deliverableSummary: string; }
-interface ForgeArtifact { type: string; title: string; content: string; generatedAt: string; universal?: boolean; }
+interface ForgeArtifact { type: string; title: string; content: string; generatedAt: string; universal?: boolean; outputFormat: string; filename: string; }
 interface ForgeOutput { forgeModel: string; artifacts: ForgeArtifact[]; generatedAt: string; domain?: string; selectedTypes?: string[]; }
 interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: SynthesisResult | null; deliverables?: TeamDeliverable[]; presentations?: TeamPresentation[]; forge?: ForgeRun[] | null; }
 
@@ -589,6 +589,24 @@ interface TeamFileEvents {
   files: FileEventFile[];
 }
 
+// ─── Forge helpers ────────────────────────────────────────────────────────────
+
+function formatExtension(outputFormat: string): string {
+  const ext: Record<string, string> = {
+    markdown: '.md', sql: '.sql', csv: '.csv',
+    yaml: '.yml', dockerfile: 'file', json: '.json', text: '.txt',
+  };
+  return ext[outputFormat] ?? '.md';
+}
+
+function parseCsvRows(content: string, maxRows = 50): string[][] {
+  return content
+    .split('\n')
+    .filter(Boolean)
+    .slice(0, maxRows + 1)
+    .map(line => line.split(',').map(cell => cell.trim().replace(/^"|"$/g, '')));
+}
+
 function ScoreDrawer({
   competitionId,
   result,
@@ -615,7 +633,7 @@ function ScoreDrawer({
   );
   const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
   const [expandedFile, setExpandedFile] = useState<{ teamId: string; path: string } | null>(null);
-  const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string } | null>(null);
+  const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string; outputFormat?: string; artifactType?: string; downloadUrl?: string } | null>(null);
   const [presentationModal, setPresentationModal] = useState<TeamPresentation | null>(null);
   // Layout redesign state
   const [selectedCriterionId, setSelectedCriterionId] = useState<string | null>(null);
@@ -1658,8 +1676,15 @@ function ScoreDrawer({
                           {activeRun.artifacts.map((artifact) => (
                             <div
                               key={artifact.type}
-                              onClick={() => setFileModalContent({ path: artifact.title, content: artifact.content })}
+                              onClick={() => setFileModalContent({
+                                path: artifact.title,
+                                content: artifact.content,
+                                outputFormat: artifact.outputFormat,
+                                artifactType: artifact.type,
+                                downloadUrl: `/api/competitions/${competitionId}/forge/${activeRun.id}/artifacts/${artifact.type}/download`,
+                              })}
                               style={{
+                                position: 'relative',
                                 background: '#050f1e', border: '1px solid #0a2235', borderRadius: '6px',
                                 padding: '0.75rem 0.85rem', cursor: 'pointer',
                                 transition: 'border-color 0.15s',
@@ -1667,6 +1692,22 @@ function ScoreDrawer({
                               onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = 'rgba(0,240,255,0.25)'; }}
                               onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.borderColor = '#0a2235'; }}
                             >
+                              {artifact.outputFormat && (
+                                <span style={{
+                                  position: 'absolute',
+                                  top: '0.4rem',
+                                  right: '0.4rem',
+                                  fontSize: '0.5rem',
+                                  fontFamily: MONOSPACE_FONT,
+                                  color: TEXT_MUTED,
+                                  background: 'rgba(0,240,255,0.05)',
+                                  border: `1px solid ${BORDER_MID}`,
+                                  borderRadius: '3px',
+                                  padding: '0.1rem 0.3rem',
+                                }}>
+                                  {formatExtension(artifact.outputFormat)}
+                                </span>
+                              )}
                               <div style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>
                                 {ARTIFACT_EMOJI[artifact.type] ?? '📄'}
                               </div>
@@ -1680,6 +1721,27 @@ function ScoreDrawer({
                               }}>
                                 {artifact.content.slice(0, 200)}
                               </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const url = `/api/competitions/${competitionId}/forge/${activeRun.id}/artifacts/${artifact.type}/download`;
+                                  window.open(url, '_blank');
+                                }}
+                                style={{
+                                  fontSize: '0.55rem',
+                                  color: TEXT_MUTED,
+                                  background: 'none',
+                                  border: `1px solid ${BORDER_MID}`,
+                                  borderRadius: '3px',
+                                  padding: '0.2rem 0.5rem',
+                                  cursor: 'pointer',
+                                  fontFamily: MONOSPACE_FONT,
+                                  marginTop: '0.5rem',
+                                  display: 'block',
+                                }}
+                              >
+                                ↓ {formatExtension(artifact.outputFormat)}
+                              </button>
                             </div>
                           ))}
                         </div>
@@ -1821,6 +1883,20 @@ function ScoreDrawer({
                 >
                   Copy
                 </button>
+                {fileModalContent.downloadUrl && (
+                  <a
+                    href={fileModalContent.downloadUrl}
+                    download
+                    style={{
+                      fontSize: '0.6rem', padding: '0.2rem 0.55rem', borderRadius: '4px',
+                      background: 'transparent', border: '1px solid #0a2235',
+                      color: TEXT_MUTED, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    ↓ {fileModalContent.outputFormat ? formatExtension(fileModalContent.outputFormat) : 'Download'}
+                  </a>
+                )}
                 <button
                   onClick={() => setFileModalContent(null)}
                   style={{ background: 'none', border: 'none', color: '#3d7d94', cursor: 'pointer', fontSize: '1rem' }}
@@ -1831,11 +1907,57 @@ function ScoreDrawer({
             </div>
             <div style={{
               padding: '0.85rem 1.1rem', overflowY: 'auto', flex: 1,
-              fontFamily: MONOSPACE_FONT,
-              fontSize: '0.68rem', color: '#7cc6db', lineHeight: 1.7,
-              whiteSpace: 'pre-wrap', wordBreak: 'break-all',
             }}>
-              {fileModalContent.content}
+              {/* Format-aware modal content */}
+              {fileModalContent.outputFormat === 'csv' ? (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ borderCollapse: 'collapse', fontSize: '0.65rem', fontFamily: MONOSPACE_FONT, width: '100%' }}>
+                    <tbody>
+                      {parseCsvRows(fileModalContent.content).map((row, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid rgba(0,240,255,0.1)' }}>
+                          {row.map((cell, j) => (
+                            i === 0
+                              ? <th key={j} style={{ padding: '0.3rem 0.6rem', color: '#00f0ff', textAlign: 'left', borderBottom: '1px solid rgba(0,240,255,0.2)' }}>{cell}</th>
+                              : <td key={j} style={{ padding: '0.3rem 0.6rem', color: TEXT_MUTED }}>{cell}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : fileModalContent.artifactType === 'reference_implementation' || fileModalContent.artifactType === 'test_suite_template' ? (
+                <div>
+                  {(() => {
+                    let fileMap: Record<string, string> = {};
+                    try { fileMap = JSON.parse(fileModalContent.content) as Record<string, string>; } catch {}
+                    const entries = Object.entries(fileMap);
+                    const [firstFile = '', firstContent = fileModalContent.content] = entries[0] ?? [];
+                    return (
+                      <>
+                        <p style={{ fontSize: '0.62rem', color: TEXT_MUTED, marginBottom: '0.5rem', fontFamily: MONOSPACE_FONT }}>
+                          {entries.length} file{entries.length !== 1 ? 's' : ''} — use Download to get all. Showing: <code>{firstFile}</code>
+                        </p>
+                        <pre style={{ overflowX: 'auto', fontSize: '0.62rem', fontFamily: MONOSPACE_FONT, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                          {firstContent}
+                        </pre>
+                      </>
+                    );
+                  })()}
+                </div>
+              ) : fileModalContent.outputFormat && ['sql', 'yaml', 'dockerfile', 'json', 'text'].includes(fileModalContent.outputFormat) ? (
+                <pre style={{ overflowX: 'auto', fontSize: '0.62rem', fontFamily: MONOSPACE_FONT, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: TEXT_MUTED }}>
+                  {fileModalContent.content}
+                </pre>
+              ) : (
+                /* markdown or plain file content (deliverable files, default) */
+                <div style={{
+                  fontFamily: MONOSPACE_FONT,
+                  fontSize: '0.68rem', color: '#7cc6db', lineHeight: 1.7,
+                  whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                }}>
+                  {fileModalContent.content}
+                </div>
+              )}
             </div>
           </div>
         </div>
