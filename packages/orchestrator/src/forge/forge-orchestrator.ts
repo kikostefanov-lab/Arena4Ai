@@ -579,6 +579,7 @@ const FORMAT_DOMAIN_DEFAULTS: Record<string, { domain: ForgeDomain; types: Forge
   PITCH:       { domain: 'creative',  types: ['presentation_structure', 'messaging_guide', 'content_outline', 'concept_canvas'] },
 };
 
+// TODO(sprint2): wire DOMAIN_TYPE_DEFAULTS into brief.domainHint path in selectDomainArtifacts()
 /**
  * Default artifact types per ForgeDomain.
  * Pre-populated for Sprint 2's selectDomainArtifacts() expansion and brief.domainHint support.

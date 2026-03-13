@@ -1,6 +1,6 @@
 'use client';
 
-import { hexToRgb, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT } from './design-tokens';
+import { hexToRgb, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, BODY_LINE_HEIGHT } from './design-tokens';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
 
@@ -258,7 +258,7 @@ export function EventRow({
       >
         {/* Timestamp */}
         <span style={{
-          color: '#3d7d94', fontSize: '0.75rem', fontFamily: 'monospace',
+          color: '#3d7d94', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT,
           flexShrink: 0, width: '2.8rem', textAlign: 'right',
           marginTop: '2px', letterSpacing: '-0.3px',
         }}>
