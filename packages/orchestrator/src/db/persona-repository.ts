@@ -1,4 +1,4 @@
-import { eq, and, ilike, sql } from 'drizzle-orm';
+import { eq, and, ilike, sql, count } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { personas, agents } from './schema.js';
 
@@ -80,11 +80,21 @@ export class PersonaRepository {
     const retired = filters.retired ?? false;
     const conditions = [eq(personas.retired, retired)];
     if (filters.search) conditions.push(ilike(personas.name, `${filters.search}%`));
-    const rows = await this.db.select().from(personas).where(and(...conditions));
-    return Promise.all(rows.map(async (row) => ({
-      ...rowToPersona(row),
-      agentCount: await this.getAgentCount(row.id),
-    })));
+
+    const rows = await this.db
+      .select({
+        persona: personas,
+        agentCount: sql<number>`count(${agents.id})::int`,
+      })
+      .from(personas)
+      .leftJoin(agents, and(eq(agents.personaId, personas.id), eq(agents.retired, false)))
+      .where(and(...conditions))
+      .groupBy(personas.id);
+
+    return rows.map(row => ({
+      ...rowToPersona(row.persona),
+      agentCount: row.agentCount,
+    }));
   }
 
   async update(id: string, input: UpdatePersonaInput): Promise<PersonaWithCount | null> {
