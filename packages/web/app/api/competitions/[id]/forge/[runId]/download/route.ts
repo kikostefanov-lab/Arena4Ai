@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { ForgeArtifact } from '@arena/shared';
+import { resolveZipPath, expandMultiFileArtifact } from '../../../../../../../lib/forge-zip-utils';
 
 export async function GET(
   _req: NextRequest,
@@ -18,7 +20,7 @@ export async function GET(
   }
 
   type ForgeSourceLiteral = 'winner' | 'loser' | 'synthesis';
-  const { runs } = await forgeRes.json() as { runs: Array<{ id: string; source: ForgeSourceLiteral; generatedAt: string; artifacts: Array<{ type: string; title: string; content: string }> }> };
+  const { runs } = await forgeRes.json() as { runs: Array<{ id: string; source: ForgeSourceLiteral; forgeModel: string; generatedAt: string; artifacts: Array<{ type: string; title: string; content: string; outputFormat: string; filename: string }> }> };
   const comp = await compRes.json() as { brief?: { id?: string; title?: string } };
 
   const run = runs.find((r) => r.id === runId);
@@ -53,9 +55,15 @@ export async function GET(
   // IMPORTANT: use type: 'nodebuffer' (not 'blob') — NextResponse requires Buffer/Uint8Array
   const JSZipModule = (await import('jszip')).default;
   const zip = new JSZipModule();
-  for (const artifact of run.artifacts) {
-    const fname = artifact.title.replace(/\s+/g, '-').toLowerCase() + '.md';
-    zip.file(fname, artifact.content);
+  for (const artifact of run.artifacts as ForgeArtifact[]) {
+    if (artifact.type === 'reference_implementation' || artifact.type === 'test_suite_template') {
+      expandMultiFileArtifact(zip, artifact);
+    } else {
+      const zipPath = resolveZipPath(artifact);
+      if (zipPath) {
+        zip.file(zipPath, artifact.content);
+      }
+    }
   }
   // Add metadata
   zip.file('_metadata.json', JSON.stringify({
@@ -63,6 +71,7 @@ export async function GET(
     briefId: comp.brief?.id ?? '',
     briefTitle: comp.brief?.title ?? '',
     forgeSource: run.source,
+    forgeModel: run.forgeModel,
     generatedAt: run.generatedAt,
     arena4aiVersion: '2.0',
   }, null, 2));
