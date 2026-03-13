@@ -774,6 +774,28 @@ export function buildPrompt(spec: ArtifactSpec): string {
   return extra ? `${spec.systemPrompt}\n\n${extra}` : spec.systemPrompt;
 }
 
+// ─── Deliverable file formatter ───────────────────────────────────────────────
+
+export const MAX_TOTAL_BYTES = 40_000;
+
+export function formatDeliverableFiles(
+  deliverables: Array<{ teamId: string; files: { path: string; content: string }[] }>
+): string {
+  let total = 0;
+  const lines: string[] = [];
+  for (const teamDels of deliverables) {
+    for (const file of teamDels.files) {
+      if (total >= MAX_TOTAL_BYTES) break;
+      const truncated = file.content.length > 6000
+        ? file.content.slice(0, 6000) + '\n... [truncated]'
+        : file.content;
+      lines.push(`--- ${file.path} ---\n${truncated}`);
+      total += truncated.length;
+    }
+  }
+  return lines.join('\n\n');
+}
+
 // ─── User prompt builder ──────────────────────────────────────────────────────
 
 function buildForgeUserPrompt(input: ForgeInput, primaryDeliverables: Array<{ teamId: string; files: { path: string; content: string }[] }>, synthesisContext: string): string {
@@ -810,25 +832,9 @@ function buildForgeUserPrompt(input: ForgeInput, primaryDeliverables: Array<{ te
     sections.push(`# Synthesis (Primary Context)${synthesisContext}`);
   }
 
-  for (const teamDels of primaryDeliverables) {
-    if (teamDels.files.length > 0) {
-      const MAX_TOTAL_BYTES = 40_000;
-      let totalBytes = 0;
-      const fileParts: string[] = [];
-      for (const f of teamDels.files) {
-        if (totalBytes >= MAX_TOTAL_BYTES) {
-          fileParts.push(`\n... (${teamDels.files.length - fileParts.length} more files omitted for size)`);
-          break;
-        }
-        const budget = MAX_TOTAL_BYTES - totalBytes;
-        const content = f.content.length > Math.min(6000, budget)
-          ? f.content.slice(0, Math.min(6000, budget)) + '\n... [truncated]'
-          : f.content;
-        totalBytes += content.length;
-        fileParts.push(`### ${f.path}\n\`\`\`\n${content}\n\`\`\``);
-      }
-      sections.push(`# Deliverables (${teamDels.teamId})\n\n${fileParts.join('\n\n')}`);
-    }
+  const fileSection = formatDeliverableFiles(primaryDeliverables);
+  if (fileSection) {
+    sections.push(`# Deliverables\n\n${fileSection}`);
   }
 
   return sections.join('\n\n---\n\n');
@@ -873,6 +879,72 @@ function runClaude(prompt: string, systemPrompt: string, timeoutMs = 120_000): P
     proc.stdin.write(fullPrompt);
     proc.stdin.end();
   });
+}
+
+// ─── Starter kit generator ───────────────────────────────────────────────────
+
+export async function generateStarterKit(
+  brief: Brief,
+  primaryDeliverables: Array<{ teamId: string; files: { path: string; content: string }[] }>
+): Promise<ForgeArtifact[] | null> {
+  const starterKitSystemPrompt = `You are generating a production-ready project starter kit from an AI hackathon winner.
+Generate three artifacts:
+1. A cleaned, well-commented reference implementation in the same language(s) — runnable, not pseudocode
+2. A test suite template with meaningful test cases based on actual function/class signatures
+3. A project README with setup instructions, usage examples, and extension notes
+
+Respond with a single JSON object:
+{
+  "src": { "filename": "file contents" },
+  "tests": { "filename": "file contents" },
+  "readme": "README.md contents"
+}`;
+
+  const fileSection = formatDeliverableFiles(primaryDeliverables);
+  const starterKitUserPrompt = `BRIEF TITLE: ${brief.title}
+BRIEF PROBLEM: ${brief.problem}
+
+WINNING CODE:
+${fileSection}`;
+
+  try {
+    const raw = await runClaude(starterKitUserPrompt, starterKitSystemPrompt, 120_000);
+    const json = JSON.parse(extractJson(raw)) as {
+      src: Record<string, string>;
+      tests: Record<string, string>;
+      readme: string;
+    };
+
+    return [
+      {
+        type: 'reference_implementation',
+        title: 'Reference Implementation',
+        content: JSON.stringify(json.src),
+        outputFormat: 'text',
+        filename: 'src/',
+        generatedAt: new Date().toISOString(),
+      },
+      {
+        type: 'test_suite_template',
+        title: 'Test Suite Template',
+        content: JSON.stringify(json.tests),
+        outputFormat: 'text',
+        filename: 'tests/',
+        generatedAt: new Date().toISOString(),
+      },
+      {
+        type: 'project_readme',
+        title: 'README',
+        content: json.readme,
+        outputFormat: 'markdown',
+        filename: 'README.md',
+        generatedAt: new Date().toISOString(),
+      },
+    ];
+  } catch (err) {
+    console.error('[generateStarterKit] failed:', err);
+    return null;
+  }
 }
 
 // ─── Main forge orchestrator ──────────────────────────────────────────────────
@@ -929,7 +1001,19 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
   };
 
   try {
-    const artifacts = await Promise.all(allSpecs.map(generateArtifact));
+    let artifacts = await Promise.all(allSpecs.map(generateArtifact));
+
+    const shouldRunStarterKit =
+      (input.brief.deliverableType === 'code' || !input.brief.deliverableType) &&
+      (input.source === 'winner' || input.source === 'loser') &&
+      primaryDeliverables.length > 0 &&
+      primaryDeliverables.some(d => d.files.length > 0);
+
+    if (shouldRunStarterKit) {
+      const kitArtifacts = await generateStarterKit(input.brief, primaryDeliverables);
+      if (kitArtifacts) artifacts = [...artifacts, ...kitArtifacts];
+    }
+
     return {
       id: randomUUID(),
       source: input.source,

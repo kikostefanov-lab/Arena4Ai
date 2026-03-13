@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ForgeArtifactType, ForgeOutputFormat } from '@arena/shared';
-import { selectDomainArtifacts, buildPrompt, ARTIFACT_CATALOG, DOMAIN_TYPE_DEFAULTS } from './forge-orchestrator.js';
+import { selectDomainArtifacts, buildPrompt, ARTIFACT_CATALOG, DOMAIN_TYPE_DEFAULTS, formatDeliverableFiles, generateStarterKit } from './forge-orchestrator.js';
 
 describe('ForgeArtifactType', () => {
   it('includes sql_schema', () => {
@@ -131,6 +131,34 @@ describe('new artifact catalog entries', () => {
       outputFormat: 'markdown',
       filename: 'gantt_timeline.md',
     });
+  });
+});
+
+describe('formatDeliverableFiles', () => {
+  it('truncates files exceeding 6000 bytes', () => {
+    const largeContent = 'x'.repeat(10000);
+    const deliverables = [{ teamId: 'team-a', files: [{ path: 'main.py', content: largeContent }] }];
+    const result = formatDeliverableFiles(deliverables);
+    expect(result).toContain('--- main.py ---');
+    expect(result.length).toBeLessThan(10000);
+    expect(result).toContain('[truncated]');
+  });
+
+  it('respects MAX_TOTAL_BYTES across multiple files', () => {
+    const files = Array.from({ length: 20 }, (_, i) => ({
+      path: `file${i}.py`,
+      content: 'x'.repeat(3000),
+    }));
+    const deliverables = [{ teamId: 'team-a', files }];
+    const result = formatDeliverableFiles(deliverables);
+    // Should stop well before all 60000 bytes
+    expect(result.length).toBeLessThan(45000);
+  });
+});
+
+describe('generateStarterKit', () => {
+  it('is exported and callable', () => {
+    expect(typeof generateStarterKit).toBe('function');
   });
 });
 
