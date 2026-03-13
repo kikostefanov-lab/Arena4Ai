@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
-import type { AgentProfile } from '@arena/shared';
+import type { AgentProfile, Agent } from '@arena/shared';
 import './new-competition.css';
 import { MONOSPACE_FONT, FORM_LABEL_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, KICKER_STYLE } from '../../../lib/design-tokens';
 
@@ -114,7 +114,6 @@ const MODEL_META: Record<Model, { emoji: string; label: string; color: string; g
   gemini: { emoji: '🟣', label: 'Gemini', color: '#00f0ff', glowColor: 'rgba(0,240,255,0.4)'  },
 };
 
-const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'researcher', 'adversarial', 'defender', 'pioneer'];
 
 const VALID_DOMAIN_HINTS: DomainHint[] = ['', 'software', 'research', 'creative', 'security', 'business', 'ideation'];
 
@@ -380,12 +379,16 @@ export default function NewCompetitionPage() {
   const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
 
   useEffect(() => {
-    if (expandedStep !== 3 || armoryLoaded) return;
-    fetch('/api/agent-profiles?retired=false')
-      .then(r => r.json())
-      .then((data: AgentProfile[]) => { setArmoryProfiles(data); setArmoryLoaded(true); })
-      .catch(() => setArmoryLoaded(true));
-  }, [expandedStep, armoryLoaded]);
+    if (expandedStep !== 3) return;
+    if (!armoryLoaded) {
+      fetch('/api/agent-profiles?retired=false')
+        .then(r => r.json())
+        .then((data: AgentProfile[]) => { setArmoryProfiles(data); setArmoryLoaded(true); })
+        .catch(() => setArmoryLoaded(true));
+    }
+    void loadAgentsForProvider(teams[0]?.model ?? 'claude');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expandedStep]);
 
   // Example briefs panel
   const [examplePanelOpen, setExamplePanelOpen] = useState(false);
@@ -412,10 +415,15 @@ export default function NewCompetitionPage() {
   const [deliverableType, setDeliverableType] = useState<DeliverableType>('code');
   const [domainHint, setDomainHint] = useState<DomainHint>('');
   const [domainHintOpen, setDomainHintOpen] = useState(false);
-  const [teams, setTeams] = useState([
+  const [teams, setTeams] = useState<Array<{ id: string; model: Model; persona: string; agentId?: string }>>([
     { id: 'team-a', model: 'claude' as Model, persona: 'speedrunner' },
     { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
   ]);
+
+  // DB-sourced agent chips for Step 3
+  const [agentChips, setAgentChips] = useState<Agent[]>([]);
+  const [agentSearch, setAgentSearch] = useState('');
+  const [loadingAgents, setLoadingAgents] = useState(false);
 
   // Pre-fill team from ?personaId=<id> — jumps to step 3
   useEffect(() => {
@@ -579,6 +587,30 @@ export default function NewCompetitionPage() {
     reader.readAsText(file);
   };
 
+  async function loadAgentsForProvider(provider: string) {
+    setLoadingAgents(true);
+    try {
+      const res = await fetch(`/api/agents?provider=${provider}&retired=false`);
+      const data = await res.json() as { agents?: Agent[] };
+      setAgentChips(data.agents ?? []);
+    } catch {
+      setAgentChips([]);
+    } finally {
+      setLoadingAgents(false);
+    }
+  }
+
+  function selectAgent(teamId: string, agent: Agent) {
+    setTeams(prev => prev.map(t =>
+      t.id === teamId ? {
+        ...t,
+        agentId: agent.id,
+        model: agent.provider as Model,
+        persona: agent.persona?.name ?? '',
+      } : t
+    ));
+  }
+
   const addCriterion = () =>
     setCriteria([...criteria, { id: '', description: '', maxScore: 10, weight: 0.5 }]);
 
@@ -611,7 +643,7 @@ export default function NewCompetitionPage() {
           deliverableType,
           ...(domainHint ? { domainHint } : {}),
         },
-        teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona })),
+        teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona, ...(t.agentId ? { agentId: t.agentId } : {}) })),
         options: { claudeBin: 'claude', logDir: '/tmp/arena-logs' },
       };
       const res = await fetch('/api/competitions', {
@@ -1487,7 +1519,10 @@ export default function NewCompetitionPage() {
                               <div
                                 key={m}
                                 className={`model-card ${active ? 'active' : ''}`}
-                                onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, model: m } : t))}
+                                onClick={() => {
+                                  setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, model: m, agentId: undefined } : t));
+                                  void loadAgentsForProvider(m);
+                                }}
                                 style={{
                                   border: `1px solid ${active ? meta.color : '#0a2235'}`,
                                   boxShadow: active ? `0 0 16px ${meta.glowColor}, 0 4px 8px rgba(0,0,0,0.3)` : 'none',
@@ -1506,54 +1541,68 @@ export default function NewCompetitionPage() {
                           })}
                         </div>
 
-                        {/* Persona */}
+                        {/* Agent */}
                         <label style={{
                           display: 'block', fontSize: '0.5rem', fontWeight: 700,
                           color: '#4a8fa8', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '0.4rem',
                         }}>
-                          Persona
+                          Agent
                         </label>
-                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                          {PERSONAS.map((p) => (
-                            <button
-                              key={p} type="button"
-                              className={`persona-chip ${team.persona === p ? 'active' : ''}`}
-                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: p } : t))}
-                            >
-                              {p}
-                            </button>
-                          ))}
-                          {/* Armory profiles for this provider */}
-                          {armoryProfiles.filter(p => p.provider === team.model).map(p => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: p.name } : t))}
-                              style={{
-                                fontSize: '0.62rem',
-                                fontWeight: team.persona === p.name ? 800 : 600,
-                                padding: '0.25rem 0.55rem',
-                                borderRadius: '4px',
-                                border: team.persona === p.name ? '1px solid rgba(0,240,255,0.5)' : '1px dashed rgba(0,240,255,0.2)',
-                                background: team.persona === p.name ? 'rgba(0,240,255,0.08)' : 'transparent',
-                                color: team.persona === p.name ? '#00f0ff' : '#3d7d94',
-                                cursor: 'pointer',
-                                fontFamily: MONOSPACE_FONT,
-                              }}
-                            >
-                              {p.avatar ?? '🤖'} {p.name}
-                            </button>
-                          ))}
-                          {/* Go to Armory link */}
-                          <a href="/agent-armory" target="_blank" style={{ fontSize: '0.58rem', color: '#3d7d94', fontFamily: BODY_FONT, textDecoration: 'none' }}>
-                            + Go to Armory
-                          </a>
-                        </div>
+                        {/* Agent search */}
+                        <input
+                          type="text"
+                          value={agentSearch}
+                          onChange={e => setAgentSearch(e.target.value)}
+                          placeholder="Search agents…"
+                          style={{
+                            background: 'rgba(0,4,8,0.6)', border: '1px solid rgba(0,240,255,0.12)',
+                            borderRadius: '6px', padding: '0.3rem 0.6rem',
+                            color: '#c8eef8', fontSize: '0.62rem', outline: 'none',
+                            marginBottom: '0.5rem', width: '100%', boxSizing: 'border-box',
+                            fontFamily: BODY_FONT,
+                          }}
+                        />
+                        {/* Agent chips */}
+                        {loadingAgents ? (
+                          <div style={{ color: '#3d7d94', fontSize: '0.62rem', fontFamily: MONOSPACE_FONT, marginBottom: '0.5rem' }}>Loading agents…</div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                            {agentChips
+                              .filter(a => agentSearch === '' || a.name.toLowerCase().startsWith(agentSearch.toLowerCase()))
+                              .map(agent => {
+                                const isSelected = team.agentId === agent.id;
+                                return (
+                                  <button
+                                    key={agent.id}
+                                    type="button"
+                                    onClick={() => selectAgent(team.id, agent)}
+                                    style={{
+                                      fontSize: '0.62rem',
+                                      fontWeight: isSelected ? 800 : 600,
+                                      padding: '0.25rem 0.55rem',
+                                      borderRadius: '4px',
+                                      border: isSelected ? '1px solid rgba(0,240,255,0.5)' : '1px dashed rgba(0,240,255,0.2)',
+                                      background: isSelected ? 'rgba(0,240,255,0.08)' : 'transparent',
+                                      color: isSelected ? '#00f0ff' : '#3d7d94',
+                                      cursor: 'pointer',
+                                      fontFamily: MONOSPACE_FONT,
+                                    }}
+                                  >
+                                    {agent.persona?.avatar ?? '🤖'} {agent.name}
+                                  </button>
+                                );
+                              })
+                            }
+                            <a href="/agent-armory" target="_blank" style={{ fontSize: '0.58rem', color: '#3d7d94', fontFamily: BODY_FONT, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                              + Armory
+                            </a>
+                          </div>
+                        )}
                         <input
                           className="arena-input"
                           type="text" value={team.persona}
-                          onChange={(e) => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: e.target.value } : t))}
-                          placeholder="or type custom persona..."
+                          onChange={(e) => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: e.target.value, agentId: undefined } : t))}
+                          placeholder="or type persona name…"
                           style={{ fontSize: '0.65rem' }}
                         />
                       </div>
