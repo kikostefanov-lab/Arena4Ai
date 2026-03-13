@@ -1,4 +1,4 @@
-import { eq, and, ilike } from 'drizzle-orm';
+import { eq, and, ilike, sql } from 'drizzle-orm';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { agents, personas } from './schema.js';
 
@@ -180,23 +180,16 @@ export class AgentRepository {
     id: string,
     result: { won: boolean; score: number },
   ): Promise<void> {
-    const current = await this.get(id);
-    if (!current) return;
-    const newTotal  = current.statsTotal + 1;
-    const newWins   = current.statsWins + (result.won ? 1 : 0);
-    const newLosses = current.statsLosses + (result.won ? 0 : 1);
-    const prevAvg   = current.statsAvgScore ?? 0;
-    const newAvg    = (prevAvg * current.statsTotal + result.score) / newTotal;
-    await this.db.update(agents)
-      .set({
-        statsWins:       newWins,
-        statsLosses:     newLosses,
-        statsTotal:      newTotal,
-        statsAvgScore:   newAvg.toFixed(4),
-        statsLastUsedAt: new Date(),
-        updatedAt:       new Date(),
-      })
-      .where(eq(agents.id, id));
+    await this.db.update(agents).set({
+      statsWins:       sql`${agents.statsWins} + ${result.won ? 1 : 0}`,
+      statsLosses:     sql`${agents.statsLosses} + ${result.won ? 0 : 1}`,
+      statsTotal:      sql`${agents.statsTotal} + 1`,
+      statsAvgScore:   sql`CASE WHEN ${agents.statsTotal} = 0 THEN ${result.score}
+                          ELSE (COALESCE(${agents.statsAvgScore}::numeric, 0) * ${agents.statsTotal} + ${result.score})
+                               / (${agents.statsTotal} + 1::numeric) END`,
+      statsLastUsedAt: new Date(),
+      updatedAt:       new Date(),
+    }).where(eq(agents.id, id));
   }
 
   async getByProviderAndPersonaName(
