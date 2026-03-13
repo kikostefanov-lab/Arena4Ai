@@ -1524,7 +1524,7 @@ export default function NewCompetitionPage() {
                             </button>
                           ))}
                           {/* Armory profiles for this provider */}
-                          {armoryProfiles.filter(p => p.provider === team.model && p.createdBy !== 'system').map(p => (
+                          {armoryProfiles.filter(p => p.provider === team.model).map(p => (
                             <button
                               key={p.id}
                               type="button"
