@@ -1,4 +1,5 @@
 import { pgTable, text, jsonb, timestamp, serial, index, uniqueIndex, boolean, integer, numeric } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { TeamPresentation, ForgeRun } from '@arena/shared';
 import type { ForgeOutput } from '@arena/shared';
@@ -55,6 +56,44 @@ export const tournaments = pgTable('tournaments', {
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
 });
+
+export const personas = pgTable('personas', {
+  id:           text('id').primaryKey(),
+  name:         text('name').notNull(),
+  description:  text('description'),
+  systemPrompt: text('system_prompt').notNull(),
+  avatar:       text('avatar'),
+  tags:         jsonb('tags').$type<string[]>(),
+  createdBy:    text('created_by').notNull().default('system'),
+  retired:      boolean('retired').notNull().default(false),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('personas_name_active_unique').on(table.name).where(sql`retired = false`),
+]);
+
+export const agents = pgTable('agents', {
+  id:               text('id').primaryKey(),
+  name:             text('name').notNull(),
+  personaId:        text('persona_id').references(() => personas.id, { onDelete: 'set null' }),
+  provider:         text('provider').notNull(),
+  modelVariant:     text('model_variant').notNull(),
+  providerOptions:  jsonb('provider_options'),
+  createdBy:        text('created_by').notNull(),
+  forkedFromId:     text('forked_from_id'),
+  retired:          boolean('retired').notNull().default(false),
+  statsWins:        integer('stats_wins').notNull().default(0),
+  statsLosses:      integer('stats_losses').notNull().default(0),
+  statsTotal:       integer('stats_total').notNull().default(0),
+  statsAvgScore:    numeric('stats_avg_score'),
+  statsLastUsedAt:  timestamp('stats_last_used_at', { withTimezone: true }),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex('agents_provider_name_active_unique').on(table.provider, table.name).where(sql`retired = false`),
+  index('agents_provider_idx').on(table.provider),
+  index('agents_persona_id_idx').on(table.personaId),
+]);
 
 export const agentProfiles = pgTable('agent_profiles', {
   id:               text('id').primaryKey(),
