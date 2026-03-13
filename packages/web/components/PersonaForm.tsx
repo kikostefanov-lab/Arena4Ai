@@ -14,17 +14,20 @@ import {
 } from '../lib/design-tokens';
 import type { Persona } from '@arena/shared';
 
+export interface PersonaFormData {
+  name: string;
+  description?: string;
+  systemPrompt: string;
+  avatar?: string;
+  tags?: string[];
+}
+
 interface PersonaFormProps {
   initial?: Partial<Persona>;
-  onSave: (data: {
-    name: string;
-    description?: string;
-    systemPrompt: string;
-    avatar?: string;
-    tags?: string[];
-  }) => Promise<void>;
+  onSave: (data: PersonaFormData) => Promise<void>;
   onCancel: () => void;
   saveLabel?: string;
+  compact?: boolean;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -46,7 +49,7 @@ const labelStyle: React.CSSProperties = {
   marginBottom: '0.35rem',
 };
 
-export function PersonaForm({ initial, onSave, onCancel, saveLabel = 'Save Persona' }: PersonaFormProps) {
+export function PersonaForm({ initial, onSave, onCancel, saveLabel = 'Save Persona', compact = false }: PersonaFormProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [systemPrompt, setSystemPrompt] = useState(initial?.systemPrompt ?? '');
@@ -139,14 +142,14 @@ export function PersonaForm({ initial, onSave, onCancel, saveLabel = 'Save Perso
   }
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: compact ? '0.8rem' : '1.2rem' }}>
 
       {/* AI Full Generation */}
       <div style={{
         background: 'rgba(0,240,255,0.04)',
         border: `1px solid ${BORDER_DIM}`,
         borderRadius: '8px',
-        padding: '0.85rem 1rem',
+        padding: compact ? '0.6rem 0.75rem' : '0.85rem 1rem',
         display: 'flex',
         flexDirection: 'column',
         gap: '0.6rem',
