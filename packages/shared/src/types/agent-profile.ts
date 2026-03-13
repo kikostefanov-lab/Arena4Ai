@@ -18,3 +18,5 @@ export interface AgentProfile {
   createdAt: string;
   updatedAt: string;
 }
+
+export type AgentWithPersona = import('./agent.js').Agent;
