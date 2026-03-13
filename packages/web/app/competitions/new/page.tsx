@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
 import type { SavedPersona } from '../../personas/page';
 import './new-competition.css';
-import { MONOSPACE_FONT, FORM_LABEL_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../../lib/design-tokens';
+import { MONOSPACE_FONT, FORM_LABEL_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, KICKER_STYLE } from '../../../lib/design-tokens';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -612,9 +612,9 @@ export default function NewCompetitionPage() {
         {/* Header */}
         <div style={{ marginBottom: '2.5rem', animation: 'fadeInUp 0.4s ease-out' }}>
           <div style={{ marginBottom: '1.2rem' }}>
-            <a href="/" style={{ fontSize: '0.6rem', color: '#00f0ff', fontWeight: 700, letterSpacing: '2px', textDecoration: 'none' }}>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff' }}>
               ◆ ARENA4AI | NEW BATTLE
-            </a>
+            </div>
           </div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 800, color: '#c8eef8', margin: 0, lineHeight: 1.2 }}>
             Launch a Competition
