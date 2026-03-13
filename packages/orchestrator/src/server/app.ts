@@ -11,6 +11,10 @@ import { briefsRouter } from './routes/briefs.js';
 import { compareRouter } from './routes/compare.js';
 import { criteriaRouter } from './routes/criteria.js';
 import { attachWebSocket } from './websocket.js';
+import { db } from '../db/client.js';
+import { AgentProfileRepository } from '../db/agent-profile-repository.js';
+import { createAgentProfilesRouter } from './routes/agent-profiles.js';
+import { seedAgentProfiles } from '../db/seed-agent-profiles.js';
 
 const CORS = {
   origin: '*',
@@ -64,6 +68,13 @@ export function createApp(): Application {
     legacyHeaders: false,
   });
 
+  const agentProfileRepo = new AgentProfileRepository(db);
+
+  // Seed system agents on startup (async, non-blocking)
+  void seedAgentProfiles(agentProfileRepo).catch((err) =>
+    console.warn('[seed] Failed to seed agent profiles:', err),
+  );
+
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.use('/competitions', createLimiter, competitionsRouter);
   // Apply tighter limits to expensive post-completion routes
@@ -76,6 +87,9 @@ export function createApp(): Application {
   app.use('/generate-brief', generateBriefLimiter, generateBriefRouter);
   app.use('/tournaments', tournamentsRouter);
   app.use('/briefs', briefsRouter);
+  // Apply tighter limit to fork endpoint (creates DB rows)
+  app.post('/agent-profiles/:id/fork', forgeSynthesisLimiter);
+  app.use('/agent-profiles', createAgentProfilesRouter(agentProfileRepo));
 
   return app;
 }
