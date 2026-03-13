@@ -2,7 +2,7 @@ import http from 'node:http';
 import express from 'express';
 import type { Application } from 'express';
 import { rateLimit } from 'express-rate-limit';
-import { competitionsRouter } from './routes/competitions.js';
+import { createCompetitionsRouter } from './routes/competitions.js';
 import { analyticsRouter } from './routes/analytics.js';
 import { leaderboardRouter } from './routes/leaderboard.js';
 import { generateBriefRouter } from './routes/generate-brief.js';
@@ -18,7 +18,7 @@ import { seedAgentProfiles } from '../db/seed-agent-profiles.js';
 
 const CORS = {
   origin: '*',
-  methods: 'GET, POST, OPTIONS',
+  methods: 'GET, POST, PATCH, DELETE, OPTIONS',
   headers: 'Content-Type, Authorization',
 } as const;
 
@@ -76,7 +76,7 @@ export function createApp(): Application {
   );
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.use('/competitions', createLimiter, competitionsRouter);
+  app.use('/competitions', createLimiter, createCompetitionsRouter(agentProfileRepo));
   // Apply tighter limits to expensive post-completion routes
   app.post('/competitions/:id/forge', forgeSynthesisLimiter);
   app.post('/competitions/:id/synthesis', forgeSynthesisLimiter);
