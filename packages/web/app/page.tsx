@@ -164,6 +164,9 @@ export default function GalleryPage() {
         }}>
           {/* Title + stats */}
           <div>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.3rem' }}>
+              ◆ ARENA4AI | COMPETITIONS
+            </div>
             <h1 style={{
               fontSize: '1.8rem', fontWeight: 800, lineHeight: 1, margin: 0,
               background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',

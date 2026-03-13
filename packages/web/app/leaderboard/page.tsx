@@ -115,7 +115,7 @@ export default function LeaderboardPage() {
         }}>
           <div>
             <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.6rem' }}>
-              ◆ Model Rankings
+              ◆ ARENA4AI | LEADERBOARD
             </div>
             <h1 style={{
               fontSize: '2.4rem',

@@ -72,7 +72,7 @@ export default function BriefsPage() {
           borderBottom: '1px solid #0a2235',
         }}>
           <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
-            ◆ Brief Library
+            ◆ ARENA4AI | BRIEF LIBRARY
           </div>
           <h1 style={{
             fontSize: '2rem',

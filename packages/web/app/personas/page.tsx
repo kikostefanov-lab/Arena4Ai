@@ -156,7 +156,7 @@ export default function PersonasPage() {
         <div style={{ marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid #0a2235', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: '1rem' }}>
           <div>
             <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
-              ◆ Personas
+              ◆ ARENA4AI | PERSONAS
             </div>
             <h1 style={{
               fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.05, margin: 0,

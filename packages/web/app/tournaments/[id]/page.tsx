@@ -140,7 +140,7 @@ export default function TournamentPage() {
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
               <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
-                ◆ Tournament
+                ◆ ARENA4AI | TOURNAMENT
               </div>
               <h1 style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0 0 0.5rem', color: '#c8eef8', lineHeight: 1.1 }}>
                 {tournament.name || tournament.brief?.title || tournament.id}
