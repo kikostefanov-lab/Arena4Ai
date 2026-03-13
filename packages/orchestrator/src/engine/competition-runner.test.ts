@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { CompetitionState, CompetitionFormat } from '@arena/shared';
 import type { Brief, Deliverable } from '@arena/shared';
-import type { AgentProfileRepository } from '../db/agent-profile-repository.js';
+import type { AgentRepository } from '../db/agent-repository.js';
 
 // ── Mocks (all hoisted by Vitest) ───────────────────────────────────────────
 
@@ -146,11 +146,11 @@ const testTeams: [{ id: string; model: string; persona: string }, { id: string; 
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function makeTestRunner(opts: { agentProfileRepo?: AgentProfileRepository } = {}): CompetitionRunner {
+function makeTestRunner(opts: { agentRepo?: AgentRepository } = {}): CompetitionRunner {
   return new CompetitionRunner(testBrief, testTeams, {
     skipSandbox: true,
     printResults: false,
-    agentProfileRepo: opts.agentProfileRepo,
+    agentRepo: opts.agentRepo,
   });
 }
 
@@ -204,24 +204,27 @@ describe('CompetitionRunner', () => {
     expect(runner.competitionId.length).toBeGreaterThan(0);
   });
 
-  it('calls updateStats on agent profiles after SCORED transition', async () => {
+  it('calls incrementStats on agent repo after SCORED transition when agentId is set', async () => {
     // Arrange: mock repo with spy
-    const mockUpdateStats = vi.fn().mockResolvedValue(undefined);
-    const mockGetByProviderAndName = vi.fn().mockResolvedValue({
-      id: 'agent-claude-architect',
-      name: 'architect',
-      provider: 'claude',
-    });
+    const mockIncrementStats = vi.fn().mockResolvedValue(undefined);
+    const mockGetByProviderAndPersonaName = vi.fn().mockResolvedValue(null);
+    const mockGet = vi.fn().mockResolvedValue(null);
     const mockRepo = {
-      getByProviderAndName: mockGetByProviderAndName,
-      updateStats: mockUpdateStats,
-    } as unknown as AgentProfileRepository;
+      get: mockGet,
+      getByProviderAndPersonaName: mockGetByProviderAndPersonaName,
+      incrementStats: mockIncrementStats,
+    } as unknown as AgentRepository;
 
-    // makeTestRunner accepts agentProfileRepo option
-    const testRunner = makeTestRunner({ agentProfileRepo: mockRepo });
+    // Use teams with agentId so incrementStats is triggered
+    const teamsWithAgentId = testTeams.map((t, i) => ({ ...t, agentId: `agent-${i}` }));
+    const testRunner = new CompetitionRunner(testBrief, teamsWithAgentId, {
+      skipSandbox: true,
+      printResults: false,
+      agentRepo: mockRepo,
+    });
     await testRunner.run();
 
-    // After SCORED, updateStats should have been called for each team
-    expect(mockUpdateStats).toHaveBeenCalled();
+    // After SCORED, incrementStats should have been called for each team with agentId
+    expect(mockIncrementStats).toHaveBeenCalled();
   });
 });

@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
-import type { AgentProfileRepository } from '../../db/agent-profile-repository.js';
+import type { AgentRepository } from '../../db/agent-repository.js';
 
-export function createAgentProfilesRouter(repo: AgentProfileRepository): Router {
+export function createAgentProfilesRouter(repo: AgentRepository): Router {
   const router = Router();
 
   // GET /agent-profiles?provider=claude&retired=false
@@ -12,8 +12,8 @@ export function createAgentProfilesRouter(repo: AgentProfileRepository): Router 
       const filters: { provider?: string; retired?: boolean } = {};
       if (provider) filters.provider = provider;
       if (retired !== undefined) filters.retired = retired === 'true';
-      const profiles = await repo.list(filters);
-      res.json(profiles);
+      const result = await repo.list(filters);
+      res.json(result.agents);
     } catch (_err) {
       res.status(500).json({ error: 'Failed to list agent profiles' });
     }
@@ -23,23 +23,18 @@ export function createAgentProfilesRouter(repo: AgentProfileRepository): Router 
   router.post('/', async (req, res) => {
     try {
       const { name, provider, modelVariant, systemPrompt, description, avatar, tags } = req.body as Record<string, unknown>;
-      if (!name || !provider || !modelVariant || !systemPrompt) {
-        res.status(400).json({ error: 'name, provider, modelVariant, systemPrompt are required' });
+      if (!name || !provider || !modelVariant) {
+        res.status(400).json({ error: 'name, provider, modelVariant are required' });
         return;
       }
       const id = `agent-${randomUUID()}`;
-      await repo.create({
+      const created = await repo.create({
         id,
         name: String(name),
-        provider: String(provider),
+        provider: String(provider) as 'claude' | 'codex' | 'gemini',
         modelVariant: String(modelVariant),
-        systemPrompt: String(systemPrompt),
-        description: description ? String(description) : undefined,
-        avatar: avatar ? String(avatar) : undefined,
-        tags: Array.isArray(tags) ? tags.map(String) : undefined,
         createdBy: 'user',
       });
-      const created = await repo.get(id);
       res.status(201).json(created);
     } catch (_err) {
       res.status(500).json({ error: 'Failed to create agent profile' });
@@ -91,8 +86,8 @@ export function createAgentProfilesRouter(repo: AgentProfileRepository): Router 
         res.status(403).json({ error: 'System profiles cannot be deleted' });
         return;
       }
-      const ok = await repo.retire(req.params.id);
-      res.json({ ok });
+      const retired = await repo.retire(req.params.id);
+      res.json({ ok: retired !== null });
     } catch (_err) {
       res.status(500).json({ error: 'Failed to retire agent profile' });
     }
@@ -106,7 +101,11 @@ export function createAgentProfilesRouter(repo: AgentProfileRepository): Router 
         res.status(400).json({ error: 'name is required' });
         return;
       }
-      const fork = await repo.fork(req.params.id, name, 'user');
+      const fork = await repo.fork(req.params.id, { name, createdBy: 'user' });
+      if (!fork) {
+        res.status(404).json({ error: 'Source agent not found' });
+        return;
+      }
       res.status(201).json(fork);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to fork';
