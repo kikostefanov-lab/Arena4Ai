@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+const hasDb = !!process.env.DATABASE_URL;
+if (!hasDb) {
+  vi.mock('../client.js', () => ({ db: {} }));
+}
+
 import { AgentRepository } from '../agent-repository.js';
 import { db } from '../client.js';
 
-const DATABASE_URL = process.env.DATABASE_URL;
-const describeWithDb = DATABASE_URL ? describe : describe.skip;
+const describeWithDb = hasDb ? describe : describe.skip;
 
 const repo = new AgentRepository(db);
 
