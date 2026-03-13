@@ -32,7 +32,7 @@ import { printResults } from '../judging/results-reporter.js';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
 import { CommentaryAgent } from '../commentary/commentary-agent.js';
-import type { AgentProfileRepository } from '../db/agent-profile-repository.js';
+import type { AgentRepository } from '../db/agent-repository.js';
 
 export interface RunOptions {
   /** Directory where JSONL event logs are written. Defaults to OS tmp dir. */
@@ -56,8 +56,8 @@ export interface RunOptions {
   aiJudgeCount?: 1 | 2;
   /** Enable live AI commentary during the competition. Default false. */
   commentary?: boolean;
-  /** Optional agent profile repository for fire-and-forget stats updates after SCORED. */
-  agentProfileRepo?: AgentProfileRepository;
+  /** Optional agent repository for DB-based persona resolution and stats updates after SCORED. */
+  agentRepo?: AgentRepository;
 }
 
 export interface TeamDeliverable {
@@ -88,8 +88,8 @@ export interface CompetitionResult {
  */
 export class CompetitionRunner extends EventEmitter {
   private competition: Competition;
-  private readonly options: Required<Omit<RunOptions, 'agentProfileRepo'>>;
-  private readonly agentProfileRepo?: AgentProfileRepository;
+  private readonly options: Required<Omit<RunOptions, 'agentRepo'>>;
+  private readonly agentRepo?: AgentRepository;
   private _cancelled = false;
   private _cancelResolve?: () => void;
   private _activeAdapters: BaseAdapter[] = [];
@@ -105,7 +105,7 @@ export class CompetitionRunner extends EventEmitter {
       state: CompetitionState.DRAFT,
     };
 
-    this.agentProfileRepo = options.agentProfileRepo;
+    this.agentRepo = options.agentRepo;
 
     this.options = {
       logDir: options.logDir ?? tmpdir(),
@@ -190,10 +190,33 @@ export class CompetitionRunner extends EventEmitter {
 
           // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
           const [provider, personaId] = team.model.split(':');
-          const persona = resolvePersona(
-            personaId ?? team.persona,
-            brief.format,
-          );
+
+          // Two-path persona resolution:
+          // 1. New UI path: agentId → DB lookup
+          // 2. Legacy/CLI path: provider + persona name → DB lookup → fallback to hardcoded
+          let systemPrompt: string;
+
+          if (team.agentId && this.agentRepo) {
+            // New UI path: agentId → DB lookup
+            const agent = await this.agentRepo.get(team.agentId);
+            systemPrompt = agent?.persona?.systemPrompt
+              ?? resolvePersona(personaId ?? team.persona, brief.format).systemPrompt;
+          } else if (this.agentRepo) {
+            // Legacy/CLI path: provider + persona name → DB lookup → fallback
+            const pName = personaId ?? team.persona;
+            const dbAgent = pName
+              ? await this.agentRepo.getByProviderAndPersonaName(provider, pName)
+              : null;
+            if (dbAgent?.persona) {
+              systemPrompt = dbAgent.persona.systemPrompt;
+              if (!team.agentId) (team as any).agentId = dbAgent.id;
+            } else {
+              systemPrompt = resolvePersona(pName, brief.format).systemPrompt;
+            }
+          } else {
+            // DB unavailable: fall back to hardcoded
+            systemPrompt = resolvePersona(personaId ?? team.persona, brief.format).systemPrompt;
+          }
 
           let adapter: BaseAdapter;
           switch (provider) {
@@ -224,7 +247,7 @@ export class CompetitionRunner extends EventEmitter {
           }
 
           adapter.on('arenaEvent', forwardEvent);
-          await adapter.injectBrief(brief, persona.systemPrompt);
+          await adapter.injectBrief(brief, systemPrompt);
           return adapter;
         })
       );
@@ -353,10 +376,16 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.SCORED);
 
       // Fire-and-forget stats update — does not block competition flow
-      if (this.agentProfileRepo) {
-        void this.updateAgentStats(scorecards).catch((err) => {
-          console.warn('[stats] Failed to update agent stats:', err);
-        });
+      if (this.agentRepo) {
+        const winnerId = scorecards.find(sc => sc.rank === 1)?.teamId ?? null;
+        for (const team of teams) {
+          if (team.agentId) {
+            const scorecard = scorecards.find(s => s.teamId === team.id);
+            const won = scorecard?.teamId === winnerId;
+            const score = scorecard?.finalScore ?? 0;
+            await this.agentRepo.incrementStats(team.agentId, { won, score }).catch(() => {});
+          }
+        }
       }
 
       // ── COMPLETE ──────────────────────────────────────────────────────────
@@ -403,24 +432,4 @@ export class CompetitionRunner extends EventEmitter {
     }
   }
 
-  private async updateAgentStats(scorecards: ScoreCard[]): Promise<void> {
-    if (!this.agentProfileRepo || scorecards.length === 0) return;
-    // Find winner: reduce tracking both teamId and score to avoid repeated array scans
-    const winner = scorecards.reduce<{ teamId: string; score: number }>(
-      (best, sc) => sc.finalScore > best.score ? { teamId: sc.teamId, score: sc.finalScore } : best,
-      { teamId: scorecards[0].teamId, score: scorecards[0].finalScore },
-    );
-    const winnerId = winner.teamId;
-    for (const sc of scorecards) {
-      const team = this.competition.teams.find(t => t.id === sc.teamId);
-      if (!team) continue;
-      const colonIdx = team.model.indexOf(':');
-      if (colonIdx === -1) continue;
-      const provider = team.model.slice(0, colonIdx);
-      const name = team.model.slice(colonIdx + 1);
-      const profile = await this.agentProfileRepo.getByProviderAndName(provider, name);
-      if (!profile) continue;
-      await this.agentProfileRepo.updateStats(profile.id, sc.teamId === winnerId, sc.finalScore);
-    }
-  }
 }

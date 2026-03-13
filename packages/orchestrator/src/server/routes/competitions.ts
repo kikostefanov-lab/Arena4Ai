@@ -14,9 +14,9 @@ import type { ForgeInput } from '../../forge/forge-orchestrator.js';
 import { synthesizeDeliverables } from '../../synthesis/merge-engine.js';
 import type { TeamDeliverable } from '../../db/schema.js';
 import { buildDeliverableFilename, buildForgeFilename } from '../../utils/naming.js';
-import type { AgentProfileRepository } from '../../db/agent-profile-repository.js';
+import type { AgentRepository } from '../../db/agent-repository.js';
 
-export function createCompetitionsRouter(agentProfileRepo?: AgentProfileRepository): Router {
+export function createCompetitionsRouter(agentRepo?: AgentRepository): Router {
   const competitionsRouter = Router();
 
 // POST /competitions — start a new competition
@@ -58,7 +58,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     claudeBin: body.options?.claudeBin,
     logDir: body.options?.logDir,
     commentary: body.options?.commentary ?? false,
-    agentProfileRepo,
+    agentRepo,
   };
 
   const rawBrief = briefResult.data;

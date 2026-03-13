@@ -5,6 +5,7 @@ export interface Team {
   id: string;           // 'team-a' | 'team-b' | 'team-c' | 'team-d'
   model: string;        // 'claude:architect'
   persona: string;      // resolved system prompt
+  agentId?: string;     // optional DB agent id (new UI path)
 }
 
 export interface RubricCriterion {

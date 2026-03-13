@@ -12,9 +12,13 @@ import { compareRouter } from './routes/compare.js';
 import { criteriaRouter } from './routes/criteria.js';
 import { attachWebSocket } from './websocket.js';
 import { db } from '../db/client.js';
-import { AgentProfileRepository } from '../db/agent-profile-repository.js';
+import { PersonaRepository } from '../db/persona-repository.js';
+import { AgentRepository } from '../db/agent-repository.js';
 import { createAgentProfilesRouter } from './routes/agent-profiles.js';
-import { seedAgentProfiles } from '../db/seed-agent-profiles.js';
+import { createPersonasRouter } from './routes/personas.js';
+import { createAgentsRouter } from './routes/agents.js';
+import { generatePersonaRouter } from './routes/generate-persona.js';
+import { seedPersonasAgents } from '../db/seed-personas-agents.js';
 
 const CORS = {
   origin: '*',
@@ -68,15 +72,25 @@ export function createApp(): Application {
     legacyHeaders: false,
   });
 
-  const agentProfileRepo = new AgentProfileRepository(db);
+  // Limit for AI persona generation
+  const generatePersonaLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    message: { error: 'Too many generate-persona requests. Try again in a minute.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+  });
 
-  // Seed system agents on startup (async, non-blocking)
-  void seedAgentProfiles(agentProfileRepo).catch((err) =>
-    console.warn('[seed] Failed to seed agent profiles:', err),
+  const personaRepo = new PersonaRepository(db);
+  const agentRepo = new AgentRepository(db);
+
+  // Seed system personas + agents on startup (async, non-blocking)
+  void seedPersonasAgents(personaRepo, agentRepo).catch((err) =>
+    console.warn('[seed] Failed to seed personas/agents:', err),
   );
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.use('/competitions', createLimiter, createCompetitionsRouter(agentProfileRepo));
+  app.use('/competitions', createLimiter, createCompetitionsRouter(agentRepo));
   // Apply tighter limits to expensive post-completion routes
   app.post('/competitions/:id/forge', forgeSynthesisLimiter);
   app.post('/competitions/:id/synthesis', forgeSynthesisLimiter);
@@ -87,9 +101,12 @@ export function createApp(): Application {
   app.use('/generate-brief', generateBriefLimiter, generateBriefRouter);
   app.use('/tournaments', tournamentsRouter);
   app.use('/briefs', briefsRouter);
-  // Apply tighter limit to fork endpoint (creates DB rows)
+  app.use('/personas', createPersonasRouter(personaRepo));
+  app.use('/agents', createAgentsRouter(agentRepo));
+  app.use('/generate-persona', generatePersonaLimiter, generatePersonaRouter);
+  // Keep agent-profiles for backward compat (now backed by AgentRepository)
   app.post('/agent-profiles/:id/fork', forgeSynthesisLimiter);
-  app.use('/agent-profiles', createAgentProfilesRouter(agentProfileRepo));
+  app.use('/agent-profiles', createAgentProfilesRouter(agentRepo));
 
   return app;
 }
