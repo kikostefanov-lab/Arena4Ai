@@ -1,11 +1,16 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+
+const hasDb = !!process.env.DATABASE_URL;
+if (!hasDb) {
+  vi.mock('../client.js', () => ({ db: {} }));
+}
+
 import { PersonaRepository } from '../persona-repository.js';
 import { db } from '../client.js';
 import { personas } from '../schema.js';
 import { like } from 'drizzle-orm';
 
-const DATABASE_URL = process.env.DATABASE_URL;
-const describeWithDb = DATABASE_URL ? describe : describe.skip;
+const describeWithDb = hasDb ? describe : describe.skip;
 
 const repo = new PersonaRepository(db);
 
