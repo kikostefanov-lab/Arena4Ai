@@ -4,7 +4,8 @@ import type { AgentProfile } from '@arena/shared';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { randomUUID } from 'crypto';
 
-type Db = NodePgDatabase;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Db = NodePgDatabase<any>;
 
 type CreateInput = {
   id?: string;
