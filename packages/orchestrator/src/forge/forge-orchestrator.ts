@@ -915,6 +915,7 @@ ${fileSection}`;
       readme: string;
     };
 
+    const generatedAt = new Date().toISOString();
     return [
       {
         type: 'reference_implementation',
@@ -922,7 +923,7 @@ ${fileSection}`;
         content: JSON.stringify(json.src),
         outputFormat: 'text',
         filename: 'src/',
-        generatedAt: new Date().toISOString(),
+        generatedAt,
       },
       {
         type: 'test_suite_template',
@@ -930,7 +931,7 @@ ${fileSection}`;
         content: JSON.stringify(json.tests),
         outputFormat: 'text',
         filename: 'tests/',
-        generatedAt: new Date().toISOString(),
+        generatedAt,
       },
       {
         type: 'project_readme',
@@ -938,7 +939,7 @@ ${fileSection}`;
         content: json.readme,
         outputFormat: 'markdown',
         filename: 'README.md',
-        generatedAt: new Date().toISOString(),
+        generatedAt,
       },
     ];
   } catch (err) {
@@ -1001,18 +1002,19 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
   };
 
   try {
-    let artifacts = await Promise.all(allSpecs.map(generateArtifact));
-
     const shouldRunStarterKit =
       (input.brief.deliverableType === 'code' || !input.brief.deliverableType) &&
       (input.source === 'winner' || input.source === 'loser') &&
       primaryDeliverables.length > 0 &&
       primaryDeliverables.some(d => d.files.length > 0);
 
-    if (shouldRunStarterKit) {
-      const kitArtifacts = await generateStarterKit(input.brief, primaryDeliverables);
-      if (kitArtifacts) artifacts = [...artifacts, ...kitArtifacts];
-    }
+    // Run domain artifacts and starter kit in parallel to minimise wall-clock time.
+    const [domainArtifacts, kitArtifacts] = await Promise.all([
+      Promise.all(allSpecs.map(generateArtifact)),
+      shouldRunStarterKit ? generateStarterKit(input.brief, primaryDeliverables) : Promise.resolve(null),
+    ]);
+
+    const artifacts = kitArtifacts ? [...domainArtifacts, ...kitArtifacts] : domainArtifacts;
 
     return {
       id: randomUUID(),

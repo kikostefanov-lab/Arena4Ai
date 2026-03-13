@@ -6,7 +6,7 @@ import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
-import type { ForgeRun, ForgeSource } from '@arena/shared';
+import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale
 interface SynthesisResult { synthesis: string; overallRationale?: string; perCriterion: SynthesisPerCriterion[]; }
 interface CriterionFinding { criterionId: string; finding: string; strength: string; gap: string; }
 interface TeamPresentation { teamId: string; model: string; approach: string; criterionFindings: CriterionFinding[]; keyInsight: string; deliverableSummary: string; }
-interface ForgeArtifact { type: string; title: string; content: string; generatedAt: string; universal?: boolean; outputFormat: string; filename: string; }
+type ForgeArtifact = SharedForgeArtifact;
 interface ForgeOutput { forgeModel: string; artifacts: ForgeArtifact[]; generatedAt: string; domain?: string; selectedTypes?: string[]; }
 interface CompetitionResult { winnerId: string | null; teams: TeamResult[]; summary?: string; synthesis?: SynthesisResult | null; deliverables?: TeamDeliverable[]; presentations?: TeamPresentation[]; forge?: ForgeRun[] | null; }
 
@@ -591,12 +591,12 @@ interface TeamFileEvents {
 
 // ─── Forge helpers ────────────────────────────────────────────────────────────
 
+const FORMAT_EXTENSIONS: Record<string, string> = {
+  markdown: '.md', sql: '.sql', csv: '.csv',
+  yaml: '.yml', dockerfile: 'Dockerfile', json: '.json', text: '.txt',
+};
 function formatExtension(outputFormat: string): string {
-  const ext: Record<string, string> = {
-    markdown: '.md', sql: '.sql', csv: '.csv',
-    yaml: '.yml', dockerfile: 'file', json: '.json', text: '.txt',
-  };
-  return ext[outputFormat] ?? '.md';
+  return FORMAT_EXTENSIONS[outputFormat] ?? '.md';
 }
 
 function parseCsvRows(content: string, maxRows = 50): string[][] {
@@ -633,7 +633,7 @@ function ScoreDrawer({
   );
   const [activeFileIdx, setActiveFileIdx] = useState<Record<string, number>>({});
   const [expandedFile, setExpandedFile] = useState<{ teamId: string; path: string } | null>(null);
-  const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string; outputFormat?: string; artifactType?: string; downloadUrl?: string } | null>(null);
+  const [fileModalContent, setFileModalContent] = useState<{ path: string; content: string; outputFormat?: string; isMultiFile?: boolean; downloadUrl?: string } | null>(null);
   const [presentationModal, setPresentationModal] = useState<TeamPresentation | null>(null);
   // Layout redesign state
   const [selectedCriterionId, setSelectedCriterionId] = useState<string | null>(null);
@@ -644,6 +644,18 @@ function ScoreDrawer({
   const dragFilePreviewStartY = useRef(0);
   const dragFilePreviewStartH = useRef(0);
   const isExpanded = height > SCORE_DRAWER_COLLAPSED;
+
+  // Memoize expensive modal content parses — fileModalContent is set once per click, but
+  // the competition polling loop causes frequent re-renders while the modal is open.
+  const csvRows = useMemo(
+    () => fileModalContent?.outputFormat === 'csv' ? parseCsvRows(fileModalContent.content) : null,
+    [fileModalContent?.outputFormat, fileModalContent?.content],
+  );
+  const multiFileEntries = useMemo(() => {
+    if (!fileModalContent?.isMultiFile) return null;
+    try { return Object.entries(JSON.parse(fileModalContent.content) as Record<string, string>); }
+    catch { return []; }
+  }, [fileModalContent?.isMultiFile, fileModalContent?.content]);
 
   const winnerLabel = result.winnerId
     ? resolveTeamLabel(teams, result.winnerId, result.winnerId)
@@ -1680,7 +1692,7 @@ function ScoreDrawer({
                                 path: artifact.title,
                                 content: artifact.content,
                                 outputFormat: artifact.outputFormat,
-                                artifactType: artifact.type,
+                                isMultiFile: artifact.type === 'reference_implementation' || artifact.type === 'test_suite_template',
                                 downloadUrl: `/api/competitions/${competitionId}/forge/${activeRun.id}/artifacts/${artifact.type}/download`,
                               })}
                               style={{
@@ -1909,11 +1921,11 @@ function ScoreDrawer({
               padding: '0.85rem 1.1rem', overflowY: 'auto', flex: 1,
             }}>
               {/* Format-aware modal content */}
-              {fileModalContent.outputFormat === 'csv' ? (
+              {csvRows ? (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ borderCollapse: 'collapse', fontSize: '0.65rem', fontFamily: MONOSPACE_FONT, width: '100%' }}>
                     <tbody>
-                      {parseCsvRows(fileModalContent.content).map((row, i) => (
+                      {csvRows.map((row, i) => (
                         <tr key={i} style={{ borderBottom: '1px solid rgba(0,240,255,0.1)' }}>
                           {row.map((cell, j) => (
                             i === 0
@@ -1925,17 +1937,14 @@ function ScoreDrawer({
                     </tbody>
                   </table>
                 </div>
-              ) : fileModalContent.artifactType === 'reference_implementation' || fileModalContent.artifactType === 'test_suite_template' ? (
+              ) : multiFileEntries !== null ? (
                 <div>
                   {(() => {
-                    let fileMap: Record<string, string> = {};
-                    try { fileMap = JSON.parse(fileModalContent.content) as Record<string, string>; } catch {}
-                    const entries = Object.entries(fileMap);
-                    const [firstFile = '', firstContent = fileModalContent.content] = entries[0] ?? [];
+                    const [firstFile = '', firstContent = fileModalContent.content] = multiFileEntries[0] ?? [];
                     return (
                       <>
                         <p style={{ fontSize: '0.62rem', color: TEXT_MUTED, marginBottom: '0.5rem', fontFamily: MONOSPACE_FONT }}>
-                          {entries.length} file{entries.length !== 1 ? 's' : ''} — use Download to get all. Showing: <code>{firstFile}</code>
+                          {multiFileEntries.length} file{multiFileEntries.length !== 1 ? 's' : ''} — use Download to get all. Showing: <code>{firstFile}</code>
                         </p>
                         <pre style={{ overflowX: 'auto', fontSize: '0.62rem', fontFamily: MONOSPACE_FONT, lineHeight: 1.5, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                           {firstContent}
@@ -2516,33 +2525,43 @@ export default function CompetitionPage() {
             letterSpacing: '2.5px', textDecoration: 'none', flexShrink: 0,
             display: 'flex', alignItems: 'center', gap: '0.4rem',
           }}>
-            ◆ ARENA4AI | ARENA
+            ◆ ARENA
           </a>
 
           <span style={{ color: '#0a2235', fontSize: '1.1rem' }}>│</span>
 
           <div style={{
             flex: 1, minWidth: 0, display: 'flex', alignItems: 'center',
-            gap: '0.8rem', flexWrap: 'wrap',
+            gap: '0.8rem', flexWrap: 'nowrap', overflow: 'hidden',
           }}>
             {briefTitle && (
-              <span style={{ fontSize: '1.05rem', fontWeight: 800, color: '#c8eef8' }}>
+              <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#c8eef8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '320px' }}>
                 {briefTitle}
               </span>
             )}
-            <span style={{
-              fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.65rem',
-              borderRadius: '4px', letterSpacing: '1.5px',
-              background: stateBadge.bg, color: stateBadge.color,
-              border: `1px solid ${stateBadge.color}33`,
-              display: 'flex', alignItems: 'center', gap: '0.35rem',
-            }}>
-              {isRunning && <StatusDot color={stateBadge.color} pulsing={true} />}
-              {isComplete && <span>✅</span>}
-              {state === 'FAILED' && <span>💥</span>}
-              {state === 'CANCELLED' && <span>🚫</span>}
-              {state}
-            </span>
+            {isRunning && (
+              <span style={{
+                fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.65rem',
+                borderRadius: '4px', letterSpacing: '1.5px',
+                background: stateBadge.bg, color: stateBadge.color,
+                border: `1px solid ${stateBadge.color}33`,
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+              }}>
+                <StatusDot color={stateBadge.color} pulsing={true} />
+                {state}
+              </span>
+            )}
+            {(state === 'FAILED' || state === 'CANCELLED') && (
+              <span style={{
+                fontSize: '0.75rem', fontWeight: 800, padding: '0.2rem 0.65rem',
+                borderRadius: '4px', letterSpacing: '1.5px',
+                background: stateBadge.bg, color: stateBadge.color,
+                border: `1px solid ${stateBadge.color}33`,
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+              }}>
+                {state === 'FAILED' ? '💥' : '🚫'} {state}
+              </span>
+            )}
 
             {!connected && !result && (
               <span style={{ fontSize: '0.70rem', color: '#eab308', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
@@ -2558,15 +2577,6 @@ export default function CompetitionPage() {
             )}
             {sseError && (
               <span style={{ fontSize: '0.70rem', color: '#ef4444' }}>{sseError}</span>
-            )}
-            {totalEvents > 0 && (
-              <span style={{
-                fontSize: '0.65rem', color: '#1e4a5a',
-                background: 'rgba(10,34,53,0.4)',
-                padding: '0.12rem 0.5rem', borderRadius: '3px', fontFamily: 'monospace',
-              }}>
-                {totalEvents} events
-              </span>
             )}
           </div>
 
@@ -2592,16 +2602,6 @@ export default function CompetitionPage() {
             📋 BRIEF
           </button>
 
-          {brief && (
-            <button
-              onClick={() => downloadYaml(`brief-${id}.yml`, briefToYaml(brief))}
-              className="text-xs border border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 px-2 py-1 rounded"
-              style={{ fontSize: '0.70rem', flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit' }}
-              title="Download brief as YAML"
-            >
-              ⬇ Brief
-            </button>
-          )}
 
           <button
             onClick={handleCopyLink}
@@ -2727,8 +2727,8 @@ export default function CompetitionPage() {
             </button>
           )}
 
-          {/* Spectate link — always shown */}
-          <a
+          {/* Spectate link — shown only while running */}
+          {!isTerminal && <a
             href={`/competitions/${id}/spectate`}
             target="_blank"
             rel="noopener noreferrer"
@@ -2743,7 +2743,7 @@ export default function CompetitionPage() {
             title="Open fullscreen spectator view"
           >
             ⤢ Spectate
-          </a>
+          </a>}
 
           {/* Notification toggle — shown when competition is in progress */}
           {!isTerminal && !notifyDenied && (
@@ -2773,15 +2773,17 @@ export default function CompetitionPage() {
             </span>
           )}
 
-          <div style={{
-            fontFamily: 'monospace',
-            color: isRunning ? '#00f0ff' : '#4a8fa8',
-            fontSize: '0.95rem', fontWeight: 800,
-            flexShrink: 0, minWidth: '4rem', textAlign: 'right',
-            letterSpacing: '0.5px', transition: 'color 0.3s ease',
-          }}>
-            {formatElapsed(elapsed)}
-          </div>
+          {!isTerminal && (
+            <div style={{
+              fontFamily: 'monospace',
+              color: isRunning ? '#00f0ff' : '#4a8fa8',
+              fontSize: '0.95rem', fontWeight: 800,
+              flexShrink: 0, minWidth: '4rem', textAlign: 'right',
+              letterSpacing: '0.5px', transition: 'color 0.3s ease',
+            }}>
+              {formatElapsed(elapsed)}
+            </div>
+          )}
         </header>
 
         {/* ── Reel progress card ───────────────────────────────────────────── */}

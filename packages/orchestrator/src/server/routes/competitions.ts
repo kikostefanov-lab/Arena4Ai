@@ -277,6 +277,9 @@ competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response
   archive.on('error', (err) => { console.error(`[arena] forge zip error for ${id}:`, err.message); res.destroy(err); });
   archive.pipe(res);
 
+  // TODO: these routing tables duplicate forge-zip-utils.ts in packages/web/lib — move to
+  // @arena/shared or packages/orchestrator/src/forge/forge-zip-utils.ts so both consumers
+  // share a single source of truth and don't silently diverge when new artifact types are added.
   const TYPE_OVERRIDES_INLINE: Partial<Record<string, string | null>> = {
     project_readme:           'README.md',
     environment_template:     'infrastructure/.env.example',
