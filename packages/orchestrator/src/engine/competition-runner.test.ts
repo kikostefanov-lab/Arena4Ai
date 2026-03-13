@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { CompetitionState, CompetitionFormat } from '@arena/shared';
 import type { Brief, Deliverable } from '@arena/shared';
+import type { AgentProfileRepository } from '../db/agent-profile-repository.js';
 
 // ── Mocks (all hoisted by Vitest) ───────────────────────────────────────────
 
@@ -53,8 +54,8 @@ vi.mock('../judging/ai-judge.js', () => ({
 // Mock score-aggregator
 vi.mock('../judging/score-aggregator.js', () => ({
   aggregate: vi.fn().mockReturnValue([
-    { teamId: 'team-a', rank: 1, totalScore: 8.5, criteriaScores: {} },
-    { teamId: 'team-b', rank: 2, totalScore: 7.0, criteriaScores: {} },
+    { teamId: 'team-a', rank: 1, finalScore: 0.85, judgeResults: [] },
+    { teamId: 'team-b', rank: 2, finalScore: 0.70, judgeResults: [] },
   ]),
 }));
 
@@ -143,6 +144,16 @@ const testTeams: [{ id: string; model: string; persona: string }, { id: string; 
   { id: 'team-b', model: 'claude:speedrunner', persona: 'speedrunner' },
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function makeTestRunner(opts: { agentProfileRepo?: AgentProfileRepository } = {}): CompetitionRunner {
+  return new CompetitionRunner(testBrief, testTeams, {
+    skipSandbox: true,
+    printResults: false,
+    agentProfileRepo: opts.agentProfileRepo,
+  });
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('CompetitionRunner', () => {
@@ -191,5 +202,26 @@ describe('CompetitionRunner', () => {
   it('exposes competitionId', () => {
     expect(typeof runner.competitionId).toBe('string');
     expect(runner.competitionId.length).toBeGreaterThan(0);
+  });
+
+  it('calls updateStats on agent profiles after SCORED transition', async () => {
+    // Arrange: mock repo with spy
+    const mockUpdateStats = vi.fn().mockResolvedValue(undefined);
+    const mockGetByProviderAndName = vi.fn().mockResolvedValue({
+      id: 'agent-claude-architect',
+      name: 'architect',
+      provider: 'claude',
+    });
+    const mockRepo = {
+      getByProviderAndName: mockGetByProviderAndName,
+      updateStats: mockUpdateStats,
+    } as unknown as AgentProfileRepository;
+
+    // makeTestRunner accepts agentProfileRepo option
+    const testRunner = makeTestRunner({ agentProfileRepo: mockRepo });
+    await testRunner.run();
+
+    // After SCORED, updateStats should have been called for each team
+    expect(mockUpdateStats).toHaveBeenCalled();
   });
 });
