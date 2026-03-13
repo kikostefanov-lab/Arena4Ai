@@ -57,7 +57,11 @@ export function createPersonasRouter(repo: PersonaRepository): Router {
   // PATCH /personas/:id
   router.patch('/:id', async (req: Request, res: Response) => {
     try {
-      const updated = await repo.update(String(req.params.id), req.body);
+      const { name, description, systemPrompt, avatar, tags } = req.body as {
+        name?: string; description?: string; systemPrompt?: string;
+        avatar?: string; tags?: string[];
+      };
+      const updated = await repo.update(String(req.params.id), { name, description, systemPrompt, avatar, tags });
       if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
       res.json(updated);
     } catch (err) {

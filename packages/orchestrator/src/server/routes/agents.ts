@@ -59,7 +59,11 @@ export function createAgentsRouter(repo: AgentRepository): Router {
   // PATCH /agents/:id
   router.patch('/:id', async (req, res) => {
     try {
-      const updated = await repo.update(req.params.id, req.body);
+      const { name, personaId, modelVariant, providerOptions } = req.body as {
+        name?: string; personaId?: string | null;
+        modelVariant?: string; providerOptions?: Record<string, unknown> | null;
+      };
+      const updated = await repo.update(req.params.id, { name, personaId, modelVariant, providerOptions });
       if (!updated) { res.status(404).json({ error: 'Not found' }); return; }
       res.json(updated);
     } catch (err) {
