@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
 import type { SavedPersona } from '../../personas/page';
@@ -34,6 +34,8 @@ interface RubricCriterion {
 
 type Format = 'SPRINT' | 'HACKATHON' | 'RELAY_RACE' | 'RED_VS_BLUE';
 type Model = 'claude' | 'codex' | 'gemini';
+type DeliverableType = 'code' | 'document' | 'analysis' | 'presentation' | 'plan' | 'mixed';
+type DomainHint = '' | 'software' | 'research' | 'creative' | 'security' | 'business' | 'ideation';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -106,6 +108,8 @@ const MODEL_META: Record<Model, { emoji: string; label: string; color: string; g
 
 const PERSONAS = ['speedrunner', 'architect', 'pragmatist', 'researcher', 'adversarial', 'defender', 'pioneer'];
 
+const VALID_DOMAIN_HINTS: DomainHint[] = ['', 'software', 'research', 'creative', 'security', 'business', 'ideation'];
+
 const FONT = MONOSPACE_FONT;
 
 // ─── ExampleChips ─────────────────────────────────────────────────────────────
@@ -169,6 +173,8 @@ interface ParsedBriefYaml {
   constraints?: string[];
   deliverables?: string[];
   expectedOutput?: string;
+  deliverableType?: DeliverableType;
+  domainHint?: string;
   rubric?: {
     criteria: Array<{
       id: string;
@@ -313,6 +319,12 @@ function parseSimpleBriefYaml(text: string): ParsedBriefYaml {
     } else if (trimmed === 'deliverables:') {
       i++;
       result.deliverables = readSequence(indent);
+    } else if (trimmed.startsWith('deliverableType:')) {
+      result.deliverableType = extractQuotedOrBare(trimmed.slice(16)) as DeliverableType;
+      i++;
+    } else if (trimmed.startsWith('domainHint:')) {
+      result.domainHint = String(extractQuotedOrBare(trimmed.slice(11)));
+      i++;
     } else if (trimmed === 'rubric:') {
       i++;
       // Look for criteria: inside rubric block
@@ -377,6 +389,9 @@ export default function NewCompetitionPage() {
   const [timeLimitMins, setTimeLimitMins] = useState(FORMAT_PRESETS['SPRINT'].timeLimitMins);
   const [criteria, setCriteria] = useState<RubricCriterion[]>(FORMAT_PRESETS['SPRINT'].criteria);
   const [expectedOutput, setExpectedOutput] = useState('');
+  const [deliverableType, setDeliverableType] = useState<DeliverableType>('code');
+  const [domainHint, setDomainHint] = useState<DomainHint>('');
+  const [domainHintOpen, setDomainHintOpen] = useState(false);
   const [teams, setTeams] = useState([
     { id: 'team-a', model: 'claude' as Model, persona: 'speedrunner' },
     { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
@@ -403,7 +418,7 @@ export default function NewCompetitionPage() {
     if (!fromId) return;
     fetch(`/api/competitions/${fromId}`)
       .then(r => r.ok ? r.json() : null)
-      .then((data: { brief?: { title?: string; problem?: string; format?: string; timeLimitMs?: number; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] } }; teams?: { model?: string }[] } | null) => {
+      .then((data: { brief?: { title?: string; problem?: string; format?: string; timeLimitMs?: number; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; deliverableType?: DeliverableType; domainHint?: string }; teams?: { model?: string }[] } | null) => {
         if (!data?.brief) return;
         const b = data.brief;
         if (b.title) setTitle(b.title);
@@ -413,6 +428,10 @@ export default function NewCompetitionPage() {
         if (b.constraints?.length) setConstraints(b.constraints.join('\n'));
         if (b.deliverables?.length) setDeliverables(b.deliverables.join('\n'));
         if (b.rubric?.criteria?.length) setCriteria(b.rubric.criteria);
+        if (b.deliverableType) setDeliverableType(b.deliverableType);
+        if (b.domainHint && VALID_DOMAIN_HINTS.includes(b.domainHint as DomainHint)) {
+          setDomainHint(b.domainHint as DomainHint);
+        }
         if (data.teams?.length) {
           const teamIds = ['team-a', 'team-b', 'team-c', 'team-d'];
           setTeams(data.teams.slice(0, 4).map((t: { model?: string }, i: number) => {
@@ -430,7 +449,7 @@ export default function NewCompetitionPage() {
     if (!briefSlug) return;
     fetch('/api/briefs')
       .then(r => r.ok ? r.json() : [])
-      .then((briefs: Array<{ id: string; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; tags?: string[] }>) => {
+      .then((briefs: Array<{ id: string; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; tags?: string[]; deliverableType?: DeliverableType; domainHint?: string }>) => {
         const brief = briefs.find((b) => b.id === briefSlug);
         if (!brief) return;
         if (brief.title) setTitle(brief.title);
@@ -440,6 +459,10 @@ export default function NewCompetitionPage() {
         if (brief.constraints?.length) setConstraints(brief.constraints.join('\n'));
         if (brief.deliverables?.length) setDeliverables(brief.deliverables.join('\n'));
         if (brief.rubric?.criteria?.length) setCriteria(brief.rubric.criteria);
+        if (brief.deliverableType) setDeliverableType(brief.deliverableType);
+        if (brief.domainHint && VALID_DOMAIN_HINTS.includes(brief.domainHint as DomainHint)) {
+          setDomainHint(brief.domainHint as DomainHint);
+        }
         setExpandedStep(3); // jump to teams step since brief is pre-filled
       })
       .catch(() => {});
@@ -523,6 +546,10 @@ export default function NewCompetitionPage() {
         if (parsed.deliverables?.length) setDeliverables(parsed.deliverables.join('\n'));
         if (parsed.expectedOutput !== undefined) setExpectedOutput(parsed.expectedOutput);
         if (parsed.rubric?.criteria?.length) setCriteria(parsed.rubric.criteria);
+        if (parsed.deliverableType) setDeliverableType(parsed.deliverableType);
+        if (parsed.domainHint && VALID_DOMAIN_HINTS.includes(parsed.domainHint as DomainHint)) {
+          setDomainHint(parsed.domainHint as DomainHint);
+        }
         showToast('success', `Brief "${parsed.title ?? 'untitled'}" imported successfully.`);
       } catch {
         showToast('error', 'Failed to parse YAML file. Check the format and try again.');
@@ -561,6 +588,8 @@ export default function NewCompetitionPage() {
               .map((c) => ({ ...c, maxScore: Number(c.maxScore), weight: Number(c.weight) })),
           },
           ...(expectedOutput.trim() ? { expectedOutput: expectedOutput.trim() } : {}),
+          deliverableType,
+          ...(domainHint ? { domainHint } : {}),
         },
         teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona })),
         options: { claudeBin: 'claude', logDir: '/tmp/arena-logs' },
@@ -1008,7 +1037,15 @@ export default function NewCompetitionPage() {
                     <textarea
                       className="arena-input"
                       value={deliverables} onChange={(e) => setDeliverables(e.target.value)}
-                      rows={3} placeholder={'report.md with findings\nRanked options with prices'}
+                      rows={3}
+                      placeholder={({
+                        code:         'e.g. solution.py, main.ts, README.md',
+                        document:     'e.g. report.md, findings.txt, analysis.pdf',
+                        analysis:     'e.g. results.csv, summary.md, charts.json',
+                        presentation: 'e.g. slides.md, deck-outline.md, visuals.md',
+                        plan:         'e.g. roadmap.md, architecture.md, strategy.md',
+                        mixed:        'e.g. thesis.md, model.py, README.md',
+                      } as const)[deliverableType]}
                       style={{ resize: 'vertical', lineHeight: 1.6 }}
                     />
                     <ExampleChips
@@ -1025,6 +1062,99 @@ export default function NewCompetitionPage() {
                       onChange={setDeliverables}
                     />
                   </div>
+                </div>
+
+                {/* Deliverable Type picker */}
+                <div style={{ marginTop: '1.25rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '1.5px', color: '#4a8fa8', textTransform: 'uppercase', marginBottom: '0.6rem', fontFamily: MONOSPACE_FONT }}>
+                    Deliverable Type
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {([
+                      { value: 'code',         label: '</> Code' },
+                      { value: 'document',     label: '📄 Document' },
+                      { value: 'analysis',     label: '📊 Analysis' },
+                      { value: 'presentation', label: '🎨 Presentation' },
+                      { value: 'plan',         label: '🗺 Plan' },
+                      { value: 'mixed',        label: '⚡ Mixed' },
+                    ] as const).map(({ value, label }) => {
+                      const active = deliverableType === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setDeliverableType(value)}
+                          style={{
+                            fontSize: '0.65rem', fontWeight: 700, padding: '0.3rem 0.75rem',
+                            borderRadius: '5px', cursor: 'pointer', fontFamily: MONOSPACE_FONT,
+                            letterSpacing: '0.5px', border: active ? '1px solid rgba(0,240,255,0.5)' : '1px solid #0a2235',
+                            background: active ? 'rgba(0,240,255,0.1)' : 'transparent',
+                            color: active ? '#00f0ff' : '#4a8fa8',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div style={{ fontSize: '0.65rem', color: '#3d7d94', marginTop: '0.4rem', fontFamily: BODY_FONT }}>
+                    {({
+                      code:         'Agents will produce runnable code files.',
+                      document:     'Agents will produce written documents — no code files.',
+                      analysis:     'Agents will produce data tables or CSV output.',
+                      presentation: 'Agents will produce slide outlines or visual content.',
+                      plan:         'Agents will produce strategy or architecture documents.',
+                      mixed:        'Agents choose whichever format best fits the brief.',
+                    } as const)[deliverableType]}
+                  </div>
+                </div>
+
+                {/* Advanced: domainHint */}
+                <div style={{ marginTop: '1rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => setDomainHintOpen(o => !o)}
+                    style={{
+                      fontSize: '0.62rem', color: '#3d7d94', background: 'none', border: 'none',
+                      cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT, letterSpacing: '1px',
+                      display: 'flex', alignItems: 'center', gap: '0.3rem',
+                    }}
+                  >
+                    {domainHintOpen ? '▼' : '▶'} Advanced
+                  </button>
+                  {domainHintOpen && (
+                    <div style={{ marginTop: '0.6rem' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '1.5px', color: '#4a8fa8', textTransform: 'uppercase', marginBottom: '0.4rem', fontFamily: MONOSPACE_FONT }}>
+                        Domain Hint (optional)
+                      </div>
+                      <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                        {(['', 'software', 'research', 'creative', 'security', 'business', 'ideation'] as const).map((d) => {
+                          const active = domainHint === d;
+                          return (
+                            <button
+                              key={d}
+                              type="button"
+                              onClick={() => setDomainHint(d)}
+                              style={{
+                                fontSize: '0.62rem', fontWeight: 700, padding: '0.2rem 0.6rem',
+                                borderRadius: '4px', cursor: 'pointer', fontFamily: MONOSPACE_FONT,
+                                border: active ? '1px solid rgba(0,240,255,0.4)' : '1px solid #0a2235',
+                                background: active ? 'rgba(0,240,255,0.08)' : 'transparent',
+                                color: active ? '#00f0ff' : '#3d7d94',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              {d === '' ? 'Auto' : d}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div style={{ fontSize: '0.62rem', color: '#1e4a5a', marginTop: '0.35rem', fontFamily: BODY_FONT }}>
+                        Overrides AI domain detection for Forge artifact selection. Leave on Auto unless you know the domain.
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Time limit */}
@@ -1229,7 +1359,7 @@ export default function NewCompetitionPage() {
                 </div>
 
                 {/* Next button */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                   <button
                     type="button"
                     onClick={() => toggleStep(3)}
@@ -1431,12 +1561,12 @@ export default function NewCompetitionPage() {
                   gap: '0.75rem', flexWrap: 'wrap',
                 }}>
                   {teams.map((team, i) => (
-                    <>
+                    <React.Fragment key={team.id ?? i}>
                       {i > 0 && <span key={`vs-${i}`} style={{ fontSize: '0.8rem', color: '#1e4a5a', fontWeight: 800 }}>vs</span>}
                       <span key={team.id} style={{ fontSize: '0.72rem', fontWeight: 700, color: MODEL_META[team.model].color }}>
                         {MODEL_META[team.model].emoji} {team.model}:{team.persona}
                       </span>
-                    </>
+                    </React.Fragment>
                   ))}
                 </div>
               </div>
