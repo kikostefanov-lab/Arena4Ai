@@ -2,9 +2,17 @@ import { and, eq, gt, asc, desc, sql, inArray } from 'drizzle-orm';
 import type { Db } from './client.js';
 import { competitions, events, results, tournaments } from './schema.js';
 import type { TeamDeliverable } from './schema.js';
-import type { ArenaEvent, Brief, Team, TeamPresentation, ForgeOutput, ForgeRun } from '@arena/shared';
+import type { ArenaEvent, Brief, Team, TeamPresentation, ForgeArtifact, ForgeOutput, ForgeRun } from '@arena/shared';
 import { CompetitionState } from '@arena/shared';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
+
+export function normalizeArtifact(artifact: ForgeArtifact): ForgeArtifact {
+  return {
+    ...artifact,
+    outputFormat: artifact.outputFormat ?? 'markdown',
+    filename: artifact.filename ?? `${artifact.type}.md`,
+  };
+}
 
 export interface StoredResult {
   scorecards: unknown[];
@@ -132,10 +140,15 @@ export class CompetitionRepository {
     if (row.forge) {
       const raw = row.forge as unknown;
       if (Array.isArray(raw)) {
-        parsedForge = raw as ForgeRun[];
+        parsedForge = (raw as ForgeRun[]).map((run) => ({
+          ...run,
+          artifacts: (run.artifacts ?? []).map(normalizeArtifact),
+        }));
       } else if (raw && typeof raw === 'object') {
         // Legacy single ForgeOutput — wrap in array
-        parsedForge = [{ ...(raw as ForgeOutput), id: 'legacy', source: 'winner' as const }];
+        const legacyRun: ForgeRun = { ...(raw as ForgeOutput), id: 'legacy', source: 'winner' as const };
+        legacyRun.artifacts = (legacyRun.artifacts ?? []).map(normalizeArtifact);
+        parsedForge = [legacyRun];
       }
     }
     return { ...row, synthesis: parsedSynthesis, forge: parsedForge };

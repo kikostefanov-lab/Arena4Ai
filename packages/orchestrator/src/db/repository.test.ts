@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { CompetitionFormat, CompetitionState } from '@arena/shared';
+import type { ForgeArtifact } from '@arena/shared';
 
 // These tests require a real Postgres connection.
 // Run with: DATABASE_URL=postgresql://postgres:arena@localhost:5432/arena npx vitest run src/db/repository.test.ts
@@ -11,7 +12,7 @@ if (!hasDb) {
   vi.mock('./client.js', () => ({ db: {} }));
 }
 
-import { CompetitionRepository } from './repository.js';
+import { CompetitionRepository, normalizeArtifact } from './repository.js';
 import { db } from './client.js';
 import { competitions, events, results } from './schema.js';
 import { eq } from 'drizzle-orm';
@@ -90,5 +91,35 @@ describe.skipIf(!hasDb)('CompetitionRepository', () => {
     const all = await repo.getEvents(competitionId);
     const afterFirst = await repo.getEvents(competitionId, 1);
     expect(afterFirst).toHaveLength(all.length - 1);
+  });
+});
+
+describe('normalizeArtifact (backward compat)', () => {
+  it('sets outputFormat to markdown and filename to {type}.md for legacy records', () => {
+    const legacy = {
+      type: 'roadmap',
+      title: 'Roadmap',
+      content: '# Roadmap',
+      generatedAt: '2024-01-01T00:00:00.000Z',
+    } as unknown as ForgeArtifact;
+
+    const normalized = normalizeArtifact(legacy);
+    expect(normalized.outputFormat).toBe('markdown');
+    expect(normalized.filename).toBe('roadmap.md');
+  });
+
+  it('does not overwrite existing outputFormat and filename', () => {
+    const artifact: ForgeArtifact = {
+      type: 'sql_schema',
+      title: 'Schema',
+      content: 'CREATE TABLE ...',
+      generatedAt: '2024-01-01T00:00:00.000Z',
+      outputFormat: 'sql',
+      filename: 'schema.sql',
+    };
+
+    const normalized = normalizeArtifact(artifact);
+    expect(normalized.outputFormat).toBe('sql');
+    expect(normalized.filename).toBe('schema.sql');
   });
 });
