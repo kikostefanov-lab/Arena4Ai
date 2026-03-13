@@ -579,7 +579,6 @@ const FORMAT_DOMAIN_DEFAULTS: Record<string, { domain: ForgeDomain; types: Forge
   PITCH:       { domain: 'creative',  types: ['presentation_structure', 'messaging_guide', 'content_outline', 'concept_canvas'] },
 };
 
-// TODO(sprint2): wire DOMAIN_TYPE_DEFAULTS into brief.domainHint path in selectDomainArtifacts()
 /**
  * Default artifact types per ForgeDomain.
  * Pre-populated for Sprint 2's selectDomainArtifacts() expansion and brief.domainHint support.
@@ -621,14 +620,33 @@ Respond ONLY with a JSON object. No explanation, no markdown, just JSON:
 
 Select 3-4 types that are most useful given what this competition was about.`;
 
-async function selectDomainArtifacts(brief: Brief): Promise<{ domain: ForgeDomain; types: ForgeArtifactType[] }> {
+export async function selectDomainArtifacts(brief: Brief): Promise<{ domain: ForgeDomain; types: ForgeArtifactType[] }> {
+  // Path 1: explicit domainHint — short-circuit, no AI call
+  if (brief.domainHint) {
+    const types = DOMAIN_TYPE_DEFAULTS[brief.domainHint] ?? GENERIC_DEFAULT.types;
+    return { domain: brief.domainHint, types };
+  }
+
+  // Path 2: deliverableType hint — seed the AI selection prompt
+  const TYPE_TO_DOMAIN: Record<string, ForgeDomain> = {
+    code:         'software',
+    document:     'creative',
+    analysis:     'research',
+    presentation: 'creative',
+    plan:         'business',
+    // 'mixed' intentionally omitted — falls through to unguided AI selection
+  };
+  const deliverableTypeHint = brief.deliverableType && brief.deliverableType !== 'mixed'
+    ? `\nNote: The brief's deliverable type is "${brief.deliverableType}", suggesting a ${TYPE_TO_DOMAIN[brief.deliverableType]} domain focus.`
+    : '';
+
   const fallback = FORMAT_DOMAIN_DEFAULTS[brief.format ?? ''] ?? GENERIC_DEFAULT;
 
   const selectionPrompt = `Competition brief:
 Title: ${brief.title}
 Format: ${brief.format ?? 'unspecified'}
 Problem: ${brief.problem}
-Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}`;
+Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}${deliverableTypeHint}`;
 
   try {
     const raw = await runClaude(selectionPrompt, DOMAIN_SELECTION_SYSTEM_PROMPT, 60_000);
