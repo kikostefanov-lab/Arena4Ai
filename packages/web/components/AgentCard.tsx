@@ -160,11 +160,14 @@ export function AgentCard({ agent, onEdit, onFork, onRetire }: AgentCardProps) {
               fontSize: '0.58rem', color: '#7cc6db', background: 'none', border: 'none',
               cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT,
             }}>✏️ Edit</button>
-            <button onClick={() => onRetire(agent.id)} style={{
-              fontSize: '0.58rem', color: '#ef4444', background: 'none', border: 'none',
-              cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT,
-              marginLeft: 'auto',
-            }}>🗑 Retire</button>
+            <button
+              onClick={() => { if (window.confirm(`Retire "${agent.name}"? This cannot be undone.`)) onRetire(agent.id); }}
+              style={{
+                fontSize: '0.58rem', color: '#ef4444', background: 'none', border: 'none',
+                cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT,
+                marginLeft: 'auto',
+              }}
+            >🗑 Retire</button>
           </>
         )}
       </div>
