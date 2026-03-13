@@ -13,6 +13,7 @@ import { runForge, getForgeProgress } from '../../forge/forge-orchestrator.js';
 import type { ForgeInput } from '../../forge/forge-orchestrator.js';
 import { synthesizeDeliverables } from '../../synthesis/merge-engine.js';
 import type { TeamDeliverable } from '../../db/schema.js';
+import { buildDeliverableFilename, buildForgeFilename } from '../../utils/naming.js';
 
 export const competitionsRouter = Router();
 
@@ -255,17 +256,21 @@ competitionsRouter.get('/:id/forge/download', async (req: Request, res: Response
     return;
   }
 
-  const forge = result.forge as unknown as ForgeOutput;
-  const title = (comp?.brief as { title?: string } | null)?.title ?? id;
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40);
+  const brief = comp?.brief as Brief | null;
+  // Use the most recent forge run for the filename (stacked runs; last = newest)
+  const forgeRun = Array.isArray(result?.forge) ? result.forge.at(-1) : null;
+  const forgeFilename = brief
+    ? buildForgeFilename(brief, forgeRun?.source ?? 'winner', forgeRun?.generatedAt)
+    : `arena4ai_unknown_${id}_forge-run.zip`;
 
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${slug}-forge.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${forgeFilename}"`);
 
   const archive = archiver('zip', { zlib: { level: 6 } });
   archive.on('error', (err) => { console.error(`[arena] forge zip error for ${id}:`, err.message); res.destroy(err); });
   archive.pipe(res);
 
+  const forge = result.forge as unknown as ForgeOutput;
   for (const artifact of forge.artifacts) {
     archive.append(artifact.content, { name: `${artifact.type}.md` });
   }
@@ -414,10 +419,12 @@ competitionsRouter.get('/:id/deliverables/:teamId/download', async (req: Request
 
   const teams = (comp.teams as Team[]) ?? [];
   const team = teams.find(t => t.id === teamId);
-  const label = team ? `${team.model.replace(':', '-')}-files` : `team-${teamId.slice(0, 8)}-files`;
+  const filename = team
+    ? buildDeliverableFilename(comp.brief as Brief, team, comp.startedAt ? comp.startedAt.toISOString() : undefined)
+    : `arena4ai_unknown_${teamId}_deliverables.zip`;
 
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${label}.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
   const archive = archiver('zip', { zlib: { level: 6 } });
   archive.pipe(res);
@@ -426,6 +433,15 @@ competitionsRouter.get('/:id/deliverables/:teamId/download', async (req: Request
     const safePath = file.path.replace(/^\//, '').replace(/\.\.\//g, '');
     archive.append(file.content, { name: safePath });
   }
+
+  archive.append(JSON.stringify({
+    competitionId: id,
+    teamId,
+    briefId: (comp.brief as { id?: string })?.id ?? '',
+    briefTitle: (comp.brief as { title?: string })?.title ?? '',
+    generatedAt: new Date().toISOString(),
+    arena4aiVersion: '2.0',
+  }, null, 2), { name: '_manifest.json' });
 
   await archive.finalize();
 });
