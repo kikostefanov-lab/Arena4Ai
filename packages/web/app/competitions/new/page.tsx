@@ -3,11 +3,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
-import type { SavedPersona } from '../../personas/page';
+import type { AgentProfile } from '@arena/shared';
 import './new-competition.css';
 import { MONOSPACE_FONT, FORM_LABEL_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, KICKER_STYLE } from '../../../lib/design-tokens';
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
+
+interface SavedPersona {
+  id: string;
+  name: string;
+  model: 'claude' | 'codex' | 'gemini';
+  description: string;
+  systemPrompt: string;
+}
 
 const PERSONAS_STORAGE_KEY = 'arena4ai:personas';
 
@@ -360,12 +368,24 @@ export default function NewCompetitionPage() {
   // Saved custom personas from localStorage
   const [savedPersonas, setSavedPersonas] = useState<SavedPersona[]>([]);
 
+  // Armory profiles from API
+  const [armoryProfiles, setArmoryProfiles] = useState<AgentProfile[]>([]);
+  const [armoryLoaded, setArmoryLoaded] = useState(false);
+
   useEffect(() => {
     setSavedPersonas(loadSavedPersonas());
   }, []);
 
   // Step expansion state
   const [expandedStep, setExpandedStep] = useState<1 | 2 | 3>(1);
+
+  useEffect(() => {
+    if (expandedStep !== 3 || armoryLoaded) return;
+    fetch('/api/agent-profiles?retired=false')
+      .then(r => r.json())
+      .then((data: AgentProfile[]) => { setArmoryProfiles(data); setArmoryLoaded(true); })
+      .catch(() => setArmoryLoaded(true));
+  }, [expandedStep, armoryLoaded]);
 
   // Example briefs panel
   const [examplePanelOpen, setExamplePanelOpen] = useState(false);
@@ -1503,18 +1523,31 @@ export default function NewCompetitionPage() {
                               {p}
                             </button>
                           ))}
-                          {/* Custom saved personas for this model */}
-                          {savedPersonas.filter((sp) => sp.model === team.model).map((sp) => (
+                          {/* Armory profiles for this provider */}
+                          {armoryProfiles.filter(p => p.provider === team.model && p.createdBy !== 'system').map(p => (
                             <button
-                              key={sp.id} type="button"
-                              className={`persona-chip ${team.persona === sp.name ? 'active' : ''}`}
-                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: sp.name } : t))}
-                              title={sp.description || sp.name}
-                              style={{ borderStyle: 'dashed' }}
+                              key={p.id}
+                              type="button"
+                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: p.name } : t))}
+                              style={{
+                                fontSize: '0.62rem',
+                                fontWeight: team.persona === p.name ? 800 : 600,
+                                padding: '0.25rem 0.55rem',
+                                borderRadius: '4px',
+                                border: team.persona === p.name ? '1px solid rgba(0,240,255,0.5)' : '1px dashed rgba(0,240,255,0.2)',
+                                background: team.persona === p.name ? 'rgba(0,240,255,0.08)' : 'transparent',
+                                color: team.persona === p.name ? '#00f0ff' : '#3d7d94',
+                                cursor: 'pointer',
+                                fontFamily: MONOSPACE_FONT,
+                              }}
                             >
-                              {sp.name} *
+                              {p.avatar ?? '🤖'} {p.name}
                             </button>
                           ))}
+                          {/* Go to Armory link */}
+                          <a href="/agent-armory" target="_blank" style={{ fontSize: '0.58rem', color: '#3d7d94', fontFamily: BODY_FONT, textDecoration: 'none' }}>
+                            + Go to Armory
+                          </a>
                         </div>
                         <input
                           className="arena-input"

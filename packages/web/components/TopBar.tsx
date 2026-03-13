@@ -6,12 +6,12 @@ import { usePathname } from 'next/navigation';
 import { MONOSPACE_FONT, FONT_WEIGHT_EXTRABOLD } from '../lib/design-tokens';
 
 const NAV_LINKS = [
-  { href: '/briefs',           label: 'Briefs'       },
-  { href: '/leaderboard',      label: 'Leaderboard'  },
-  { href: '/analytics',        label: 'Analytics'    },
-  { href: '/tournaments/new',  label: 'Tournaments'  },
-  { href: '/compare',          label: 'Compare'      },
-  { href: '/personas',         label: 'Personas'     },
+  { href: '/briefs',          label: 'Briefs'       },
+  { href: '/leaderboard',     label: 'Leaderboard'  },
+  { href: '/analytics',       label: 'Analytics'    },
+  { href: '/tournaments/new', label: 'Tournaments'  },
+  { href: '/compare',         label: 'Compare'      },
+  { href: '/agent-armory',    label: 'Armory'       },
 ];
 
 export function TopBar() {
