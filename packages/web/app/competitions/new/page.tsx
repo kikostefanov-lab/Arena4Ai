@@ -386,7 +386,8 @@ export default function NewCompetitionPage() {
         .then((data: AgentProfile[]) => { setArmoryProfiles(data); setArmoryLoaded(true); })
         .catch(() => setArmoryLoaded(true));
     }
-    void loadAgentsForProvider(teams[0]?.model ?? 'claude');
+    // Load chips for each team's current provider independently
+    teamsRef.current.forEach(t => void loadAgentsForProvider(t.id, t.model));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expandedStep]);
 
@@ -420,10 +421,13 @@ export default function NewCompetitionPage() {
     { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
   ]);
 
-  // DB-sourced agent chips for Step 3
-  const [agentChips, setAgentChips] = useState<Agent[]>([]);
-  const [agentSearch, setAgentSearch] = useState('');
-  const [loadingAgents, setLoadingAgents] = useState(false);
+  // DB-sourced agent chips for Step 3 — keyed by team.id to avoid cross-team contamination
+  const [agentChipsByTeam, setAgentChipsByTeam] = useState<Record<string, Agent[]>>({});
+  const [agentSearchByTeam, setAgentSearchByTeam] = useState<Record<string, string>>({});
+  const [loadingAgentsByTeam, setLoadingAgentsByTeam] = useState<Record<string, boolean>>({});
+  // Keep a ref so the step-3 useEffect can read current teams without being in deps
+  const teamsRef = useRef(teams);
+  teamsRef.current = teams;
 
   // Pre-fill team from ?personaId=<id> — jumps to step 3
   useEffect(() => {
@@ -587,16 +591,16 @@ export default function NewCompetitionPage() {
     reader.readAsText(file);
   };
 
-  async function loadAgentsForProvider(provider: string) {
-    setLoadingAgents(true);
+  async function loadAgentsForProvider(teamId: string, provider: string) {
+    setLoadingAgentsByTeam(prev => ({ ...prev, [teamId]: true }));
     try {
       const res = await fetch(`/api/agents?provider=${provider}&retired=false`);
       const data = await res.json() as { agents?: Agent[] };
-      setAgentChips(data.agents ?? []);
+      setAgentChipsByTeam(prev => ({ ...prev, [teamId]: data.agents ?? [] }));
     } catch {
-      setAgentChips([]);
+      setAgentChipsByTeam(prev => ({ ...prev, [teamId]: [] }));
     } finally {
-      setLoadingAgents(false);
+      setLoadingAgentsByTeam(prev => ({ ...prev, [teamId]: false }));
     }
   }
 
@@ -1521,7 +1525,7 @@ export default function NewCompetitionPage() {
                                 className={`model-card ${active ? 'active' : ''}`}
                                 onClick={() => {
                                   setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, model: m, agentId: undefined } : t));
-                                  void loadAgentsForProvider(m);
+                                  void loadAgentsForProvider(team.id, m);
                                 }}
                                 style={{
                                   border: `1px solid ${active ? meta.color : '#0a2235'}`,
@@ -1551,8 +1555,8 @@ export default function NewCompetitionPage() {
                         {/* Agent search */}
                         <input
                           type="text"
-                          value={agentSearch}
-                          onChange={e => setAgentSearch(e.target.value)}
+                          value={agentSearchByTeam[team.id] ?? ''}
+                          onChange={e => setAgentSearchByTeam(prev => ({ ...prev, [team.id]: e.target.value }))}
                           placeholder="Search agents…"
                           style={{
                             background: 'rgba(0,4,8,0.6)', border: '1px solid rgba(0,240,255,0.12)',
@@ -1563,12 +1567,15 @@ export default function NewCompetitionPage() {
                           }}
                         />
                         {/* Agent chips */}
-                        {loadingAgents ? (
+                        {loadingAgentsByTeam[team.id] ? (
                           <div style={{ color: '#3d7d94', fontSize: '0.62rem', fontFamily: MONOSPACE_FONT, marginBottom: '0.5rem' }}>Loading agents…</div>
                         ) : (
                           <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                            {agentChips
-                              .filter(a => agentSearch === '' || a.name.toLowerCase().startsWith(agentSearch.toLowerCase()))
+                            {(agentChipsByTeam[team.id] ?? [])
+                              .filter(a => {
+                                const search = agentSearchByTeam[team.id] ?? '';
+                                return search === '' || a.name.toLowerCase().startsWith(search.toLowerCase());
+                              })
                               .map(agent => {
                                 const isSelected = team.agentId === agent.id;
                                 return (

@@ -51,6 +51,7 @@ export default function AgentArmoryPage() {
       setRetiredAgents(retired.agents ?? []);
     } catch {
       setAgents([]);
+      setRetiredAgents([]);
     }
   }
 
@@ -66,6 +67,7 @@ export default function AgentArmoryPage() {
       setRetiredPersonas(Array.isArray(retired) ? retired : []);
     } catch {
       setPersonas([]);
+      setRetiredPersonas([]);
     }
   }
 
@@ -387,6 +389,10 @@ export default function AgentArmoryPage() {
           borderRadius: '10px', padding: '1.5rem',
         }}>
           <AgentBuilder
+            personas={personas}
+            onPersonaCreated={newPersona => {
+              setPersonas(prev => [newPersona, ...prev]);
+            }}
             editAgent={builderAgent}
             forkedFromId={builderForkId}
             onSaved={async () => {

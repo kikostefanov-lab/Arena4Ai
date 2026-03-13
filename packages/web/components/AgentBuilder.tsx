@@ -1,7 +1,14 @@
 'use client';
 import { useState, useEffect } from 'react';
 import type { Agent, Persona } from '@arena/shared';
-import { MONOSPACE_FONT } from '../lib/design-tokens';
+import {
+  MONOSPACE_FONT,
+  FORM_LABEL_STYLE,
+  BG_INPUT,
+  BORDER_MID,
+  TEXT_PRIMARY,
+  TEXT_MUTED,
+} from '../lib/design-tokens';
 import { PersonaForm, type PersonaFormData } from './PersonaForm';
 
 const PROVIDERS = ['claude', 'codex', 'gemini'] as const;
@@ -14,6 +21,10 @@ const MODEL_VARIANTS: Record<Provider, string[]> = {
 };
 
 interface Props {
+  /** Pre-populated personas list from parent (skips internal fetch if provided). */
+  personas?: Persona[];
+  /** Called after a new persona is created inline so parent can refresh its list. */
+  onPersonaCreated?: (p: Persona) => void;
   /** If set, pre-fills form (edit mode). Pass forkedFromId to indicate fork mode. */
   editAgent?: Agent | null;
   forkedFromId?: string | null;
@@ -21,13 +32,21 @@ interface Props {
   onCancel?: () => void;
 }
 
-export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Props) {
-  const [personas, setPersonas]               = useState<Persona[]>([]);
+export function AgentBuilder({
+  personas: personasProp,
+  onPersonaCreated,
+  editAgent,
+  forkedFromId,
+  onSaved,
+  onCancel,
+}: Props) {
+  const [internalPersonas, setInternalPersonas] = useState<Persona[]>([]);
+  const personas = personasProp ?? internalPersonas;
+
   const [selectedPersonaId, setPersonaId]     = useState<string>(editAgent?.personaId ?? '');
   const [provider, setProvider]               = useState<Provider>((editAgent?.provider as Provider) ?? 'claude');
   const [modelVariant, setModelVariant]       = useState<string>(editAgent?.modelVariant ?? 'claude-sonnet-4-6');
   const [name, setName]                       = useState<string>(forkedFromId ? `my-${editAgent?.name ?? ''}` : (editAgent?.name ?? ''));
-  const [avatar, setAvatar]                   = useState<string>(editAgent?.persona?.avatar ?? '');
   const [showPersonaForm, setShowPersonaForm] = useState(false);
   const [saving, setSaving]                   = useState(false);
   const [error, setError]                     = useState('');
@@ -35,17 +54,14 @@ export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Pro
   const isEdit = !!editAgent && !forkedFromId;
   const isFork = !!forkedFromId;
 
-  useEffect(() => { loadPersonas(); }, []);
-
-  async function loadPersonas() {
-    try {
-      const res = await fetch('/api/personas?retired=false');
-      const data = await res.json();
-      setPersonas(Array.isArray(data) ? data : []);
-    } catch {
-      setPersonas([]);
-    }
-  }
+  // Only fetch internally when parent doesn't supply the list
+  useEffect(() => {
+    if (personasProp !== undefined) return;
+    fetch('/api/personas?retired=false')
+      .then(r => r.json())
+      .then((data: Persona[]) => setInternalPersonas(Array.isArray(data) ? data : []))
+      .catch(() => setInternalPersonas([]));
+  }, [personasProp]);
 
   async function handlePersonaCreated(data: PersonaFormData) {
     const res = await fetch('/api/personas', {
@@ -58,7 +74,10 @@ export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Pro
       throw new Error(err.error ?? 'Failed to create persona');
     }
     const newPersona: Persona = await res.json() as Persona;
-    setPersonas(prev => [newPersona, ...prev]);
+    if (personasProp === undefined) {
+      setInternalPersonas(prev => [newPersona, ...prev]);
+    }
+    onPersonaCreated?.(newPersona);
     setPersonaId(newPersona.id);
     setShowPersonaForm(false);
   }
@@ -110,11 +129,15 @@ export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Pro
   }
 
   const selectedPersona = personas.find(p => p.id === selectedPersonaId);
-  const labelStyle: React.CSSProperties = { fontSize: '0.72rem', color: '#7cc6db', display: 'block', marginBottom: '0.3rem' };
+  const labelStyle: React.CSSProperties = { ...FORM_LABEL_STYLE, color: TEXT_MUTED, display: 'block', marginBottom: '0.3rem' };
   const inputStyle: React.CSSProperties = {
-    width: '100%', background: 'rgba(0,240,255,0.05)',
-    border: '1px solid rgba(0,240,255,0.2)', borderRadius: 4,
-    color: '#e4f8ff', padding: '0.4rem 0.6rem', fontSize: '0.8rem',
+    width: '100%',
+    background: BG_INPUT,
+    border: `1px solid ${BORDER_MID}`,
+    borderRadius: 4,
+    color: TEXT_PRIMARY,
+    padding: '0.4rem 0.6rem',
+    fontSize: '0.8rem',
     fontFamily: MONOSPACE_FONT,
     boxSizing: 'border-box',
   };
@@ -151,7 +174,7 @@ export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Pro
 
           {selectedPersona && (
             <div style={{ marginTop: '0.5rem', padding: '0.5rem 0.75rem', background: 'rgba(255,215,0,0.04)', border: '1px solid rgba(255,215,0,0.1)', borderRadius: 4 }}>
-              <p style={{ fontSize: '0.68rem', color: '#7cc6db', margin: 0 }}>
+              <p style={{ fontSize: '0.68rem', color: TEXT_MUTED, margin: 0 }}>
                 <strong style={{ color: '#ffd700' }}>{selectedPersona.avatar} {selectedPersona.name}</strong>
                 {' — '}{selectedPersona.systemPrompt.slice(0, 100)}…
               </p>
@@ -184,7 +207,7 @@ export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Pro
                   padding: '0.35rem 0.9rem', borderRadius: 20, fontSize: '0.75rem', cursor: 'pointer',
                   background: provider === p ? 'rgba(0,240,255,0.15)' : 'rgba(0,240,255,0.04)',
                   border: `1px solid ${provider === p ? '#00f0ff' : 'rgba(0,240,255,0.2)'}`,
-                  color: provider === p ? '#00f0ff' : '#7cc6db',
+                  color: provider === p ? '#00f0ff' : TEXT_MUTED,
                   textTransform: 'uppercase', letterSpacing: 1,
                 }}
               >
@@ -206,12 +229,6 @@ export function AgentBuilder({ editAgent, forkedFromId, onSaved, onCancel }: Pro
         <div>
           <label style={labelStyle}>Agent Name *</label>
           <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} required />
-        </div>
-
-        {/* 5. Avatar (optional override) */}
-        <div>
-          <label style={labelStyle}>Avatar override <span style={{ color: '#3d7d94', fontSize: '0.65rem', fontWeight: 400 }}>(optional — defaults to persona&apos;s)</span></label>
-          <input value={avatar} onChange={e => setAvatar(e.target.value)} style={{ ...inputStyle, maxWidth: 80 }} maxLength={2} />
         </div>
 
         {error && <p style={{ color: '#ff4444', fontSize: '0.75rem', margin: 0 }}>{error}</p>}
