@@ -1,21 +1,25 @@
 'use client';
 import { getModelColor, MODEL_BADGE_COLORS, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
-import type { AgentProfile } from '@arena/shared';
+import type { Agent } from '@arena/shared';
 
 interface AgentCardProps {
-  profile: AgentProfile;
-  onEdit?: (profile: AgentProfile) => void;
-  onFork?: (profile: AgentProfile) => void;
-  onRetire?: (profile: AgentProfile) => void;
+  agent: Agent;
+  onEdit: (agent: Agent) => void;
+  onFork: (agent: Agent) => void;
+  onRetire: (id: string) => void;
 }
 
-export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps) {
-  const modelColor = getModelColor(profile.provider);
-  const badgeColors = MODEL_BADGE_COLORS[profile.provider] ?? { bg: 'rgba(74,143,168,0.15)', fg: '#4a8fa8', border: 'rgba(74,143,168,0.3)' };
-  const isSystem = profile.createdBy === 'system';
-  const statsLabel = profile.statsTotal > 0
-    ? `${profile.statsWins}W / ${profile.statsLosses}L · ${profile.statsAvgScore !== undefined ? profile.statsAvgScore.toFixed(2) : '—'} avg`
+export function AgentCard({ agent, onEdit, onFork, onRetire }: AgentCardProps) {
+  const modelColor = getModelColor(agent.provider);
+  const badgeColors = MODEL_BADGE_COLORS[agent.provider] ?? { bg: 'rgba(74,143,168,0.15)', fg: '#4a8fa8', border: 'rgba(74,143,168,0.3)' };
+  const isSystem = agent.createdBy === 'system';
+
+  const statsLabel = agent.statsTotal > 0
+    ? `${agent.statsWins}W · ${agent.statsLosses}L · avg ${agent.statsAvgScore != null ? agent.statsAvgScore.toFixed(2) : '—'}`
     : '— no battles yet';
+
+  const personaAvatar = agent.persona?.avatar ?? '🤖';
+  const personaName = agent.persona?.name ?? null;
 
   return (
     <div style={{
@@ -44,7 +48,7 @@ export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps)
           fontSize: '1.1rem',
           flexShrink: 0,
         }}>
-          {profile.avatar ?? '🤖'}
+          {personaAvatar}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -56,7 +60,7 @@ export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps)
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}>
-            {profile.name}
+            {agent.name}
           </div>
           <div style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', marginTop: '0.15rem', flexWrap: 'wrap' }}>
             {/* Provider badge */}
@@ -72,10 +76,10 @@ export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps)
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
             }}>
-              {profile.provider}
+              {agent.provider}
             </span>
             {/* Fork badge */}
-            {profile.forkedFromId && (
+            {agent.forkedFromId && (
               <span style={{ fontSize: '0.55rem', color: '#4a8fa8', fontFamily: MONOSPACE_FONT }}>⑂ fork</span>
             )}
             {/* System badge */}
@@ -94,8 +98,21 @@ export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps)
         </div>
       </div>
 
-      {/* Description */}
-      {profile.description && (
+      {/* Persona info */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+        <span style={{ fontSize: '0.7rem' }}>{personaAvatar}</span>
+        <span style={{
+          fontSize: '0.6rem',
+          fontFamily: BODY_FONT,
+          color: personaName ? '#7cc6db' : '#3d7d94',
+          fontStyle: personaName ? 'normal' : 'italic',
+        }}>
+          {personaName ?? 'No persona'}
+        </span>
+      </div>
+
+      {/* Persona description */}
+      {agent.persona?.description && (
         <p style={{
           color: '#7cc6db',
           fontSize: '0.62rem',
@@ -107,27 +124,8 @@ export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps)
           WebkitLineClamp: 2,
           WebkitBoxOrient: 'vertical',
         }}>
-          {profile.description}
+          {agent.persona.description}
         </p>
-      )}
-
-      {/* Tags */}
-      {profile.tags && profile.tags.length > 0 && (
-        <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-          {profile.tags.map(tag => (
-            <span key={tag} style={{
-              fontSize: '0.52rem',
-              color: '#3d7d94',
-              background: 'rgba(0,128,255,0.07)',
-              border: '1px solid rgba(0,128,255,0.15)',
-              borderRadius: '3px',
-              padding: '0.05rem 0.35rem',
-              fontFamily: MONOSPACE_FONT,
-            }}>
-              {tag}
-            </span>
-          ))}
-        </div>
       )}
 
       {/* Stats */}
@@ -141,31 +139,35 @@ export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps)
         {statsLabel}
       </div>
 
-      {/* Actions (non-system only) */}
-      {!isSystem && (onEdit || onFork || onRetire) && (
-        <div style={{ display: 'flex', gap: '0.5rem', borderTop: '1px solid rgba(0,240,255,0.06)', paddingTop: '0.5rem' }}>
-          {onEdit && (
-            <button onClick={() => onEdit(profile)} style={{
+      {/* Actions */}
+      <div style={{
+        display: 'flex',
+        gap: '0.5rem',
+        borderTop: '1px solid rgba(0,240,255,0.06)',
+        paddingTop: '0.5rem',
+        alignItems: 'center',
+      }}>
+        {/* Fork — available for all agents */}
+        <button onClick={() => onFork(agent)} style={{
+          fontSize: '0.58rem', color: '#4a8fa8', background: 'none', border: 'none',
+          cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT,
+        }}>⑂ Fork</button>
+
+        {/* Edit + Retire — user agents only */}
+        {!isSystem && (
+          <>
+            <button onClick={() => onEdit(agent)} style={{
               fontSize: '0.58rem', color: '#7cc6db', background: 'none', border: 'none',
               cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT,
             }}>✏️ Edit</button>
-          )}
-          {onRetire && (
-            <button onClick={() => onRetire(profile)} style={{
+            <button onClick={() => onRetire(agent.id)} style={{
               fontSize: '0.58rem', color: '#ef4444', background: 'none', border: 'none',
               cursor: 'pointer', padding: 0, fontFamily: MONOSPACE_FONT,
+              marginLeft: 'auto',
             }}>🗑 Retire</button>
-          )}
-        </div>
-      )}
-      {/* Fork available for all profiles */}
-      {onFork && (
-        <button onClick={() => onFork(profile)} style={{
-          position: 'absolute', top: '0.7rem', right: '0.7rem',
-          fontSize: '0.58rem', color: '#3d7d94', background: 'none', border: 'none',
-          cursor: 'pointer', fontFamily: MONOSPACE_FONT,
-        }}>⑂ Fork</button>
-      )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
