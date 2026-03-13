@@ -34,7 +34,23 @@ export type ForgeArtifactType =
   | 'sql_schema'           // raw SQL schema for software domain
   | 'environment_template' // .env.example template for software domain
   | 'slide_deck'           // slide-by-slide outline with copy for creative domain
-  | 'spreadsheet_export';  // CSV comparison matrix for research domain
+  | 'spreadsheet_export'   // CSV comparison matrix for research domain
+  // Sprint 4 additions
+  | 'dockerfile'
+  | 'github_actions'
+  | 'gantt_timeline'
+  | 'reference_implementation'
+  | 'test_suite_template'
+  | 'project_readme';
+
+export type ForgeOutputFormat =
+  | 'markdown'
+  | 'sql'
+  | 'csv'
+  | 'yaml'
+  | 'json'
+  | 'text'
+  | 'dockerfile';
 
 export type ForgeDomain =
   | 'software'
@@ -47,9 +63,11 @@ export type ForgeDomain =
 export interface ForgeArtifact {
   type: ForgeArtifactType;
   title: string;
-  content: string;         // markdown
-  generatedAt: string;     // ISO 8601
-  universal?: boolean;     // true for the 3 universal artifacts
+  content: string;                   // artifact content (format determined by outputFormat)
+  generatedAt: string;               // ISO 8601
+  universal?: boolean;               // true for the 3 universal artifacts
+  outputFormat: ForgeOutputFormat;   // format of the content field
+  filename: string;                  // suggested filename for download (e.g. "roadmap.md")
 }
 
 export interface ForgeOutput {
