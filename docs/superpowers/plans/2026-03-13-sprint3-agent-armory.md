@@ -149,6 +149,8 @@
 
   CREATE INDEX idx_agent_profiles_provider ON agent_profiles(provider);
   CREATE INDEX idx_agent_profiles_retired  ON agent_profiles(retired);
+  -- Enforce unique (provider, name) among active profiles for stats lookup
+  CREATE UNIQUE INDEX idx_agent_profiles_provider_name_active ON agent_profiles(provider, name) WHERE retired = FALSE;
   ```
 
 - [ ] **Step 6: Run migration**
@@ -317,6 +319,13 @@
       const profile = await repo.get('does-not-exist');
       expect(profile).toBeNull();
     });
+
+    it('lists profiles by tags filter', async () => {
+      await repo.create({ id: 'test-tagged-1', name: 'Tagged Agent', provider: 'claude', modelVariant: 'claude-sonnet-4-6', systemPrompt: 'test', tags: ['security', 'testing'], createdBy: 'test' });
+      const tagged = await repo.list({ tags: ['security'] });
+      const ids = tagged.map(p => p.id);
+      expect(ids).toContain('test-tagged-1');
+    });
   });
   ```
 
@@ -427,7 +436,12 @@
         query = query.where(and(...conditions)) as typeof query;
       }
       const rows = await query.orderBy(agentProfiles.createdAt);
-      return rows.map(rowToProfile);
+      let profiles = rows.map(rowToProfile);
+      // Tags filter applied in JS (JSONB containment; data set is small)
+      if (filters.tags && filters.tags.length > 0) {
+        profiles = profiles.filter(p => filters.tags!.every(t => p.tags?.includes(t)));
+      }
+      return profiles;
     }
 
     async update(id: string, patch: UpdateInput): Promise<AgentProfile | null> {
@@ -491,7 +505,7 @@
   cd "/Users/kstefano/Personal Projects/agentarena" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
   ```
 
-  Expected: All tests pass. Count goes from 196 to 204 (8 new tests).
+  Expected: All tests pass. Count goes from 159 to 168 (9 new tests including the tags filter test).
 
 - [ ] **Step 6: Run typecheck**
 
@@ -532,24 +546,36 @@
 
   ```ts
   it('calls updateStats on agent profiles after SCORED transition', async () => {
-    // This test verifies that updateAgentStats is called without blocking.
-    // Since it's fire-and-forget, we just verify the competition reaches COMPLETE normally.
-    // Stats update is tested directly in agent-profile-repository.test.ts.
-    // Here we just check no error is thrown when repo is absent (graceful degradation).
-    const runner = makeTestRunner({ /* no agentProfileRepo */ });
-    // Run to completion
+    // Arrange: mock repo with spy
+    const mockUpdateStats = vi.fn().mockResolvedValue(undefined);
+    const mockGetByProviderAndName = vi.fn().mockResolvedValue({
+      id: 'agent-claude-architect',
+      name: 'architect',
+      provider: 'claude',
+    });
+    const mockRepo = {
+      getByProviderAndName: mockGetByProviderAndName,
+      updateStats: mockUpdateStats,
+    } as unknown as AgentProfileRepository;
+
+    // makeTestRunner must accept agentProfileRepo option (not yet wired — this test will FAIL until Step 4)
+    const runner = makeTestRunner({ agentProfileRepo: mockRepo });
     await runner.run();
-    expect(runner.getState()).toBe('COMPLETE');
+
+    // After SCORED, updateStats should have been called for each team
+    expect(mockUpdateStats).toHaveBeenCalled();
   });
   ```
 
-  **Note:** Read the existing test file to understand `makeTestRunner` pattern. The test verifies graceful degradation when no repo is configured.
+  **Note:** Read the existing test file to understand `makeTestRunner` pattern. Import `AgentProfileRepository` at the top of the test file. This test will fail until `agentProfileRepo` is wired in Step 4.
 
-- [ ] **Step 3: Run to confirm baseline passes**
+- [ ] **Step 3: Run to confirm the test FAILS**
 
   ```bash
   cd "/Users/kstefano/Personal Projects/agentarena" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
   ```
+
+  Expected: 1 test FAILS (makeTestRunner does not accept agentProfileRepo yet / updateStats not called).
 
 - [ ] **Step 4: Add stats update to competition-runner.ts**
 
@@ -573,11 +599,12 @@
   ```ts
   private async updateAgentStats(scorecards: ScoreCard[]): Promise<void> {
     if (!this.agentProfileRepo || scorecards.length === 0) return;
-    const winnerId = scorecards.reduce((best, sc) =>
-      sc.finalScore > (scorecards.find(s => s.teamId === best)?.finalScore ?? 0)
-        ? sc.teamId : best,
-      scorecards[0].teamId
+    // Find winner: reduce tracking both teamId and score to avoid repeated array scans
+    const winner = scorecards.reduce<{ teamId: string; score: number }>(
+      (best, sc) => sc.finalScore > best.score ? { teamId: sc.teamId, score: sc.finalScore } : best,
+      { teamId: scorecards[0].teamId, score: scorecards[0].finalScore }
     );
+    const winnerId = winner.teamId;
     for (const sc of scorecards) {
       const team = this.competition.teams.find(t => t.id === sc.teamId);
       if (!team) continue;
@@ -619,7 +646,7 @@
 **Files:**
 - Create: `packages/orchestrator/src/server/routes/agent-profiles.ts`
 - Create: `packages/orchestrator/src/db/seed-agent-profiles.ts`
-- Modify: `packages/orchestrator/src/app.ts`
+- Modify: `packages/orchestrator/src/server/app.ts`
 
 **Context:** 6 REST endpoints. The router receives a `db` instance via closure (same pattern as other routers — check `routes/competitions.ts`). Seed data runs once on app startup: check for existing system agents, skip if already seeded.
 
@@ -659,6 +686,7 @@
 
   ```ts
   import { Router } from 'express';
+  import { randomUUID } from 'crypto';
   import type { AgentProfileRepository } from '../../db/agent-profile-repository.js';
 
   export function createAgentProfilesRouter(repo: AgentProfileRepository): Router {
@@ -685,10 +713,10 @@
         if (!name || !provider || !modelVariant || !systemPrompt) {
           return res.status(400).json({ error: 'name, provider, modelVariant, systemPrompt are required' });
         }
-        await repo.create({ name, provider, modelVariant, systemPrompt, description, avatar, tags, createdBy: 'user' });
-        // Retrieve the created profile (list and find by name+provider+createdBy to get ID)
-        const profiles = await repo.list({ provider, retired: false });
-        const created = profiles.reverse().find(p => p.name === name && p.createdBy === 'user');
+        // Generate ID here so we can retrieve it deterministically after create
+        const id = `agent-${randomUUID()}`;
+        await repo.create({ id, name, provider, modelVariant, systemPrompt, description, avatar, tags, createdBy: 'user' });
+        const created = await repo.get(id);
         res.status(201).json(created);
       } catch (err) {
         res.status(500).json({ error: 'Failed to create agent profile' });
@@ -751,13 +779,19 @@
 
 - [ ] **Step 4: Register router and run seed in app.ts**
 
-  Find where `createApp` initializes routes and add:
-  ```ts
-  import { AgentProfileRepository } from './db/agent-profile-repository.js';
-  import { createAgentProfilesRouter } from './server/routes/agent-profiles.js';
-  import { seedAgentProfiles } from './db/seed-agent-profiles.js';
+  Read app.ts to find the correct insertion point:
+  ```bash
+  grep -n "import\|createApp\|app.use\|router\|Repository\|rateLimit" packages/orchestrator/src/server/app.ts | head -40
+  ```
 
-  // In createApp():
+  Then add to the import block at top, and inside `createApp()` before `return app`:
+  ```ts
+  // Add to imports:
+  import { AgentProfileRepository } from '../db/agent-profile-repository.js';
+  import { createAgentProfilesRouter } from './routes/agent-profiles.js';
+  import { seedAgentProfiles } from '../db/seed-agent-profiles.js';
+
+  // Add inside createApp(), after the existing limiter definitions:
   const agentProfileRepo = new AgentProfileRepository(db);
 
   // Seed system agents (async, non-blocking)
@@ -766,6 +800,8 @@
   );
 
   app.use('/agent-profiles', createAgentProfilesRouter(agentProfileRepo));
+  // Rate-limit fork endpoint (creates DB rows) at same level as forge/synthesis (5/min)
+  app.post('/agent-profiles/:id/fork', forgeSynthesisLimiter);
   ```
 
 - [ ] **Step 5: Run typecheck**
@@ -789,7 +825,7 @@
   ```bash
   git add packages/orchestrator/src/server/routes/agent-profiles.ts \
           packages/orchestrator/src/db/seed-agent-profiles.ts \
-          packages/orchestrator/src/app.ts
+          packages/orchestrator/src/server/app.ts
   git commit -m "feat(api): add /agent-profiles REST endpoints and seed 9 system personas"
   ```
 
@@ -931,7 +967,7 @@
 
   export function AgentCard({ profile, onEdit, onFork, onRetire }: AgentCardProps) {
     const modelColor = getModelColor(profile.provider);
-    const badgeColors = MODEL_BADGE_COLORS[profile.provider] ?? { bg: 'rgba(74,143,168,0.15)', color: '#4a8fa8', border: 'rgba(74,143,168,0.3)' };
+    const badgeColors = MODEL_BADGE_COLORS[profile.provider] ?? { bg: 'rgba(74,143,168,0.15)', fg: '#4a8fa8', border: 'rgba(74,143,168,0.3)' };
     const isSystem = profile.createdBy === 'system';
     const statsLabel = profile.statsTotal > 0
       ? `${profile.statsWins}W / ${profile.statsLosses}L · ${profile.statsAvgScore !== undefined ? profile.statsAvgScore.toFixed(2) : '—'} avg`
@@ -986,7 +1022,7 @@
                 padding: '0.08rem 0.35rem',
                 borderRadius: '3px',
                 background: badgeColors.bg,
-                color: badgeColors.color,
+                color: badgeColors.fg,
                 border: `1px solid ${badgeColors.border}`,
                 fontFamily: MONOSPACE_FONT,
                 letterSpacing: '0.5px',
@@ -1527,21 +1563,30 @@
 
 - [ ] **Step 1: Update TopBar.tsx**
 
-  Find `{ href: '/personas', label: 'Personas' }` and change to:
+  Find `const NAV_LINKS = [` and replace the entire array with:
   ```ts
-  { href: '/agent-armory', label: 'Armory' },
+  const NAV_LINKS = [
+    { href: '/briefs',          label: 'Briefs'       },
+    { href: '/leaderboard',     label: 'Leaderboard'  },
+    { href: '/analytics',       label: 'Analytics'    },
+    { href: '/tournaments/new', label: 'Tournaments'  },
+    { href: '/compare',         label: 'Compare'      },
+    { href: '/agent-armory',    label: 'Armory'       },
+  ];
   ```
 
 - [ ] **Step 2: Replace personas/page.tsx with a redirect**
 
   Replace the entire content of `packages/web/app/personas/page.tsx` with:
   ```ts
-  import { redirect } from 'next/navigation';
+  import { redirect, RedirectType } from 'next/navigation';
 
   export default function PersonasPage() {
-    redirect('/agent-armory');
+    redirect('/agent-armory', RedirectType.permanent);
   }
   ```
+
+  Note: `RedirectType.permanent` issues a 301 (Permanent Redirect). The default `redirect()` without it issues a 307 Temporary Redirect.
 
 - [ ] **Step 3: Update Step 3 in competitions/new/page.tsx**
 
@@ -1569,14 +1614,32 @@
   }, [expandedStep, armoryLoaded]);
   ```
 
-  d) In the persona picker area for each team (inside the Step 3 `expandedStep === 3` block), after the preset persona chips, replace the localStorage custom persona section with Armory profiles filtered by the team's model:
+  d) In the persona picker area for each team (inside the Step 3 `expandedStep === 3` block), find and replace the localStorage custom persona block (lines ~1506–1517):
+
+  **Replace this:**
+  ```tsx
+                          {/* Custom saved personas for this model */}
+                          {savedPersonas.filter((sp) => sp.model === team.model).map((sp) => (
+                            <button
+                              key={sp.id} type="button"
+                              className={`persona-chip ${team.persona === sp.name ? 'active' : ''}`}
+                              onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: sp.name } : t))}
+                              title={sp.description || sp.name}
+                              style={{ borderStyle: 'dashed' }}
+                            >
+                              {sp.name} *
+                            </button>
+                          ))}
+  ```
+
+  **With this** (Armory profiles for this provider, plus a link to the Armory):
   ```tsx
   {/* Armory profiles for this provider */}
   {armoryProfiles.filter(p => p.provider === team.model && p.createdBy !== 'system').map(p => (
     <button
       key={p.id}
       type="button"
-      onClick={() => updateTeam(team.id, 'persona', p.name)}
+      onClick={() => setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, persona: p.name } : t))}
       style={{
         fontSize: '0.62rem',
         fontWeight: team.persona === p.name ? 800 : 600,
@@ -1627,7 +1690,7 @@
   DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -10
   ```
 
-  Expected: All tests pass (204+ total).
+  Expected: All tests pass (168+ total — 159 baseline + 9 new from Task 2 + 1 from Task 3).
 
 - [ ] **Step 2: Typecheck all packages**
 
@@ -1662,10 +1725,10 @@
 - [ ] **Step 4: Smoke test seed data**
 
   ```bash
-  curl http://localhost:3000/agent-profiles | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'{len(d)} profiles, system: {sum(1 for p in d if p[\"createdBy\"]==\"system\")}')"
+  curl http://localhost:3001/api/agent-profiles | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'{len(d)} profiles, system: {sum(1 for p in d if p[\"createdBy\"]==\"system\")}')"
   ```
 
-  Expected: `9 profiles, system: 9` (or more if you added extras).
+  Expected: `9 profiles, system: 9` (or more if you added extras). This hits the Next.js proxy route to verify end-to-end routing.
 
 - [ ] **Step 5: Final commit**
 
