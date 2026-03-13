@@ -32,6 +32,12 @@ export interface Brief {
   expectedOutput?: string;
   /** Category tags for filtering and library display (e.g. ["Algorithms", "CLI"]) */
   tags?: string[];
+  /** Controls agent prompt guidance and Forge domain selection.
+   *  Absent on records persisted before this field was introduced; treat undefined as 'code'. */
+  deliverableType?: 'code' | 'document' | 'analysis' | 'presentation' | 'plan' | 'mixed';
+  /** Explicit Forge domain override. Once wired in forge-orchestrator, skips AI domain
+   *  selection entirely. Parsed and stored; consumed by the Forge in Task 3. */
+  domainHint?: 'software' | 'research' | 'creative' | 'security' | 'business' | 'ideation';
 }
 
 export interface Deliverable {

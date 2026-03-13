@@ -26,6 +26,8 @@ export const briefSchema = z.object({
   timeLimitMs: z.number().positive(),
   expectedOutput: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  deliverableType: z.enum(['code', 'document', 'analysis', 'presentation', 'plan', 'mixed']).default('code'),
+  domainHint: z.enum(['software', 'research', 'creative', 'security', 'business', 'ideation']).optional(),
 });
 
 export type BriefInput = z.infer<typeof briefSchema>;

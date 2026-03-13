@@ -48,6 +48,7 @@ const mockBrief: BriefInput = {
   constraints: [],
   deliverables: ['solution.py'],
   timeLimitMs: 60000,
+  deliverableType: 'code',
   rubric: {
     criteria: [{ id: 'correctness', description: 'Correct', weight: 1, maxScore: 10 }],
   },
