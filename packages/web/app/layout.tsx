@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Orbitron } from 'next/font/google';
 import './globals.css';
 import { TopBar } from '../components/TopBar';
+import { BODY_FONT } from '../lib/design-tokens';
 
 const orbitron = Orbitron({
   subsets: ['latin'],
@@ -31,6 +32,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <TopBar />
         {/* BG-008: Main content above all overlays */}
         <main style={{ position: 'relative', zIndex: 2, paddingTop: '3.5rem' }}>{children}</main>
+        <footer style={{
+          borderTop: '1px solid #0a2235',
+          padding: '1rem 1.5rem',
+          textAlign: 'center' as const,
+          fontSize: '0.65rem',
+          color: '#3d7d94',
+          fontFamily: BODY_FONT,
+          letterSpacing: '1px',
+        }}>
+          arena4.ai — competitive AI orchestration
+        </footer>
       </body>
     </html>
   );
