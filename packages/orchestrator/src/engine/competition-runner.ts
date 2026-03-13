@@ -32,6 +32,7 @@ import { printResults } from '../judging/results-reporter.js';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
 import { CommentaryAgent } from '../commentary/commentary-agent.js';
+import type { AgentProfileRepository } from '../db/agent-profile-repository.js';
 
 export interface RunOptions {
   /** Directory where JSONL event logs are written. Defaults to OS tmp dir. */
@@ -55,6 +56,8 @@ export interface RunOptions {
   aiJudgeCount?: 1 | 2;
   /** Enable live AI commentary during the competition. Default false. */
   commentary?: boolean;
+  /** Optional agent profile repository for fire-and-forget stats updates after SCORED. */
+  agentProfileRepo?: AgentProfileRepository;
 }
 
 export interface TeamDeliverable {
@@ -85,7 +88,8 @@ export interface CompetitionResult {
  */
 export class CompetitionRunner extends EventEmitter {
   private competition: Competition;
-  private readonly options: Required<RunOptions>;
+  private readonly options: Required<Omit<RunOptions, 'agentProfileRepo'>>;
+  private readonly agentProfileRepo?: AgentProfileRepository;
   private _cancelled = false;
   private _cancelResolve?: () => void;
   private _activeAdapters: BaseAdapter[] = [];
@@ -100,6 +104,8 @@ export class CompetitionRunner extends EventEmitter {
       teams,
       state: CompetitionState.DRAFT,
     };
+
+    this.agentProfileRepo = options.agentProfileRepo;
 
     this.options = {
       logDir: options.logDir ?? tmpdir(),
@@ -346,6 +352,13 @@ export class CompetitionRunner extends EventEmitter {
       // ── SCORED ───────────────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);
 
+      // Fire-and-forget stats update — does not block competition flow
+      if (this.agentProfileRepo) {
+        void this.updateAgentStats(scorecards).catch((err) => {
+          console.warn('[stats] Failed to update agent stats:', err);
+        });
+      }
+
       // ── COMPLETE ──────────────────────────────────────────────────────────
       const synthesis: SynthesisResult | null = null; // synthesis is now on-demand via POST /synthesis
       this.advance(CompetitionState.COMPLETE);
@@ -387,6 +400,27 @@ export class CompetitionRunner extends EventEmitter {
       await logger.close();
       // Clean up temp workdirs (skip-sandbox mode only; sandbox containers handle their own cleanup)
       await Promise.all(this._activeAdapters.map(a => a.cleanupWorkdir().catch(() => {})));
+    }
+  }
+
+  private async updateAgentStats(scorecards: ScoreCard[]): Promise<void> {
+    if (!this.agentProfileRepo || scorecards.length === 0) return;
+    // Find winner: reduce tracking both teamId and score to avoid repeated array scans
+    const winner = scorecards.reduce<{ teamId: string; score: number }>(
+      (best, sc) => sc.finalScore > best.score ? { teamId: sc.teamId, score: sc.finalScore } : best,
+      { teamId: scorecards[0].teamId, score: scorecards[0].finalScore },
+    );
+    const winnerId = winner.teamId;
+    for (const sc of scorecards) {
+      const team = this.competition.teams.find(t => t.id === sc.teamId);
+      if (!team) continue;
+      const colonIdx = team.model.indexOf(':');
+      if (colonIdx === -1) continue;
+      const provider = team.model.slice(0, colonIdx);
+      const name = team.model.slice(colonIdx + 1);
+      const profile = await this.agentProfileRepo.getByProviderAndName(provider, name);
+      if (!profile) continue;
+      await this.agentProfileRepo.updateStats(profile.id, sc.teamId === winnerId, sc.finalScore);
     }
   }
 }
