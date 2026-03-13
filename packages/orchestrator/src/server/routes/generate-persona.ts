@@ -22,9 +22,17 @@ generatePersonaRouter.post('/', async (req, res) => {
       res.status(400).json({ error: 'idea is required for mode "full"' });
       return;
     }
+    if (idea.length > 500) {
+      res.status(400).json({ error: 'idea must be 500 characters or less' });
+      return;
+    }
   } else {
     if (!systemPrompt || typeof systemPrompt !== 'string' || systemPrompt.trim().length === 0) {
       res.status(400).json({ error: 'systemPrompt is required for mode "expand"' });
+      return;
+    }
+    if (systemPrompt.length > 2000) {
+      res.status(400).json({ error: 'systemPrompt must be 2000 characters or less' });
       return;
     }
   }
