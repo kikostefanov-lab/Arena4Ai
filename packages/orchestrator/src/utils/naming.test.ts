@@ -6,8 +6,8 @@ import {
   buildDeliverableFilename,
   buildForgeFilename,
 } from './naming.js';
-import type { Brief } from '@arena/shared';
-import type { Team } from '@arena/shared';
+import type { Brief, Team } from '@arena/shared';
+import { CompetitionFormat } from '@arena/shared';
 
 const mockBrief = (overrides: Partial<Brief> = {}): Brief => ({
   id: 'fizzbuzz-cli',
@@ -16,7 +16,7 @@ const mockBrief = (overrides: Partial<Brief> = {}): Brief => ({
   constraints: [],
   deliverables: ['solution.py'],
   rubric: { criteria: [] },
-  format: 'SPRINT',
+  format: CompetitionFormat.SPRINT,
   timeLimitMs: 120000,
   ...overrides,
 });
