@@ -157,7 +157,7 @@ export default async function AnalyticsPage() {
             background: '#050f1e', border: '1px solid #0a2235', borderRadius: '8px',
           }}>
             <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⚠️</div>
-            <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>
+            <p style={{ color: '#4a8fa8', fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT }}>
               Could not reach orchestrator. Is it running?
             </p>
           </div>

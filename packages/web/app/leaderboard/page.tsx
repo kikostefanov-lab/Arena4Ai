@@ -177,7 +177,7 @@ export default function LeaderboardPage() {
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
               No rankings yet
             </h2>
-            <p style={{ fontSize: '0.75rem', color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
               Rankings appear after competitions complete. Run a battle to get the first result on the board.
             </p>
             <Link

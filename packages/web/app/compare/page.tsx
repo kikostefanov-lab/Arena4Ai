@@ -270,7 +270,7 @@ export default function ComparePage() {
           </div>
 
           {modelA === modelB && modelA && (
-            <p style={{ fontSize: '0.65rem', color: '#ef4444', flex: '100%', margin: 0 }}>
+            <p style={{ fontSize: '0.65rem', fontFamily: BODY_FONT, color: '#ef4444', flex: '100%', margin: 0 }}>
               Select two different models to compare.
             </p>
           )}

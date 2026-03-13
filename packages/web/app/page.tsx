@@ -655,7 +655,7 @@ export default function GalleryPage() {
           </div>
 
           {tournamentsLoading && (
-            <p style={{ fontSize: '0.72rem', color: '#4a8fa8' }}>Loading tournaments…</p>
+            <p style={{ fontSize: '0.72rem', color: '#4a8fa8', fontFamily: BODY_FONT }}>Loading tournaments…</p>
           )}
 
           {!tournamentsLoading && tournaments.length === 0 && (
