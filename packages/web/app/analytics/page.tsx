@@ -46,7 +46,7 @@ const FORMAT_BADGE_CONFIG: Record<string, { color: string; icon: string; label: 
   SPRINT:      { color: '#06b6d4', icon: '⚡',       label: 'SPRINT' },
   HACKATHON:   { color: '#00f0ff', icon: '🔨', label: 'HACKATHON' },
   RELAY_RACE:  { color: '#0066ff', icon: '🔄', label: 'RELAY' },
-  RED_VS_BLUE: { color: '#ef4444', icon: '⚔️', label: 'RED×BLUE' },
+  RED_VS_BLUE: { color: '#ef4444', icon: '⚔', label: 'RED×BLUE' },
 };
 
 function FormatBadge({ format }: { format: string | null }) {
@@ -328,7 +328,7 @@ export default async function AnalyticsPage() {
                   textTransform: 'uppercase', letterSpacing: '2px',
                   display: 'flex', alignItems: 'center', gap: '0.5rem',
                 }}>
-                  ⚔️ Head-to-Head
+                  ⚔ Head-to-Head
                 </span>
               </div>
 

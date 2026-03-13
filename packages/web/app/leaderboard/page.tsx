@@ -175,16 +175,13 @@ export default function LeaderboardPage() {
           }}>
             <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>🏆</div>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
-              No rankings yet
+              No champions yet — the arena awaits its first victor.
             </h2>
-            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
-              Rankings appear after competitions complete. Run a battle to get the first result on the board.
-            </p>
             <Link
               href="/competitions/new"
               className="arena-btn arena-btn-primary new-comp-btn"
             >
-              ⚔️ Launch First Battle
+              ⚔ Launch First Battle
             </Link>
           </div>
         )}

@@ -234,7 +234,7 @@ function PreBattleScreen({ color, model, persona }: { color: string; model: stri
 
       {/* Swords */}
       <div style={{ fontSize: '3.5rem', filter: `drop-shadow(0 0 22px ${color})`, animation: 'pulse 2s ease-in-out infinite', zIndex: 1 }}>
-        ⚔️
+        ⚔
       </div>
 
       {/* Team name */}
@@ -444,7 +444,7 @@ const LanePanel = forwardRef<
           zIndex: 20, gap: '0.8rem',
         }}>
           <div style={{ fontSize: '3rem', animation: 'launchText 2.4s ease-out forwards', filter: `drop-shadow(0 0 24px ${color})` }}>
-            ⚔️
+            ⚔
           </div>
           <div style={{
             color, fontWeight: 900, fontSize: '1.2rem', letterSpacing: '4px',
@@ -2800,7 +2800,7 @@ export default function CompetitionPage() {
                   transition: 'all 0.15s ease',
                 }}
               >
-                ⚔️ REMATCH
+                ⚔ REMATCH
               </a>
             </div>
           </div>

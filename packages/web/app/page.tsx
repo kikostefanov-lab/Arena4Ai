@@ -346,7 +346,7 @@ export default function GalleryPage() {
         {/* Loading */}
         {loading && (
           <div style={{ textAlign: 'center', padding: '4rem 0' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚔️</div>
+            <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>⚔</div>
             <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>Loading competitions…</p>
           </div>
         )}
@@ -386,19 +386,15 @@ export default function GalleryPage() {
             border: '1px dashed #0a2235',
             borderRadius: '12px',
           }}>
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚔️</div>
+            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>⚔</div>
             <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#c8eef8', marginBottom: '0.5rem' }}>
-              No battles yet
+              No battles recorded. ⚔ Run the first match to claim the arena.
             </h2>
-            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginBottom: '1.5rem', maxWidth: '360px', margin: '0 auto 1.5rem' }}>
-              Pit two AI agents against each other in a head-to-head coding competition.
-              Create your first battle to see who comes out on top.
-            </p>
             <Link
               href="/competitions/new"
               className="arena-btn arena-btn-primary new-comp-btn"
             >
-              ⚔️ Launch First Battle
+              ⚔ Launch First Battle
             </Link>
           </div>
         )}
@@ -462,7 +458,7 @@ export default function GalleryPage() {
                       {/* Title row */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.45rem', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.78rem', opacity: 0.7 }}>
-                          {isRunning ? '⚔️' : isComplete ? '🏆' : isFailed ? '💥' : isCancelled ? '🚫' : '📋'}
+                          {isRunning ? '⚔' : isComplete ? '🏆' : isFailed ? '💥' : isCancelled ? '🚫' : '📋'}
                         </span>
                         <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#c8eef8' }}>
                           {comp.brief?.title ?? comp.id}
