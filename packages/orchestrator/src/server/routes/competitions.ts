@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import archiver from 'archiver';
 import { briefSchema, CompetitionFormat, CompetitionState } from '@arena/shared';
-import type { Team, TeamPresentation, ForgeOutput, ForgeRun, ForgeSource, Brief, Deliverable } from '@arena/shared';
+import type { BriefInput, Team, TeamPresentation, ForgeOutput, ForgeRun, ForgeSource, Brief, Deliverable } from '@arena/shared';
 import { CompetitionRunner } from '../../engine/competition-runner.js';
 import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
@@ -307,7 +307,8 @@ competitionsRouter.post('/:id/synthesis', requireApiKey, async (req: Request, re
   const presentations = (result.presentations as TeamPresentation[]) ?? [];
   const brief = comp.brief as Brief;
 
-  synthesizeDeliverables(brief, deliverables, { claudeBin: process.env.CLAUDE_BIN }, presentations)
+  const briefInput = { ...brief, deliverableType: brief.deliverableType ?? 'code' } as BriefInput;
+  synthesizeDeliverables(briefInput, deliverables, { claudeBin: process.env.CLAUDE_BIN }, presentations)
     .then(async (synthesis) => {
       if (synthesis) {
         await repo.saveSynthesis(id, synthesis);

@@ -3,7 +3,8 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeFile, unlink, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { parseBrief } from './parser.js';
+import yaml from 'js-yaml';
+import { parseBrief, parseBriefFromYaml } from './parser.js';
 import { CompetitionFormat } from '@arena/shared';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -144,10 +145,57 @@ describe('parseBrief()', () => {
   it('throws when rubric criteria is empty (Zod enforces at least one criterion)', async () => {
     // The Zod schema enforces .min(1) on criteria, so an empty array fails schema validation.
     // This test verifies the guard is in place (either via Zod or post-parse check).
-    const yaml = minimalBriefYaml({ criteriaBlock: '' });
-    await withTempBrief(yaml, async (path) => {
+    const yamlContent = minimalBriefYaml({ criteriaBlock: '' });
+    await withTempBrief(yamlContent, async (path) => {
       // Empty criteria block produces null in YAML; Zod rejects it
       await expect(parseBrief(path)).rejects.toThrow();
     });
+  });
+});
+
+describe('deliverableType and domainHint', () => {
+  const baseValid = {
+    id: 'test-1',
+    title: 'Test Brief',
+    problem: 'Test problem',
+    constraints: [],
+    deliverables: ['output.md'],
+    rubric: { criteria: [{ id: 'quality', weight: 1.0, maxScore: 10, description: 'Quality' }] },
+    format: 'SPRINT',
+    timeLimitMs: 300_000,
+  };
+
+  it('defaults deliverableType to "code" when omitted', () => {
+    const result = parseBriefFromYaml(yaml.dump(baseValid));
+    expect(result.deliverableType).toBe('code');
+  });
+
+  it('accepts valid deliverableType values', () => {
+    const types = ['code', 'document', 'analysis', 'presentation', 'plan', 'mixed'] as const;
+    for (const t of types) {
+      const result = parseBriefFromYaml(yaml.dump({ ...baseValid, deliverableType: t }));
+      expect(result.deliverableType).toBe(t);
+    }
+  });
+
+  it('rejects invalid deliverableType', () => {
+    expect(() => parseBriefFromYaml(yaml.dump({ ...baseValid, deliverableType: 'video' }))).toThrow();
+  });
+
+  it('accepts valid domainHint values', () => {
+    const domains = ['software', 'research', 'creative', 'security', 'business', 'ideation'] as const;
+    for (const d of domains) {
+      const result = parseBriefFromYaml(yaml.dump({ ...baseValid, domainHint: d }));
+      expect(result.domainHint).toBe(d);
+    }
+  });
+
+  it('domainHint is omitted when not in YAML', () => {
+    const result = parseBriefFromYaml(yaml.dump(baseValid));
+    expect(result.domainHint).toBeUndefined();
+  });
+
+  it('rejects invalid domainHint', () => {
+    expect(() => parseBriefFromYaml(yaml.dump({ ...baseValid, domainHint: 'finance' }))).toThrow();
   });
 });

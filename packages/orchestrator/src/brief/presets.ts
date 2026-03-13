@@ -13,6 +13,7 @@ export const PRESETS: Record<CompetitionFormat, BriefInput> = {
     deliverables: ['solution.md'],
     timeLimitMs: 15 * 60 * 1000, // 15 minutes
     format: CompetitionFormat.SPRINT,
+    deliverableType: 'code',
     rubric: {
       criteria: [
         { id: 'correctness', description: 'Solution is correct', weight: 0.5, maxScore: 10 },
@@ -30,6 +31,7 @@ export const PRESETS: Record<CompetitionFormat, BriefInput> = {
     deliverables: ['README.md', 'source code'],
     timeLimitMs: 2 * 60 * 60 * 1000, // 2 hours
     format: CompetitionFormat.HACKATHON,
+    deliverableType: 'code',
     rubric: {
       criteria: [
         { id: 'innovation', description: 'Creative and novel approach', weight: 0.35, maxScore: 10 },
@@ -47,6 +49,7 @@ export const PRESETS: Record<CompetitionFormat, BriefInput> = {
     deliverables: ['incremental solution'],
     timeLimitMs: 30 * 60 * 1000, // 30 minutes
     format: CompetitionFormat.RELAY_RACE,
+    deliverableType: 'code',
     rubric: {
       criteria: [
         { id: 'continuity', description: 'Builds coherently on prior work', weight: 0.4, maxScore: 10 },
@@ -64,6 +67,7 @@ export const PRESETS: Record<CompetitionFormat, BriefInput> = {
     deliverables: ['attack/defense report'],
     timeLimitMs: 60 * 60 * 1000, // 1 hour
     format: CompetitionFormat.RED_VS_BLUE,
+    deliverableType: 'code',
     rubric: {
       criteria: [
         { id: 'effectiveness', description: 'Attack or defense is effective', weight: 0.5, maxScore: 10 },
