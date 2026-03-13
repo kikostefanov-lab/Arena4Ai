@@ -4,7 +4,7 @@ import {
   MONOSPACE_FONT, BODY_FONT, KICKER_STYLE,
   MODEL_BADGE_COLORS, getModelColor,
 } from '../../lib/design-tokens';
-import type { AgentProfile } from '@arena/shared';
+import type { AgentProfile, Agent } from '@arena/shared';
 import { AgentCard } from '../../components/AgentCard';
 import { EmojiPicker } from '../../components/EmojiPicker';
 
@@ -128,15 +128,17 @@ export default function AgentArmoryPage() {
     setShowForm(false);
   }
 
-  function openEditForm(profile: AgentProfile) {
-    setEditProfile(profile);
-    setFormName(profile.name);
-    setFormProvider(profile.provider as Provider);
-    setFormModelVariant(profile.modelVariant);
-    setFormSystemPrompt(profile.systemPrompt);
-    setFormDescription(profile.description ?? '');
-    setFormAvatar(profile.avatar ?? '🤖');
-    setFormTags(profile.tags?.join(', ') ?? '');
+  function openEditForm(profile: AgentProfile | Agent) {
+    // Cast to AgentProfile for form usage; Agent shape from new cards is compatible for id/name/provider/modelVariant
+    const p = profile as AgentProfile;
+    setEditProfile(p);
+    setFormName(p.name);
+    setFormProvider(p.provider as Provider);
+    setFormModelVariant(p.modelVariant);
+    setFormSystemPrompt(p.systemPrompt ?? '');
+    setFormDescription(p.description ?? '');
+    setFormAvatar(p.avatar ?? '🤖');
+    setFormTags(p.tags?.join(', ') ?? '');
     setFormError('');
     setShowEmojiPicker(false);
     setShowForm(true);
@@ -182,11 +184,11 @@ export default function AgentArmoryPage() {
     }
   }
 
-  async function handleFork(profile: AgentProfile) {
-    const name = window.prompt(`Fork name (forking "${profile.name}"):`);
+  async function handleFork(agent: Agent | AgentProfile) {
+    const name = window.prompt(`Fork name (forking "${agent.name}"):`);
     if (!name?.trim()) return;
     try {
-      await fetch(`/api/agent-profiles/${profile.id}/fork`, {
+      await fetch(`/api/agent-profiles/${agent.id}/fork`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim() }),
@@ -195,10 +197,11 @@ export default function AgentArmoryPage() {
     } catch {}
   }
 
-  async function handleRetire(profile: AgentProfile) {
-    if (!confirm(`Retire "${profile.name}"? It will be hidden from the Armory.`)) return;
+  async function handleRetireById(id: string) {
+    const target = profiles.find(p => p.id === id);
+    if (!confirm(`Retire "${target?.name ?? id}"? It will be hidden from the Armory.`)) return;
     try {
-      await fetch(`/api/agent-profiles/${profile.id}`, { method: 'DELETE' });
+      await fetch(`/api/agent-profiles/${id}`, { method: 'DELETE' });
       await loadProfiles();
     } catch {}
   }
@@ -455,7 +458,7 @@ export default function AgentArmoryPage() {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.8rem' }}>
             {systemProfiles.map(p => (
-              <AgentCard key={p.id} profile={p} onFork={handleFork} />
+              <AgentCard key={p.id} agent={p as unknown as Agent} onEdit={openEditForm} onFork={handleFork} onRetire={handleRetireById} />
             ))}
           </div>
         </div>
@@ -469,7 +472,7 @@ export default function AgentArmoryPage() {
           </h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.8rem' }}>
             {userProfiles.map(p => (
-              <AgentCard key={p.id} profile={p} onEdit={openEditForm} onFork={handleFork} onRetire={handleRetire} />
+              <AgentCard key={p.id} agent={p as unknown as Agent} onEdit={openEditForm} onFork={handleFork} onRetire={handleRetireById} />
             ))}
           </div>
         </div>
@@ -490,7 +493,7 @@ export default function AgentArmoryPage() {
           </summary>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.8rem', marginTop: '1rem', opacity: 0.5 }}>
             {retiredProfiles.map(p => (
-              <AgentCard key={p.id} profile={p} />
+              <AgentCard key={p.id} agent={p as unknown as Agent} onEdit={openEditForm} onFork={handleFork} onRetire={handleRetireById} />
             ))}
           </div>
         </details>
