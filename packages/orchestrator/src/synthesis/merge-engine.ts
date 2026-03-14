@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
-import type { BriefInput, Deliverable, TeamPresentation } from '@arena/shared';
+import type { Brief, BriefInput, Deliverable, TeamPresentation } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { extractJson } from '../utils/extract-json.js';
+import { buildBriefContext, SYNTHESIS_CONTEXT } from '../utils/brief-context.js';
 
 export interface SynthesisOptions {
   /** Path to the claude CLI binary. Defaults to 'claude'. */
@@ -38,9 +39,7 @@ export async function synthesizeDeliverables(
   const nonEmpty = deliverables.filter((d) => d.files.length > 0);
   if (nonEmpty.length === 0) return null;
 
-  const criteriaList = brief.rubric.criteria
-    .map((c) => `- **${c.id}** (weight ${c.weight}): ${c.description}`)
-    .join('\n');
+  const briefContext = buildBriefContext(brief as Brief, SYNTHESIS_CONTEXT);
 
   const criteriaIds = brief.rubric.criteria.map((c) => c.id);
   const teamIds = nonEmpty.map((d) => d.teamId);
@@ -75,11 +74,7 @@ export async function synthesizeDeliverables(
 
 Write for a smart person who wants to understand WHY each choice was made, not just WHAT was chosen.
 
-## Problem
-${brief.problem}
-
-## Judging Criteria
-${criteriaList}
+${briefContext}
 
 ## Team Submissions (${teamCount} teams)
 ${teamContext}
