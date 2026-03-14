@@ -5,12 +5,15 @@ const ENERGY_MAP: Record<string, number> = {
   FILE_CREATE: 0.15,
   FILE_MODIFY: 0.12,
   TOOL_CALL: 0.10,
-  REASONING: 0.02,
+  REASONING: 0.03,
   ERROR: -0.10,
 };
 
 const DEFAULT_ENERGY = 0.01;
-const ENERGY_DECAY_PER_SEC = 0.01;
+const ENERGY_DECAY_PER_SEC = 0.008;  // slower decay so thinking phases don't drain energy
+
+/** Every Nth reasoning event triggers a subtle visual pulse */
+const REASONING_PULSE_INTERVAL = 6;
 const INITIAL_ENERGY = 0.3;
 
 /** Map event type to a flash pose (or undefined for no flash) */
@@ -183,10 +186,26 @@ export class EventProcessor {
             particle,
           });
         } else if (ev.type === 'REASONING') {
-          // Still emit base pose change for reasoning streaks
+          // Content-aware reasoning: detect plan items, decisions, completions
+          const text = (ev.payload?.text as string ?? '').toLowerCase();
+          const isDecision = /\b(decided|set|locked|chosen|plan update|fixed)\b/.test(text);
+          const isListItem = /^[\s]*[•\-→✓]\s/.test(ev.payload?.text as string ?? '');
+          const isCompletion = /\b(succeeded|completed|done|finished|built)\b/.test(text);
+
+          // Boost energy for substantive reasoning (decisions, completions)
+          if (isDecision || isCompletion) {
+            m.energy = clampEnergy(m.energy + 0.05);
+          }
+
+          // Every Nth reasoning event OR substantive content → subtle power pulse
+          const shouldPulse = (m.eventCounts.reasoning % REASONING_PULSE_INTERVAL === 0)
+            || isDecision || isCompletion;
+
           commands.push({
             teamId: ev.teamId,
             basePose: m.basePose,
+            // Subtle power flash on pulse events to keep the gladiator visually active
+            ...(shouldPulse ? { flash: 'power' as FlashPose, particle: 'power_burst' as ParticleType } : {}),
           });
         }
       }
