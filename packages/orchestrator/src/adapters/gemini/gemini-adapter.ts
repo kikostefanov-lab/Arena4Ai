@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
@@ -48,21 +51,27 @@ export class GeminiAdapter extends BaseAdapter {
 
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
 
+    // Write prompt to a temp .md file and pass the path to gemini -p
+    // This avoids CLI arg length limits with the richer Sprint 5 briefs
+    const promptFile = join(tmpdir(), `arena-gemini-${this.teamId}-${Date.now()}.md`);
+    writeFileSync(promptFile, this.promptText, 'utf-8');
+
     this.executionDone = new Promise<void>((resolve, reject) => {
       // gemini -p <prompt> --yolo  — non-interactive, auto-approve all tools
-      const geminiArgs = ['-p', this.promptText, '--yolo'];
+      // Read prompt from temp file via shell command substitution to avoid arg length issues
+      const geminiArgs = ['--yolo'];
 
       const child = this.sandbox
         ? this.sandbox.spawnInContainer(
             this.teamId,
             this.workdir,
             this.geminiBin,
-            geminiArgs,
+            ['-p', this.promptText, '--yolo'],
             claudeEnv(),
           )
         : spawn(
-            this.geminiBin,
-            geminiArgs,
+            '/bin/sh',
+            ['-c', `"${this.geminiBin}" -p "$(cat "${promptFile}")" --yolo`],
             {
               cwd: this.workdir,
               stdio: ['ignore', 'pipe', 'pipe'],
@@ -92,6 +101,7 @@ export class GeminiAdapter extends BaseAdapter {
         rl.close();
         errRl.close();
         this.process = null;
+        try { unlinkSync(promptFile); } catch { /* ignore */ }
         if (code === 0 || code === null) resolve();
         else reject(new Error(`Gemini process exited with code ${code}`));
       });
@@ -100,6 +110,7 @@ export class GeminiAdapter extends BaseAdapter {
         rl.close();
         errRl.close();
         this.process = null;
+        try { unlinkSync(promptFile); } catch { /* ignore */ }
         this.emitErrorEvent(`Failed to start Gemini: ${err.message}`);
         reject(err);
       });
