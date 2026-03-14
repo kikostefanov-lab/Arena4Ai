@@ -27,7 +27,15 @@ const { tournamentStore, mockTournamentRepo } = vi.hoisted(() => {
 vi.mock('../../db/repository.js', () => ({
   CompetitionRepository: vi.fn(),
   TournamentRepository: vi.fn().mockImplementation(() => mockTournamentRepo),
+  BriefsRepository: vi.fn().mockImplementation(() => ({
+    list: vi.fn().mockResolvedValue([]),
+    getById: vi.fn().mockResolvedValue(null),
+    save: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+    seedFromYaml: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
+vi.mock('../routes/briefs-seed.js', () => ({ seedYamlBriefs: vi.fn().mockResolvedValue(undefined) }));
 
 // Mock dependencies before importing app
 vi.mock('../repo.js', () => ({

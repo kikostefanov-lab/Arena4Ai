@@ -7,7 +7,9 @@ import { analyticsRouter } from './routes/analytics.js';
 import { leaderboardRouter } from './routes/leaderboard.js';
 import { generateBriefRouter } from './routes/generate-brief.js';
 import { tournamentsRouter } from './routes/tournaments.js';
-import { briefsRouter } from './routes/briefs.js';
+import { createBriefsRouter } from './routes/briefs.js';
+import { BriefsRepository } from '../db/repository.js';
+import { seedYamlBriefs } from './routes/briefs-seed.js';
 import { compareRouter } from './routes/compare.js';
 import { criteriaRouter } from './routes/criteria.js';
 import { attachWebSocket } from './websocket.js';
@@ -100,7 +102,13 @@ export function createApp(): Application {
   app.use('/leaderboard', leaderboardRouter);
   app.use('/generate-brief', generateBriefLimiter, generateBriefRouter);
   app.use('/tournaments', tournamentsRouter);
-  app.use('/briefs', briefsRouter);
+  const briefsRepo = new BriefsRepository(db);
+  app.use('/briefs', createBriefsRouter(briefsRepo));
+
+  // Seed YAML briefs into DB on startup (async, non-blocking)
+  void seedYamlBriefs(briefsRepo).catch((err) =>
+    console.warn('[seed] Failed to seed YAML briefs:', err),
+  );
   app.use('/personas', createPersonasRouter(personaRepo));
   app.use('/agents', createAgentsRouter(agentRepo));
   app.use('/generate-persona', generatePersonaLimiter, generatePersonaRouter);
