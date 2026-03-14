@@ -407,7 +407,7 @@ export default function NewCompetitionPage() {
   // Intake flow state
   const [showIntake, setShowIntake] = useState(false);
   const [intakeLoading, setIntakeLoading] = useState(false);
-  const [intakeQuestions, setIntakeQuestions] = useState<Array<{ id: string; question: string; options: string[] }>>([]);
+  const [intakeQuestions, setIntakeQuestions] = useState<Array<{ id: string; question: string; options?: string[] }>>([]);
   const [intakeAnswers, setIntakeAnswers] = useState<Record<string, string>>({});
   const [detectedDomain, setDetectedDomain] = useState('');
   const [detectedDeliverableType, setDetectedDeliverableType] = useState('');
@@ -573,7 +573,13 @@ export default function NewCompetitionPage() {
       if (data.detectedDomain && VALID_DOMAIN_HINTS.includes(data.detectedDomain as DomainHint)) {
         setDomainHint(data.detectedDomain as DomainHint);
       }
-      setIntakeQuestions(Array.isArray(data.questions) ? data.questions : []);
+      // Normalize questions: API may return string[] or {id,question,options}[]
+      const rawQ = Array.isArray(data.questions) ? data.questions : [];
+      const normalized = rawQ.map((q: string | { id?: string; question?: string; text?: string; options?: string[] }, i: number) => {
+        if (typeof q === 'string') return { id: `q${i}`, question: q };
+        return { id: q.id ?? `q${i}`, question: q.question ?? q.text ?? '', options: q.options };
+      });
+      setIntakeQuestions(normalized);
       setShowIntake(true);
     } catch {
       setGenerateError('Failed to run intake. Make sure the orchestrator is running.');
@@ -1303,7 +1309,7 @@ export default function NewCompetitionPage() {
                                   {q.question}
                                 </div>
                                 <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                                  {q.options.map((opt) => {
+                                  {q.options && q.options.length > 0 ? q.options.map((opt) => {
                                     const selected = intakeAnswers[q.id] === opt;
                                     return (
                                       <button
@@ -1322,7 +1328,16 @@ export default function NewCompetitionPage() {
                                         {opt}
                                       </button>
                                     );
-                                  })}
+                                  }) : (
+                                    <input
+                                      type="text"
+                                      className="arena-input"
+                                      placeholder="Type your answer..."
+                                      value={intakeAnswers[q.id] ?? ''}
+                                      onChange={(e) => setIntakeAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                                      style={{ fontSize: '0.58rem', padding: '0.3rem 0.5rem', flex: 1 }}
+                                    />
+                                  )}
                                 </div>
                               </div>
                             ))}
