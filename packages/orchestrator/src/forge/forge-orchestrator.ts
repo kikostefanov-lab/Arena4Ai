@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeOutputFormat, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { extractJson } from '../utils/extract-json.js';
+import { buildBriefContext, FORGE_CONTEXT } from '../utils/brief-context.js';
 
 type ArtifactStatus = 'queued' | 'generating' | 'done' | 'error';
 type ProgressMap = Record<string, ArtifactStatus>;
@@ -690,6 +691,7 @@ export const DOMAIN_TYPE_DEFAULTS: Record<ForgeDomain, ForgeArtifactType[]> = {
   business:  ['roadmap', 'gantt_timeline', 'risk_register', 'decision_log'],
   ideation:  ['concept_canvas', 'mvp_definition', 'hypothesis_backlog', 'decision_framework'],
   security:  ['risk_register', 'api_contracts', 'repo_blueprint', 'decision_log'],
+  strategy:  ['roadmap', 'risk_register', 'decision_log', 'gantt_timeline', 'stakeholder_map', 'go_to_market'],
 };
 
 const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
@@ -708,6 +710,7 @@ Available domains and their artifact types:
 - business: roadmap, gantt_timeline, risk_register, decision_log
 - ideation: concept_canvas, mvp_definition, hypothesis_backlog, decision_framework
 - security: risk_register, api_contracts, repo_blueprint, decision_log
+- strategy: roadmap, risk_register, decision_log, gantt_timeline, stakeholder_map, go_to_market
 
 Respond ONLY with a JSON object. No explanation, no markdown, just JSON:
 {"domain":"<domain>","types":["<type1>","<type2>","<type3>","<type4>"]}
@@ -747,7 +750,7 @@ Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}${deliverableTyp
     const json = JSON.parse(extractJson(raw)) as { domain: ForgeDomain; types: ForgeArtifactType[] };
 
     // Validate response
-    const validDomains: ForgeDomain[] = ['software', 'research', 'creative', 'security', 'business', 'ideation'];
+    const validDomains: ForgeDomain[] = ['software', 'research', 'creative', 'security', 'business', 'ideation', 'strategy'];
     const validTypes = new Set(Object.keys(ARTIFACT_CATALOG));
 
     if (!validDomains.includes(json.domain)) return GENERIC_DEFAULT;
@@ -802,11 +805,7 @@ function buildForgeUserPrompt(input: ForgeInput, primaryDeliverables: Array<{ te
   const { brief, presentations, synthesis, winner } = input;
   const sections: string[] = [];
 
-  sections.push(`# Original Brief\n\n**Title:** ${brief.title}\n**Problem:** ${brief.problem}\n**Constraints:** ${brief.constraints.join(', ')}`);
-
-  if (brief.rubric?.criteria) {
-    sections.push(`## Judging Criteria\n${brief.rubric.criteria.map((c) => `- **${c.id}** (weight ${c.weight}): ${c.description}`).join('\n')}`);
-  }
+  sections.push(`# Original Brief\n\n${buildBriefContext(brief, FORGE_CONTEXT)}`);
 
   const winnerPres = presentations.find((p) => p.teamId === winner.teamId);
   if (winnerPres) {
