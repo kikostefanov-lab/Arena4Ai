@@ -2075,6 +2075,7 @@ export default function CompetitionPage() {
   const [competitionStartTime, setCompetitionStartTime] = useState<number | null>(null);
   const [rematchLoading, setRematchLoading] = useState(false);
   const [copyLabel, setCopyLabel] = useState<'🔗 Copy Link' | '✓ Copied'>('🔗 Copy Link');
+  const [saveBriefLabel, setSaveBriefLabel] = useState<'📚 Save Brief' | '✓ Saved' | 'Failed'>('📚 Save Brief');
   const [notes, setNotes] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
   const notesSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2366,6 +2367,23 @@ export default function CompetitionPage() {
     }).catch(() => { /* clipboard not available */ });
   };
 
+  const handleSaveBrief = async () => {
+    if (!brief) return;
+    try {
+      const res = await fetch('/api/briefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief, source: 'competition', tags: [] }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setSaveBriefLabel('✓ Saved');
+      setTimeout(() => setSaveBriefLabel('📚 Save Brief'), 3000);
+    } catch {
+      setSaveBriefLabel('Failed');
+      setTimeout(() => setSaveBriefLabel('📚 Save Brief'), 3000);
+    }
+  };
+
   const handleRematch = async () => {
     if (!brief || teams.length === 0 || rematchLoading) return;
     setRematchLoading(true);
@@ -2602,6 +2620,25 @@ export default function CompetitionPage() {
             📋 BRIEF
           </button>
 
+
+          {isComplete && brief && (
+            <button
+              onClick={handleSaveBrief}
+              style={{
+                fontSize: '0.70rem',
+                color: saveBriefLabel === '✓ Saved' ? '#22c55e' : saveBriefLabel === 'Failed' ? '#ef4444' : '#4a8fa8',
+                background: saveBriefLabel === '✓ Saved' ? 'rgba(34,197,94,0.08)' : 'transparent',
+                border: `1px solid ${saveBriefLabel === '✓ Saved' ? 'rgba(34,197,94,0.35)' : '#0a2235'}`,
+                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
+                letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '0.35rem',
+                transition: 'all 0.15s ease', fontFamily: 'inherit',
+              }}
+              title="Save this brief to the library"
+            >
+              {saveBriefLabel}
+            </button>
+          )}
 
           <button
             onClick={handleCopyLink}
