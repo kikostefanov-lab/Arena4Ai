@@ -74,12 +74,26 @@ export default function GalleryPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Fetch competitions on mount
+  // Fetch competitions on mount — retry once on failure before showing error
   useEffect(() => {
-    fetch('/api/competitions')
-      .then((r) => r.json())
-      .then((data: CompetitionSummary[]) => { setCompetitions(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(() => { setError('Failed to load competitions — is the API server running?'); setLoading(false); });
+    let cancelled = false;
+    const doFetch = (attempt: number) => {
+      fetch('/api/competitions')
+        .then((r) => r.json())
+        .then((data: CompetitionSummary[]) => {
+          if (cancelled) return;
+          if (Array.isArray(data)) { setCompetitions(data); setLoading(false); }
+          else if (attempt < 2) { setTimeout(() => doFetch(attempt + 1), 2000); }
+          else { setLoading(false); }
+        })
+        .catch(() => {
+          if (cancelled) return;
+          if (attempt < 2) { setTimeout(() => doFetch(attempt + 1), 2000); }
+          else { setError('Failed to load competitions — is the API server running?'); setLoading(false); }
+        });
+    };
+    doFetch(0);
+    return () => { cancelled = true; };
   }, []);
 
   // Auto-refresh competitions list every 10 seconds while tab is visible
