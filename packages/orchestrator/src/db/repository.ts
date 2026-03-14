@@ -1,6 +1,6 @@
 import { and, eq, gt, asc, desc, sql, inArray } from 'drizzle-orm';
 import type { Db } from './client.js';
-import { competitions, events, results, tournaments } from './schema.js';
+import { competitions, events, results, tournaments, resultsHistory, briefQualitySignals, briefs } from './schema.js';
 import type { TeamDeliverable } from './schema.js';
 import type { ArenaEvent, Brief, Team, TeamPresentation, ForgeArtifact, ForgeOutput, ForgeRun } from '@arena/shared';
 import { CompetitionState } from '@arena/shared';
@@ -199,6 +199,28 @@ export class CompetitionRepository {
     });
     return deleted.length > 0;
   }
+
+  async archiveResult(competitionId: string, stage: string): Promise<void> {
+    const current = await this.getResult(competitionId);
+    if (!current) return;
+    await this.db.insert(resultsHistory).values({
+      competitionId,
+      stage,
+      previousResults: current as Record<string, unknown>,
+    });
+  }
+
+  async updateScorecards(competitionId: string, scorecards: unknown[], winnerId: string | null): Promise<void> {
+    await this.db.update(results)
+      .set({ scorecards, winnerId })
+      .where(eq(results.competitionId, competitionId));
+  }
+
+  async updatePresentations(competitionId: string, presentations: TeamPresentation[]): Promise<void> {
+    await this.db.update(results)
+      .set({ presentations })
+      .where(eq(results.competitionId, competitionId));
+  }
 }
 
 export interface TournamentRanking {
@@ -293,5 +315,40 @@ export class TournamentRepository {
       createdAt: row.createdAt.toISOString(),
       completedAt: row.completedAt ? row.completedAt.toISOString() : null,
     }));
+  }
+}
+
+export class BriefsRepository {
+  constructor(private readonly db: Db) {}
+
+  async list() {
+    return this.db.select().from(briefs).orderBy(briefs.createdAt);
+  }
+
+  async getById(id: string) {
+    const rows = await this.db.select().from(briefs).where(eq(briefs.id, id)).limit(1);
+    return rows[0] ?? null;
+  }
+
+  async save(entry: typeof briefs.$inferInsert) {
+    await this.db.insert(briefs).values(entry)
+      .onConflictDoUpdate({
+        target: briefs.id,
+        set: { title: entry.title, brief: entry.brief, source: entry.source, qualityScore: entry.qualityScore, tags: entry.tags, updatedAt: new Date() },
+      });
+  }
+
+  async remove(id: string) {
+    await this.db.delete(briefs).where(eq(briefs.id, id));
+  }
+
+  async seedFromYaml(entries: Array<typeof briefs.$inferInsert>) {
+    for (const entry of entries) {
+      await this.db.insert(briefs).values(entry)
+        .onConflictDoUpdate({
+          target: briefs.id,
+          set: { title: entry.title, brief: entry.brief, tags: entry.tags, updatedAt: new Date() },
+        });
+    }
   }
 }
