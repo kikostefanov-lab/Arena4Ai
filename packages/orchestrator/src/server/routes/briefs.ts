@@ -1,54 +1,45 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve, join, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import yaml from 'js-yaml';
+import type { BriefsRepository } from '../../db/repository.js';
 
-export const briefsRouter = Router();
+export function createBriefsRouter(briefsRepo: BriefsRepository) {
+  const router = Router();
 
-// Resolve repo root: go up from src/server/routes/ → src/server/ → src/ → packages/orchestrator/ → packages/ → repo root
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const REPO_ROOT = resolve(__dirname, '..', '..', '..', '..', '..');
-const BRIEFS_DIR = join(REPO_ROOT, 'briefs');
+  // GET /briefs
+  router.get('/', async (_req: Request, res: Response) => {
+    const rows = await briefsRepo.list();
+    res.json(rows.map(r => ({
+      id: r.id, title: r.title, brief: r.brief,
+      source: r.source, qualityScore: r.qualityScore ? Number(r.qualityScore) : null,
+      tags: r.tags ?? [], createdAt: r.createdAt,
+    })));
+  });
 
-interface BriefYaml {
-  id?: string;
-  title?: string;
-  format?: string;
-  tags?: string[];
-  timeLimitMs?: number;
-  problem?: string;
-  [key: string]: unknown;
+  // POST /briefs
+  router.post('/', async (req: Request, res: Response) => {
+    const { brief, source = 'generated', tags } = req.body;
+    if (!brief?.title) { res.status(400).json({ error: 'Missing brief or title' }); return; }
+    const id = brief.id ?? brief.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    await briefsRepo.save({ id, title: brief.title, brief, source, qualityScore: brief._qualityScore ?? null, tags: tags ?? brief.tags ?? [] });
+    res.status(201).json({ id });
+  });
+
+  // PUT /briefs/:id
+  router.put('/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const { brief, tags } = req.body;
+    if (!brief) { res.status(400).json({ error: 'Missing brief' }); return; }
+    await briefsRepo.save({ id: req.params.id, title: brief.title ?? req.params.id, brief, source: 'generated', tags: tags ?? brief.tags ?? [] });
+    res.json({ id: req.params.id });
+  });
+
+  // DELETE /briefs/:id (YAML protected)
+  router.delete('/:id', async (req: Request<{ id: string }>, res: Response) => {
+    const existing = await briefsRepo.getById(req.params.id);
+    if (!existing) { res.status(404).json({ error: 'Not found' }); return; }
+    if (existing.source === 'yaml') { res.status(403).json({ error: 'Cannot delete YAML-sourced briefs' }); return; }
+    await briefsRepo.remove(req.params.id);
+    res.json({ deleted: true });
+  });
+
+  return router;
 }
-
-// GET /briefs — returns metadata for all brief YAML files
-briefsRouter.get('/', (_req: Request, res: Response) => {
-  try {
-    const files = readdirSync(BRIEFS_DIR).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
-
-    const briefs = files.map((filename) => {
-      try {
-        const raw = readFileSync(join(BRIEFS_DIR, filename), 'utf-8');
-        const parsed = yaml.load(raw) as BriefYaml;
-        const problem = typeof parsed?.problem === 'string' ? parsed.problem : '';
-        return {
-          id: parsed?.id ?? filename.replace(/\.(yml|yaml)$/, ''),
-          title: parsed?.title ?? filename,
-          format: parsed?.format ?? 'SPRINT',
-          tags: parsed?.tags ?? [],
-          timeLimitMs: parsed?.timeLimitMs ?? 120000,
-          problemSnippet: problem.trim().slice(0, 200),
-          filename,
-        };
-      } catch {
-        return null;
-      }
-    }).filter(Boolean);
-
-    res.json(briefs);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to read briefs directory', details: String(err) });
-  }
-});

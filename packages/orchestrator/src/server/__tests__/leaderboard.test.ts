@@ -12,7 +12,15 @@ vi.mock('../../db/repository.js', () => ({
     updateTournamentProgress: vi.fn().mockResolvedValue(undefined),
     listTournaments: vi.fn().mockResolvedValue([]),
   })),
+  BriefsRepository: vi.fn().mockImplementation(() => ({
+    list: vi.fn().mockResolvedValue([]),
+    getById: vi.fn().mockResolvedValue(null),
+    save: vi.fn().mockResolvedValue(undefined),
+    remove: vi.fn().mockResolvedValue(undefined),
+    seedFromYaml: vi.fn().mockResolvedValue(undefined),
+  })),
 }));
+vi.mock('../routes/briefs-seed.js', () => ({ seedYamlBriefs: vi.fn().mockResolvedValue(undefined) }));
 
 // Mock repo before imports
 vi.mock('../repo.js', () => ({
