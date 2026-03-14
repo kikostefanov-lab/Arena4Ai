@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { BaseAdapter } from '../base-adapter.js';
 import { CodexNormalizer } from './codex-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
@@ -47,23 +50,26 @@ export class CodexAdapter extends BaseAdapter {
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
     const normalizer = new CodexNormalizer(ctx);
 
+    // Write prompt to a temp file to avoid CLI arg length limits with rich briefs
+    const promptFile = join(tmpdir(), `arena-codex-${this.teamId}-${Date.now()}.md`);
+    writeFileSync(promptFile, this.promptText, 'utf-8');
+
     this.executionDone = new Promise<void>((resolve, reject) => {
       // codex exec <prompt>
       //   --skip-git-repo-check   — allow running in temp workdirs outside a git repo
       //   -s workspace-write      — allow writing files in the workdir
-      const codexArgs = ['exec', '--skip-git-repo-check', '-s', 'workspace-write', this.promptText];
-
+      // Use shell to read prompt from temp file via command substitution
       const child = this.sandbox
         ? this.sandbox.spawnInContainer(
             this.teamId,
             this.workdir,
             this.codexBin,
-            codexArgs,
+            ['exec', '--skip-git-repo-check', '-s', 'workspace-write', this.promptText],
             claudeEnv(),
           )
         : spawn(
-            this.codexBin,
-            codexArgs,
+            '/bin/sh',
+            ['-c', `"${this.codexBin}" exec --skip-git-repo-check -s workspace-write "$(cat "${promptFile}")"`],
             {
               cwd: this.workdir,
               stdio: ['ignore', 'pipe', 'pipe'],
@@ -86,6 +92,7 @@ export class CodexAdapter extends BaseAdapter {
       child.on('close', (code) => {
         errRl.close();
         this.process = null;
+        try { unlinkSync(promptFile); } catch { /* ignore */ }
         if (code === 0 || code === null) resolve();
         else reject(new Error(`Codex process exited with code ${code}`));
       });
@@ -93,6 +100,7 @@ export class CodexAdapter extends BaseAdapter {
       child.on('error', (err) => {
         errRl.close();
         this.process = null;
+        try { unlinkSync(promptFile); } catch { /* ignore */ }
         this.emitErrorEvent(`Failed to start Codex: ${err.message}`);
         reject(err);
       });
