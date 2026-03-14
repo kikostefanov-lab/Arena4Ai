@@ -115,3 +115,49 @@ export const agentProfiles = pgTable('agent_profiles', {
   createdAt:        timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt:        timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const resultsHistory = pgTable('results_history', {
+  id:              text('id').primaryKey().default(sql`gen_random_uuid()`),
+  competitionId:   text('competition_id').notNull().references(() => competitions.id),
+  archivedAt:      timestamp('archived_at', { withTimezone: true }).notNull().defaultNow(),
+  stage:           text('stage').notNull(),
+  previousResults: jsonb('previous_results').notNull(),
+}, (t) => [
+  index('idx_results_history_competition').on(t.competitionId),
+]);
+
+export const briefQualitySignals = pgTable('brief_quality_signals', {
+  id:                          text('id').primaryKey().default(sql`gen_random_uuid()`),
+  competitionId:               text('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
+  computedAt:                  timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
+  scoreSpread:                 numeric('score_spread'),
+  tied:                        boolean('tied'),
+  allEights:                   boolean('all_eights'),
+  criterionSignals:            jsonb('criterion_signals'),
+  judgeReferencedProblem:      boolean('judge_referenced_problem'),
+  judgeReferencedConstraints:  boolean('judge_referenced_constraints'),
+  judgeReferencedDeliverables: boolean('judge_referenced_deliverables'),
+  expectedFilesProduced:       jsonb('expected_files_produced'),
+  totalFilesProduced:          integer('total_files_produced'),
+  totalContentSize:            integer('total_content_size'),
+  forgeDomainMatched:          boolean('forge_domain_matched'),
+  forgeArtifactsDownloaded:    integer('forge_artifacts_downloaded').default(0),
+  briefWasAiGenerated:         boolean('brief_was_ai_generated'),
+  briefEditDistance:            integer('brief_edit_distance'),
+  competitionRerun:            boolean('competition_rerun'),
+  synthesisTriggered:          boolean('synthesis_triggered'),
+  synthesisMeaningful:         boolean('synthesis_meaningful'),
+}, (t) => [
+  uniqueIndex('brief_quality_signals_competition_unique').on(t.competitionId),
+]);
+
+export const briefs = pgTable('briefs', {
+  id:           text('id').primaryKey(),
+  title:        text('title').notNull(),
+  brief:        jsonb('brief').notNull(),
+  source:       text('source').notNull(),
+  qualityScore: numeric('quality_score'),
+  tags:         jsonb('tags').$type<string[]>(),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
