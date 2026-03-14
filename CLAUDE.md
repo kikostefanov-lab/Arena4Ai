@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Sprint 4 complete. 211 tests passing.**
+**Status: Sprint 5 complete. 255 tests passing.**
 
 ## Running the Stack
 
@@ -46,12 +46,20 @@ npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
 npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml \
   --teams claude:architect,claude:speedrunner,codex:standard \
   --skip-sandbox
+
+# Re-evaluate completed competitions with new judge context
+DATABASE_URL=postgresql://localhost/arena \
+  npx tsx packages/orchestrator/src/cli.ts re-evaluate --all --stage judge
+
+# Seed quality signals from existing competitions
+DATABASE_URL=postgresql://localhost/arena \
+  npx tsx packages/orchestrator/src/cli.ts seed-quality-signals
 ```
 
 ## Tests
 
 ```bash
-npm run test --workspace=packages/orchestrator   # 211 tests
+npm run test --workspace=packages/orchestrator   # 255 tests
 npm run typecheck --workspace=packages/orchestrator
 npx tsc --noEmit -p packages/web/tsconfig.json
 ```
@@ -107,6 +115,14 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 - `GET /competitions/:id/synthesis` — synthesis status
 - `GET /competitions/:id/deliverables/:teamId/download` — ZIP of team deliverables
 - `POST /generate-brief` — Claude expands rough idea → structured brief JSON
+- `POST /generate-brief/intake` — domain detection + clarifying questions
+- `POST /generate-brief/generate` — domain-aware brief generation with answers
+- `POST /generate-brief/quality` — brief quality heuristic check
+- `POST /generate-brief` — legacy single-shot (chains intake + generate)
+- `GET /briefs` — DB-backed brief library (replaces filesystem read)
+- `POST /briefs` — save brief to library
+- `PUT /briefs/:id` — update library brief
+- `DELETE /briefs/:id` — remove (YAML-sourced briefs protected, returns 403)
 - `GET /health`
 
 Rate limiting: 10/min on `POST /competitions`; 5/min on `POST /competitions/:id/forge` and `POST /competitions/:id/synthesis`; 20/min on `POST /generate-brief`.
@@ -170,6 +186,9 @@ Enable with `--commentary` flag or `commentary: true` in RunOptions. Batches 5 e
 - `events`: id, competitionId, teamId, timestamp, type, payload, metadata, seq (serial)
 - `results`: competitionId, scorecards (jsonb), winnerId, synthesis (jsonb — SynthesisResult), presentations (jsonb), forge (jsonb — ForgeRun[]), deliverables (jsonb)
 - `tournaments`: id, name, brief (jsonb), teams (jsonb), type, state, matchIds (jsonb), rankings (jsonb), createdAt, completedAt
+- `results_history`: id (uuid), competitionId, archivedAt, stage, previousResults (jsonb) — backup before re-evaluate overwrites
+- `brief_quality_signals`: id (uuid), competitionId (unique), scoreSpread, tied, allEights, criterionSignals (jsonb), expectedFilesProduced (jsonb), etc.
+- `briefs`: id (text PK), title, brief (jsonb), source ('yaml'|'generated'|'competition'), qualityScore, tags (jsonb), createdAt, updatedAt
 
 Run migrations: `DATABASE_URL=postgresql://localhost/arena npm run db:migrate --workspace=packages/orchestrator`
 
@@ -206,6 +225,50 @@ Every page uses the same hero structure — do not deviate:
 import { extractJson } from '../utils/extract-json.js';
 const parsed = JSON.parse(extractJson(stdout));
 ```
+
+### Brief context utility (Sprint 5)
+`packages/orchestrator/src/utils/brief-context.ts` — shared utility that every LLM-calling stage uses to build consistent brief context strings. Exports `buildBriefContext(brief, options)`, `truncateFiles(files, perFile, budget)`, and 4 presets:
+- `JUDGE_CONTEXT`: title/problem/constraints/deliverables/rubric (full detail), 12K/file, 80K budget
+- `PRESENTER_CONTEXT`: same fields, weights-only rubric, 8K/file, 50K budget
+- `SYNTHESIS_CONTEXT`: title/problem/constraints/rubric (full), 8K/file, 50K budget
+- `FORGE_CONTEXT`: title/problem/constraints/rubric (full), 6K/file, 40K budget
+
+Use these presets — don't hand-build brief sections in LLM prompts.
+
+### Intelligent brief generator (Sprint 5)
+Multi-step pipeline replacing the single-shot generator:
+1. **Intake** (`POST /generate-brief/intake`) — classifies domain + generates 1-3 clarifying questions
+2. **Generate** (`POST /generate-brief/generate`) — uses domain-specific template from `packages/orchestrator/src/brief/domain-templates.ts` (7 domains: software, business, research, creative, strategy, security, ideation)
+3. **Quality** (`POST /generate-brief/quality`) — heuristic checks (7 rules, no LLM): criterion length, constraints, problem length, weights, duplicates, deliverableType
+4. Legacy `POST /generate-brief` preserved — chains intake + generate internally
+
+Domain templates: `DOMAIN_TEMPLATES` record in `domain-templates.ts`. Each has: systemFocus, deliverableType, exemplarCriteria (3 per domain), antiPatterns, deliverableHints, defaultTimeLimitMs.
+
+### Brief library persistence (Sprint 5)
+`briefs` table (Drizzle + PostgreSQL). Three write paths:
+- **YAML seed on startup** — `briefs/*.yml` upserted with `source: 'yaml'` (YAML is source of truth, overwrites DB on restart)
+- **Save from generator** — `source: 'generated'`
+- **Save from competition** — `source: 'competition'`
+
+YAML-sourced briefs cannot be deleted via API (403).
+
+### Feedback telemetry (Sprint 5)
+`brief_quality_signals` table — one row per competition (upsert). Computed by `computeHeuristicSignals()` in `packages/orchestrator/src/telemetry/quality-analyzer.ts`. Tracks:
+- Score differentiation: spread, tied (< 0.01), all-eights (7-9 range)
+- Per-criterion signals: spread and average per criterion
+- File delivery: expected vs. produced deliverables
+
+`getGeneratorLearnings()` in `packages/orchestrator/src/telemetry/learnings.ts` — queries signals, returns insights injected into the brief generation prompt. Self-improving loop: more competitions → better brief generation.
+
+CLI: `seed-quality-signals` retroactively analyzes all completed competitions.
+
+### Re-evaluate CLI (Sprint 5)
+```bash
+# Re-judge with new context-aware pipeline
+npx tsx packages/orchestrator/src/cli.ts re-evaluate <id> --stage judge
+npx tsx packages/orchestrator/src/cli.ts re-evaluate --all --stage all
+```
+Stages: `judge`, `presentation`, `synthesis`, `all`. Archives results before overwriting (→ `results_history` table).
 
 ### DB persistence for CLI `run`
 When `DATABASE_URL` is set, the CLI `run` command persists to DB:
