@@ -1082,6 +1082,78 @@ export default function NewCompetitionPage() {
                 padding: '0 1.25rem 1.5rem',
                 animation: 'slideDown 0.3s ease-out',
               }}>
+                {/* Quality Report — inline at top of Brief step */}
+                {qualityReport && !qualityLoading && (
+                  <div style={{
+                    marginBottom: '1rem', padding: '0.75rem 1rem',
+                    background: qualityReport.launchReady ? 'rgba(34,197,94,0.04)' : 'rgba(234,179,8,0.04)',
+                    border: `1px solid ${qualityReport.launchReady ? 'rgba(34,197,94,0.25)' : 'rgba(234,179,8,0.25)'}`,
+                    borderRadius: '8px',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: qualityReport.issues.length > 0 ? '0.5rem' : 0 }}>
+                      <span style={{ fontSize: '0.52rem', fontWeight: 700, color: '#4a8fa8', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                        BRIEF QUALITY
+                      </span>
+                      <div style={{
+                        flex: 1, height: '5px', background: '#0a2235', borderRadius: '3px',
+                        overflow: 'hidden', maxWidth: '180px',
+                      }}>
+                        <div style={{
+                          width: `${Math.round(qualityReport.overallScore * 100)}%`,
+                          height: '100%', borderRadius: '3px',
+                          background: qualityReport.overallScore >= 0.8
+                            ? '#22c55e'
+                            : qualityReport.overallScore >= 0.6
+                              ? '#eab308'
+                              : '#ef4444',
+                          transition: 'width 0.5s ease',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: '0.6rem', fontWeight: 700, color: '#c8eef8' }}>
+                        {Math.round(qualityReport.overallScore * 100)}%
+                      </span>
+                      {qualityReport.launchReady && (
+                        <span style={{
+                          fontSize: '0.45rem', fontWeight: 700, padding: '0.08rem 0.35rem',
+                          borderRadius: '3px', letterSpacing: '0.8px',
+                          background: 'rgba(34,197,94,0.12)', color: '#22c55e',
+                        }}>
+                          READY
+                        </span>
+                      )}
+                    </div>
+                    {qualityReport.issues.length > 0 && (
+                      <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                        {qualityReport.issues.map((issue: { severity: string; field: string; message: string }, i: number) => (
+                          <span
+                            key={i}
+                            style={{
+                              fontSize: '0.48rem', fontWeight: 700, padding: '0.1rem 0.4rem',
+                              borderRadius: '3px', letterSpacing: '0.3px',
+                              background: issue.severity === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(234,179,8,0.12)',
+                              color: issue.severity === 'error' ? '#ef4444' : '#eab308',
+                            }}
+                            title={`${issue.field}: ${issue.message}`}
+                          >
+                            {issue.severity === 'error' ? '✕' : '⚠'} {issue.message}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {qualityLoading && (
+                  <div style={{
+                    marginBottom: '1rem', padding: '0.55rem 1rem',
+                    background: 'rgba(0,240,255,0.03)', border: '1px solid rgba(0,240,255,0.12)',
+                    borderRadius: '8px', fontSize: '0.58rem', color: '#4a8fa8',
+                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  }}>
+                    <span style={{ display: 'inline-block', width: '0.6rem', height: '0.6rem', border: '2px solid rgba(0,240,255,0.3)', borderTopColor: '#00f0ff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                    Checking brief quality...
+                  </div>
+                )}
+
                 {/* Format preset cards */}
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={{ ...FORM_LABEL_STYLE, display: 'block', marginBottom: '0.65rem' }}>
