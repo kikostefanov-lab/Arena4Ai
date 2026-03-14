@@ -258,17 +258,17 @@ export function EventRow({
       >
         {/* Timestamp */}
         <span style={{
-          color: '#3d7d94', fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT,
+          color: '#3d7d94', fontSize: '0.58rem', fontFamily: BODY_FONT,
           flexShrink: 0, width: '2.8rem', textAlign: 'right',
           marginTop: '2px', letterSpacing: '-0.3px',
         }}>
           {relTime}
         </span>
         {/* Icon */}
-        <span style={{ flexShrink: 0, fontSize: '1.0rem', lineHeight: 1.4 }}>{info.icon}</span>
+        <span style={{ flexShrink: 0, fontSize: '0.82rem', lineHeight: 1.4 }}>{info.icon}</span>
         {/* Label badge */}
         <span style={{
-          color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.72rem',
+          color: info.color, fontWeight: 800, flexShrink: 0, fontSize: '0.58rem',
           letterSpacing: '0.5px',
           background: `rgba(${hexToRgb(info.color)},0.12)`,
           padding: '0.1rem 0.45rem', borderRadius: '4px', marginTop: '1px',
@@ -285,8 +285,8 @@ export function EventRow({
           flex: 1,
           minWidth: 0,
           fontFamily: BODY_FONT,
-          fontSize: BODY_FONT_SIZE,
-          lineHeight: BODY_LINE_HEIGHT,
+          fontSize: '0.65rem',
+          lineHeight: 1.4,
         }}>
           {info.text}
         </span>
