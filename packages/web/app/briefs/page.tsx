@@ -5,7 +5,25 @@ import Link from 'next/link';
 import { FORMAT_BADGES, MONOSPACE_FONT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../../lib/design-tokens';
 import { formatTimeLimit } from '../../lib/format';
 
-interface BriefSummary {
+interface BriefRecord {
+  id: string;
+  title: string;
+  brief: {
+    title?: string;
+    format?: string;
+    problem?: string;
+    timeLimitMs?: number;
+    tags?: string[];
+    [key: string]: unknown;
+  };
+  source: 'yaml' | 'generated' | 'competition';
+  qualityScore: number | null;
+  tags: string[];
+  createdAt: string;
+}
+
+// Backward-compat: also accept old shape
+interface LegacyBriefSummary {
   id: string;
   title: string;
   format: string;
@@ -15,8 +33,43 @@ interface BriefSummary {
   filename: string;
 }
 
+type ApiItem = BriefRecord | LegacyBriefSummary;
+
+function isNewShape(item: ApiItem): item is BriefRecord {
+  return 'brief' in item && typeof (item as BriefRecord).brief === 'object';
+}
+
+function getSnippet(item: ApiItem): string {
+  if (isNewShape(item)) {
+    const problem = item.brief?.problem ?? '';
+    return problem.slice(0, 200);
+  }
+  return (item as LegacyBriefSummary).problemSnippet ?? '';
+}
+
+function getFormat(item: ApiItem): string {
+  if (isNewShape(item)) return item.brief?.format ?? '';
+  return (item as LegacyBriefSummary).format ?? '';
+}
+
+function getTimeLimit(item: ApiItem): number {
+  if (isNewShape(item)) return item.brief?.timeLimitMs ?? 0;
+  return (item as LegacyBriefSummary).timeLimitMs ?? 0;
+}
+
+function getTags(item: ApiItem): string[] {
+  if (isNewShape(item)) return item.tags ?? item.brief?.tags ?? [];
+  return (item as LegacyBriefSummary).tags ?? [];
+}
+
+const SOURCE_BADGES: Record<string, { bg: string; color: string; label: string }> = {
+  yaml:        { bg: 'rgba(0,128,255,0.12)', color: '#0080ff', label: 'YAML' },
+  generated:   { bg: 'rgba(0,240,255,0.12)', color: '#00f0ff', label: 'GENERATED' },
+  competition: { bg: 'rgba(255,102,0,0.12)', color: '#ff6600', label: 'FROM MATCH' },
+};
+
 export default function BriefsPage() {
-  const [briefs, setBriefs] = useState<BriefSummary[]>([]);
+  const [briefs, setBriefs] = useState<ApiItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
@@ -24,24 +77,25 @@ export default function BriefsPage() {
   useEffect(() => {
     fetch('/api/briefs')
       .then((r) => r.json())
-      .then((data: BriefSummary[]) => setBriefs(Array.isArray(data) ? data : []))
+      .then((data: ApiItem[]) => setBriefs(Array.isArray(data) ? data : []))
       .catch(() => setBriefs([]))
       .finally(() => setLoading(false));
   }, []);
 
   const allCategories = Array.from(
-    new Set(briefs.flatMap((b) => b.tags ?? []))
+    new Set(briefs.flatMap((b) => getTags(b)))
   ).sort();
 
   const filtered = briefs.filter((b) => {
-    const catMatch = categoryFilter === 'ALL' || b.tags?.includes(categoryFilter);
+    const tags = getTags(b);
+    const catMatch = categoryFilter === 'ALL' || tags.includes(categoryFilter);
     if (!catMatch) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       return (
         b.title.toLowerCase().includes(q) ||
-        b.problemSnippet.toLowerCase().includes(q) ||
-        b.tags.some((t) => t.toLowerCase().includes(q))
+        getSnippet(b).toLowerCase().includes(q) ||
+        tags.some((t) => t.toLowerCase().includes(q))
       );
     }
     return true;
@@ -70,25 +124,43 @@ export default function BriefsPage() {
           marginBottom: '2.5rem',
           padding: '1.5rem 0',
           borderBottom: '1px solid #0a2235',
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
         }}>
-          <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
-            ◆ ARENA4AI | BRIEF LIBRARY
+          <div>
+            <div style={{ ...KICKER_STYLE, color: '#00f0ff', marginBottom: '0.4rem' }}>
+              ◆ ARENA4AI | BRIEF LIBRARY
+            </div>
+            <h1 style={{
+              fontSize: '2rem',
+              fontWeight: 800,
+              lineHeight: 1.05,
+              margin: 0,
+              background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              fontFamily: MONOSPACE_FONT,
+            }}>
+              Competition Briefs
+            </h1>
+            <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.6rem' }}>
+              {loading ? 'Loading...' : `${briefs.length} brief${briefs.length !== 1 ? 's' : ''} available`}
+            </p>
           </div>
-          <h1 style={{
-            fontSize: '2rem',
-            fontWeight: 800,
-            lineHeight: 1.05,
-            margin: 0,
-            background: 'linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            fontFamily: MONOSPACE_FONT,
-          }}>
-            Competition Briefs
-          </h1>
-          <p style={{ fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#4a8fa8', marginTop: '0.6rem' }}>
-            {loading ? 'Loading…' : `${briefs.length} brief${briefs.length !== 1 ? 's' : ''} available`}
-          </p>
+          <Link
+            href="/competitions/new"
+            style={{
+              fontSize: '0.62rem', fontWeight: 700, padding: '0.45rem 1rem',
+              background: 'rgba(255,102,0,0.12)', color: '#ff6600',
+              border: '1px solid rgba(255,102,0,0.4)', borderRadius: '6px',
+              textDecoration: 'none', letterSpacing: '1px',
+              fontFamily: MONOSPACE_FONT, flexShrink: 0,
+              display: 'inline-flex', alignItems: 'center', gap: '0.35rem',
+            }}
+          >
+            + New Brief
+          </Link>
         </div>
 
         {/* Filters */}
@@ -175,7 +247,7 @@ export default function BriefsPage() {
         {loading && (
           <div style={{ textAlign: 'center', padding: '4rem 0' }}>
             <div style={{ fontSize: '1.5rem', marginBottom: '0.75rem' }}>📚</div>
-            <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>Loading briefs…</p>
+            <p style={{ color: '#4a8fa8', fontSize: '0.75rem' }}>Loading briefs...</p>
           </div>
         )}
 
@@ -205,11 +277,18 @@ export default function BriefsPage() {
         {/* Brief Cards */}
         {!loading && filtered.length > 0 && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-            {filtered.map((brief, index) => {
-              const fmt = FORMAT_BADGES[brief.format as keyof typeof FORMAT_BADGES] ?? null;
+            {filtered.map((item, index) => {
+              const fmt = FORMAT_BADGES[getFormat(item) as keyof typeof FORMAT_BADGES] ?? null;
+              const tags = getTags(item);
+              const snippet = getSnippet(item);
+              const timeLimitMs = getTimeLimit(item);
+              const source = isNewShape(item) ? item.source : 'yaml';
+              const qualityScore = isNewShape(item) ? item.qualityScore : null;
+              const sourceBadge = SOURCE_BADGES[source] ?? null;
+
               return (
                 <div
-                  key={brief.id}
+                  key={item.id}
                   className="brief-card"
                   style={{
                     background: '#050f1e',
@@ -235,25 +314,63 @@ export default function BriefsPage() {
                           <span style={{ fontSize: '0.55rem' }}>{fmt.icon}</span> {fmt.label}
                         </span>
                       )}
-                      <span style={{
-                        fontSize: '0.5rem', fontWeight: 600, color: '#3d7d94',
-                        letterSpacing: '0.5px',
-                      }}>
-                        ⏱ {formatTimeLimit(brief.timeLimitMs)}
-                      </span>
+                      {sourceBadge && (
+                        <span style={{
+                          fontSize: '0.45rem', fontWeight: 700, padding: '0.1rem 0.4rem',
+                          borderRadius: '3px', letterSpacing: '0.8px',
+                          background: sourceBadge.bg, color: sourceBadge.color,
+                        }}>
+                          {sourceBadge.label}
+                        </span>
+                      )}
+                      {timeLimitMs > 0 && (
+                        <span style={{
+                          fontSize: '0.5rem', fontWeight: 600, color: '#3d7d94',
+                          letterSpacing: '0.5px',
+                        }}>
+                          ⏱ {formatTimeLimit(timeLimitMs)}
+                        </span>
+                      )}
                     </div>
                     <h2 style={{
                       fontSize: '0.88rem', fontWeight: 700, color: '#e4f8ff',
                       margin: 0, lineHeight: 1.3,
                     }}>
-                      {brief.title}
+                      {item.title}
                     </h2>
                   </div>
 
+                  {/* Quality score bar */}
+                  {qualityScore != null && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <span style={{ fontSize: '0.48rem', fontWeight: 700, color: '#3d7d94', letterSpacing: '0.5px' }}>
+                        QUALITY
+                      </span>
+                      <div style={{
+                        flex: 1, height: '4px', background: '#0a2235', borderRadius: '2px',
+                        overflow: 'hidden',
+                      }}>
+                        <div style={{
+                          width: `${Math.round(qualityScore * 100)}%`,
+                          height: '100%',
+                          borderRadius: '2px',
+                          background: qualityScore >= 0.8
+                            ? '#00f0ff'
+                            : qualityScore >= 0.6
+                              ? '#eab308'
+                              : '#ef4444',
+                        }} />
+                      </div>
+                      <span style={{ fontSize: '0.48rem', fontWeight: 700, color: '#4a8fa8' }}>
+                        {Math.round(qualityScore * 100)}%
+                      </span>
+                    </div>
+                  )}
+
                   {/* Tags */}
-                  {brief.tags.length > 0 && (
+                  {tags.length > 0 && (
                     <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                      {brief.tags.map((tag) => (
+                      {tags.map((tag) => (
                         <span
                           key={tag}
                           style={{
@@ -272,7 +389,7 @@ export default function BriefsPage() {
                   )}
 
                   {/* Problem snippet */}
-                  {brief.problemSnippet && (
+                  {snippet && (
                     <p style={{
                       fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, color: '#3d7d94', lineHeight: 1.55,
                       margin: 0, flex: 1,
@@ -281,13 +398,13 @@ export default function BriefsPage() {
                       WebkitBoxOrient: 'vertical' as const,
                       overflow: 'hidden',
                     }}>
-                      {brief.problemSnippet}{brief.problemSnippet.length === 200 ? '…' : ''}
+                      {snippet}{snippet.length === 200 ? '...' : ''}
                     </p>
                   )}
 
                   {/* Launch button */}
                   <Link
-                    href={`/competitions/new?briefSlug=${encodeURIComponent(brief.id)}`}
+                    href={`/competitions/new?briefSlug=${encodeURIComponent(item.id)}`}
                     className="launch-btn"
                     style={{
                       display: 'inline-flex', alignItems: 'center', justifyContent: 'center',

@@ -404,6 +404,26 @@ export default function NewCompetitionPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
 
+  // Intake flow state
+  const [showIntake, setShowIntake] = useState(false);
+  const [intakeLoading, setIntakeLoading] = useState(false);
+  const [intakeQuestions, setIntakeQuestions] = useState<Array<{ id: string; question: string; options: string[] }>>([]);
+  const [intakeAnswers, setIntakeAnswers] = useState<Record<string, string>>({});
+  const [detectedDomain, setDetectedDomain] = useState('');
+  const [detectedDeliverableType, setDetectedDeliverableType] = useState('');
+
+  // Quality report
+  const [qualityReport, setQualityReport] = useState<{
+    overallScore: number;
+    launchReady: boolean;
+    issues: Array<{ field: string; severity: 'error' | 'warning'; message: string }>;
+    suggestions: string[];
+  } | null>(null);
+  const [qualityLoading, setQualityLoading] = useState(false);
+
+  // Save to library
+  const [saveToast, setSaveToast] = useState<string | null>(null);
+
   // Form state
   const [title, setTitle] = useState('');
   const [format, setFormat] = useState<Format>('SPRINT');
@@ -522,7 +542,134 @@ export default function NewCompetitionPage() {
     setExamplePanelOpen(false);
   };
 
+  const runIntake = async () => {
+    if (ideaText.trim().length < 10) return;
+    setIntakeLoading(true);
+    setGenerateError('');
+    setShowIntake(false);
+    setIntakeQuestions([]);
+    setIntakeAnswers({});
+    try {
+      const res = await fetch('/api/generate-brief/intake', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idea: ideaText.trim() }),
+      });
+      if (!res.ok) throw new Error('Intake failed');
+      const data = await res.json();
+      setDetectedDomain(data.detectedDomain ?? '');
+      setDetectedDeliverableType(data.detectedDeliverableType ?? '');
+      if (data.detectedDomain && VALID_DOMAIN_HINTS.includes(data.detectedDomain as DomainHint)) {
+        setDomainHint(data.detectedDomain as DomainHint);
+      }
+      setIntakeQuestions(Array.isArray(data.questions) ? data.questions : []);
+      setShowIntake(true);
+    } catch {
+      setGenerateError('Failed to run intake. Make sure the orchestrator is running.');
+    } finally {
+      setIntakeLoading(false);
+    }
+  };
+
   const generateBrief = async () => {
+    setGenerating(true);
+    setGenerateError('');
+    setQualityReport(null);
+    try {
+      const res = await fetch('/api/generate-brief/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          idea: ideaText.trim(),
+          answers: intakeAnswers,
+          domain: detectedDomain || undefined,
+          deliverableType: detectedDeliverableType || undefined,
+          format,
+        }),
+      });
+      if (!res.ok) throw new Error('Generation failed');
+      const brief = await res.json();
+      if (brief.title) setTitle(brief.title);
+      if (brief.problem) setProblem(brief.problem);
+      if (brief.constraints) setConstraints(brief.constraints);
+      if (brief.deliverables) setDeliverables(brief.deliverables);
+      if (brief.expectedOutput !== undefined) setExpectedOutput(brief.expectedOutput);
+      if (brief.criteria) setCriteria(brief.criteria);
+      if (brief.deliverableType) setDeliverableType(brief.deliverableType);
+      if (brief.domainHint && VALID_DOMAIN_HINTS.includes(brief.domainHint as DomainHint)) {
+        setDomainHint(brief.domainHint as DomainHint);
+      }
+      setShowGenerator(false);
+      setShowIntake(false);
+      setIdeaText('');
+
+      // Auto-run quality check
+      runQualityCheck(brief);
+    } catch {
+      setGenerateError('Failed to generate brief. Make sure the orchestrator is running.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const runQualityCheck = async (briefObj?: Record<string, unknown>) => {
+    setQualityLoading(true);
+    try {
+      const briefToCheck = briefObj ?? {
+        title,
+        format,
+        problem,
+        constraints: constraints.split('\n').map(s => s.trim()).filter(Boolean),
+        deliverables: deliverables.split('\n').map(s => s.trim()).filter(Boolean),
+        timeLimitMs: timeLimitMins * 60 * 1000,
+        rubric: { criteria: criteria.filter(c => c.id.trim() && c.description.trim()) },
+        deliverableType,
+        ...(domainHint ? { domainHint } : {}),
+      };
+      const res = await fetch('/api/generate-brief/quality', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief: briefToCheck }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setQualityReport(data);
+    } catch {
+      // quality check is non-critical
+    } finally {
+      setQualityLoading(false);
+    }
+  };
+
+  const handleSaveToLibrary = async () => {
+    try {
+      const briefObj = {
+        id: `brief-${Date.now()}`,
+        title,
+        format,
+        problem,
+        constraints: constraints.split('\n').map(s => s.trim()).filter(Boolean),
+        deliverables: deliverables.split('\n').map(s => s.trim()).filter(Boolean),
+        timeLimitMs: timeLimitMins * 60 * 1000,
+        rubric: { criteria: criteria.filter(c => c.id.trim() && c.description.trim()) },
+        deliverableType,
+        ...(domainHint ? { domainHint } : {}),
+      };
+      const res = await fetch('/api/briefs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brief: briefObj, source: 'generated', tags: [] }),
+      });
+      if (!res.ok) throw new Error('Save failed');
+      setSaveToast('Brief saved to library');
+      setTimeout(() => setSaveToast(null), 3000);
+    } catch {
+      setSaveToast('Failed to save brief');
+      setTimeout(() => setSaveToast(null), 3000);
+    }
+  };
+
+  const generateBriefLegacy = async () => {
     if (ideaText.trim().length < 10) return;
     setGenerating(true);
     setGenerateError('');
@@ -1004,7 +1151,7 @@ export default function NewCompetitionPage() {
                         animation: 'slideDown 0.25s ease-out',
                       }}>
                         <p style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#4a8fa8', margin: '0 0 0.5rem', lineHeight: 1.5 }}>
-                          Describe your idea in plain English and AI will expand it into a full brief.
+                          Describe your idea in plain English. We will ask a few clarifying questions, then generate a full brief.
                         </p>
                         <textarea
                           className="arena-input"
@@ -1014,28 +1161,135 @@ export default function NewCompetitionPage() {
                           placeholder={'e.g. A script that finds the cheapest flight from NYC to London next month\ne.g. A REST API that converts Markdown to HTML with caching\ne.g. Compare sorting algorithms and benchmark them'}
                           style={{ resize: 'vertical', lineHeight: 1.6, marginBottom: '0.65rem' }}
                         />
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+
+                        {/* Intake questions panel */}
+                        {showIntake && intakeQuestions.length > 0 && (
+                          <div style={{
+                            background: 'rgba(0,240,255,0.04)',
+                            border: '1px solid rgba(0,240,255,0.2)',
+                            borderRadius: '6px',
+                            padding: '0.75rem',
+                            marginBottom: '0.65rem',
+                          }}>
+                            {detectedDomain && (
+                              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.65rem', flexWrap: 'wrap' }}>
+                                <span style={{
+                                  fontSize: '0.5rem', fontWeight: 700, padding: '0.12rem 0.45rem',
+                                  borderRadius: '3px', letterSpacing: '1px',
+                                  background: 'rgba(0,240,255,0.12)', color: '#00f0ff',
+                                }}>
+                                  DOMAIN: {detectedDomain.toUpperCase()}
+                                </span>
+                                {detectedDeliverableType && (
+                                  <span style={{
+                                    fontSize: '0.5rem', fontWeight: 700, padding: '0.12rem 0.45rem',
+                                    borderRadius: '3px', letterSpacing: '1px',
+                                    background: 'rgba(255,102,0,0.12)', color: '#ff6600',
+                                  }}>
+                                    TYPE: {detectedDeliverableType.toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.58rem', fontWeight: 700, color: '#4a8fa8', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                              Clarifying Questions
+                            </div>
+                            {intakeQuestions.map((q) => (
+                              <div key={q.id} style={{ marginBottom: '0.6rem' }}>
+                                <div style={{ fontSize: BODY_FONT_SIZE_SM, fontFamily: BODY_FONT, color: '#c8eef8', marginBottom: '0.3rem', lineHeight: 1.5 }}>
+                                  {q.question}
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                                  {q.options.map((opt) => {
+                                    const selected = intakeAnswers[q.id] === opt;
+                                    return (
+                                      <button
+                                        key={opt}
+                                        type="button"
+                                        onClick={() => setIntakeAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                                        style={{
+                                          fontSize: '0.58rem', fontWeight: selected ? 800 : 600,
+                                          padding: '0.2rem 0.55rem', borderRadius: '4px',
+                                          border: selected ? '1px solid rgba(0,240,255,0.5)' : '1px solid #0a2235',
+                                          background: selected ? 'rgba(0,240,255,0.1)' : 'transparent',
+                                          color: selected ? '#00f0ff' : '#4a8fa8',
+                                          cursor: 'pointer', fontFamily: FONT, transition: 'all 0.15s',
+                                        }}
+                                      >
+                                        {opt}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', flexWrap: 'wrap' }}>
+                          {!showIntake ? (
+                            <button
+                              type="button"
+                              onClick={runIntake}
+                              disabled={intakeLoading || ideaText.trim().length < 10}
+                              style={{
+                                fontSize: '0.62rem', fontWeight: 800, padding: '0.4rem 1rem',
+                                background: intakeLoading || ideaText.trim().length < 10
+                                  ? 'rgba(0,240,255,0.2)'
+                                  : 'rgba(0,240,255,0.85)',
+                                color: intakeLoading || ideaText.trim().length < 10 ? 'rgba(0,240,255,0.5)' : '#fff',
+                                border: '1px solid rgba(0,240,255,0.6)',
+                                borderRadius: '6px',
+                                cursor: intakeLoading || ideaText.trim().length < 10 ? 'not-allowed' : 'pointer',
+                                fontFamily: FONT, letterSpacing: '1px', transition: 'all 0.2s',
+                              }}
+                            >
+                              {intakeLoading ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(0,240,255,0.4)', borderTopColor: '#00f0ff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                                  Analyzing...
+                                </span>
+                              ) : 'Analyze Idea'}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={generateBrief}
+                              disabled={generating}
+                              style={{
+                                fontSize: '0.62rem', fontWeight: 800, padding: '0.4rem 1rem',
+                                background: generating
+                                  ? 'rgba(0,240,255,0.2)'
+                                  : 'rgba(0,240,255,0.85)',
+                                color: generating ? 'rgba(0,240,255,0.5)' : '#fff',
+                                border: '1px solid rgba(0,240,255,0.6)',
+                                borderRadius: '6px',
+                                cursor: generating ? 'not-allowed' : 'pointer',
+                                fontFamily: FONT, letterSpacing: '1px', transition: 'all 0.2s',
+                              }}
+                            >
+                              {generating ? (
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(0,240,255,0.4)', borderTopColor: '#00f0ff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                                  Generating...
+                                </span>
+                              ) : 'Generate Brief ✨'}
+                            </button>
+                          )}
                           <button
                             type="button"
-                            onClick={generateBrief}
+                            onClick={generateBriefLegacy}
                             disabled={generating || ideaText.trim().length < 10}
                             style={{
-                              fontSize: '0.62rem', fontWeight: 800, padding: '0.4rem 1rem',
-                              background: generating || ideaText.trim().length < 10
-                                ? 'rgba(0,240,255,0.2)'
-                                : 'rgba(0,240,255,0.85)',
-                              color: generating || ideaText.trim().length < 10 ? 'rgba(0,240,255,0.5)' : '#fff',
-                              border: '1px solid rgba(0,240,255,0.6)',
-                              borderRadius: '6px', cursor: generating || ideaText.trim().length < 10 ? 'not-allowed' : 'pointer',
-                              fontFamily: FONT, letterSpacing: '1px', transition: 'all 0.2s',
+                              fontSize: '0.55rem', fontWeight: 600, padding: '0.3rem 0.65rem',
+                              background: 'transparent', color: '#3d7d94',
+                              border: '1px solid #0a2235', borderRadius: '5px',
+                              cursor: generating || ideaText.trim().length < 10 ? 'not-allowed' : 'pointer',
+                              fontFamily: FONT, transition: 'all 0.15s',
                             }}
+                            title="Skip intake questions and generate directly"
                           >
-                            {generating ? (
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                                <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(0,240,255,0.4)', borderTopColor: '#00f0ff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                                Generating...
-                              </span>
-                            ) : 'Generate ✨'}
+                            Quick Generate
                           </button>
                           {generateError && (
                             <span style={{ fontSize: '0.58rem', color: '#ef4444' }}>{generateError}</span>
@@ -1676,35 +1930,140 @@ export default function NewCompetitionPage() {
             </div>
           )}
 
-          {/* ── Launch Button ── */}
-          <button
-            className="launch-btn arena-btn-primary"
-            type="submit"
-            disabled={submitting || hasErrors}
-            style={{
-              background: submitting
-                ? '#081520'
-                : 'linear-gradient(135deg, #00f0ff, #ea580c, #00f0ff)',
-              color: submitting ? '#1e4a5a' : '#000408',
-              boxShadow: submitting
-                ? 'none'
-                : '0 0 20px rgba(0,240,255,0.3), 0 4px 12px rgba(0,0,0,0.3)',
-              opacity: hasErrors ? 0.5 : 1,
-            }}
-          >
-            {submitting ? (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}>
-                <span style={{
-                  display: 'inline-block', width: '14px', height: '14px',
-                  border: '2px solid #1e4a5a', borderTopColor: 'transparent',
-                  borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-                }} />
-                Launching...
-              </span>
-            ) : (
-              <span>{'🚀'} LAUNCH COMPETITION</span>
+          {/* ── Quality Report ── */}
+          {qualityLoading && (
+            <div style={{
+              marginBottom: '1rem', padding: '0.65rem 1rem',
+              background: 'rgba(0,240,255,0.04)', border: '1px solid rgba(0,240,255,0.15)',
+              borderRadius: '8px', fontSize: '0.62rem', color: '#4a8fa8',
+              display: 'flex', alignItems: 'center', gap: '0.5rem',
+            }}>
+              <span style={{ display: 'inline-block', width: '0.7rem', height: '0.7rem', border: '2px solid rgba(0,240,255,0.4)', borderTopColor: '#00f0ff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+              Running quality check...
+            </div>
+          )}
+          {qualityReport && !qualityLoading && (
+            <div style={{
+              marginBottom: '1rem', padding: '0.85rem 1rem',
+              background: '#050f1e', border: '1px solid #0a2235',
+              borderRadius: '8px', animation: 'fadeInUp 0.3s ease-out',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: qualityReport.issues.length > 0 ? '0.65rem' : 0 }}>
+                <span style={{ fontSize: '0.55rem', fontWeight: 700, color: '#4a8fa8', letterSpacing: '1px', textTransform: 'uppercase' }}>
+                  QUALITY
+                </span>
+                <div style={{
+                  flex: 1, height: '6px', background: '#0a2235', borderRadius: '3px',
+                  overflow: 'hidden', maxWidth: '200px',
+                }}>
+                  <div style={{
+                    width: `${Math.round(qualityReport.overallScore * 100)}%`,
+                    height: '100%', borderRadius: '3px',
+                    background: qualityReport.overallScore >= 0.8
+                      ? '#00f0ff'
+                      : qualityReport.overallScore >= 0.6
+                        ? '#eab308'
+                        : '#ef4444',
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+                <span style={{ fontSize: '0.62rem', fontWeight: 700, color: '#c8eef8' }}>
+                  {Math.round(qualityReport.overallScore * 100)}%
+                </span>
+                {qualityReport.launchReady && (
+                  <span style={{
+                    fontSize: '0.48rem', fontWeight: 700, padding: '0.1rem 0.4rem',
+                    borderRadius: '3px', letterSpacing: '0.8px',
+                    background: 'rgba(34,197,94,0.12)', color: '#22c55e',
+                  }}>
+                    LAUNCH READY
+                  </span>
+                )}
+              </div>
+              {qualityReport.issues.length > 0 && (
+                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                  {qualityReport.issues.map((issue, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        fontSize: '0.5rem', fontWeight: 700, padding: '0.12rem 0.45rem',
+                        borderRadius: '3px', letterSpacing: '0.5px',
+                        background: issue.severity === 'error'
+                          ? 'rgba(239,68,68,0.12)'
+                          : 'rgba(234,179,8,0.12)',
+                        color: issue.severity === 'error' ? '#ef4444' : '#eab308',
+                      }}
+                      title={`${issue.field}: ${issue.message}`}
+                    >
+                      {issue.severity === 'error' ? '!' : '~'} {issue.message}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Save toast ── */}
+          {saveToast && (
+            <div style={{
+              marginBottom: '1rem', padding: '0.5rem 1rem',
+              borderRadius: '6px', fontSize: '0.62rem', fontWeight: 600,
+              background: saveToast.startsWith('Failed') ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)',
+              border: `1px solid ${saveToast.startsWith('Failed') ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}`,
+              color: saveToast.startsWith('Failed') ? '#ef4444' : '#22c55e',
+              animation: 'fadeInUp 0.2s ease-out',
+            }}>
+              {saveToast}
+            </div>
+          )}
+
+          {/* ── Launch + Save buttons ── */}
+          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <button
+              className="launch-btn arena-btn-primary"
+              type="submit"
+              disabled={submitting || hasErrors}
+              style={{
+                flex: 1,
+                background: submitting
+                  ? '#081520'
+                  : 'linear-gradient(135deg, #00f0ff, #ea580c, #00f0ff)',
+                color: submitting ? '#1e4a5a' : '#000408',
+                boxShadow: submitting
+                  ? 'none'
+                  : '0 0 20px rgba(0,240,255,0.3), 0 4px 12px rgba(0,0,0,0.3)',
+                opacity: hasErrors ? 0.5 : 1,
+              }}
+            >
+              {submitting ? (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.6rem' }}>
+                  <span style={{
+                    display: 'inline-block', width: '14px', height: '14px',
+                    border: '2px solid #1e4a5a', borderTopColor: 'transparent',
+                    borderRadius: '50%', animation: 'spin 0.8s linear infinite',
+                  }} />
+                  Launching...
+                </span>
+              ) : (
+                <span>{'🚀'} LAUNCH COMPETITION</span>
+              )}
+            </button>
+            {title.trim() && problem.trim() && (
+              <button
+                type="button"
+                onClick={handleSaveToLibrary}
+                style={{
+                  fontSize: '0.62rem', fontWeight: 700, padding: '0.55rem 1rem',
+                  background: 'rgba(0,128,255,0.08)', color: '#0080ff',
+                  border: '1px solid rgba(0,128,255,0.35)', borderRadius: '6px',
+                  cursor: 'pointer', fontFamily: FONT, letterSpacing: '0.5px',
+                  transition: 'all 0.15s', flexShrink: 0,
+                }}
+              >
+                📚 Save to Library
+              </button>
             )}
-          </button>
+          </div>
         </form>
       </div>
     </div>
