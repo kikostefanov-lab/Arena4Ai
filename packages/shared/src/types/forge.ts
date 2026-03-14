@@ -58,7 +58,8 @@ export type ForgeDomain =
   | 'creative'
   | 'security'
   | 'business'
-  | 'ideation';
+  | 'ideation'
+  | 'strategy';
 
 export interface ForgeArtifact {
   type: ForgeArtifactType;

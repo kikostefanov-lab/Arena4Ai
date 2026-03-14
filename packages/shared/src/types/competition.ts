@@ -38,7 +38,7 @@ export interface Brief {
   deliverableType?: 'code' | 'document' | 'analysis' | 'presentation' | 'plan' | 'mixed';
   /** Explicit Forge domain override. Once wired in forge-orchestrator, skips AI domain
    *  selection entirely. Parsed and stored; consumed by the Forge in Task 3. */
-  domainHint?: 'software' | 'research' | 'creative' | 'security' | 'business' | 'ideation';
+  domainHint?: 'software' | 'research' | 'creative' | 'security' | 'business' | 'ideation' | 'strategy';
 }
 
 export interface Deliverable {
