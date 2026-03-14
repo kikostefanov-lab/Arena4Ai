@@ -327,14 +327,14 @@ export class CompetitionRunner extends EventEmitter {
 
       // Run AI cross-judge (primary) + automated scorer (fallback) in parallel
       console.log('[arena] judging with AI cross-judge (automated scorer as fallback)...');
-      const aiJudgePromises = deliverables.map((d) => aiJudge(d, brief.rubric, {
+      const aiJudgePromises = deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
         judgeId: JUDGE_IDS.aiClaude,
         claudeBin: this.options.claudeBin,
       }));
 
       if (this.options.aiJudgeCount >= 2) {
         aiJudgePromises.push(
-          ...deliverables.map((d) => aiJudge(d, brief.rubric, {
+          ...deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
             judgeId: JUDGE_IDS.aiAdversarial,
             claudeBin: this.options.claudeBin,
           })),

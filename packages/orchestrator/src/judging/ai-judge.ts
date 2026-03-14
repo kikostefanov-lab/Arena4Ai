@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process';
-import type { Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
+import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
+import { buildBriefContext, truncateFiles, JUDGE_CONTEXT } from '../utils/brief-context.js';
 
 export const JUDGE_IDS = {
   automated: 'automated',
@@ -22,35 +23,40 @@ export interface AiJudgeOptions {
  * When judgeId includes 'adversarial', critical evaluation instructions are added.
  */
 export function buildJudgePrompt(
+  brief: Brief,
   deliverable: Deliverable,
   rubric: Rubric,
   judgeId: string,
 ): string {
-  const criteriaList = rubric.criteria
-    .map((c) => `- ${c.id}: ${c.description} (max ${c.maxScore} points)`)
-    .join('\n');
+  const briefContext = buildBriefContext(brief, JUDGE_CONTEXT);
 
-  const filesText = deliverable.files
-    .map((f) => `### ${f.path}\n\`\`\`\n${f.content}\n\`\`\``)
-    .join('\n\n');
+  const perFile = JUDGE_CONTEXT.fileTruncation ?? 12000;
+  const totalBudget = JUDGE_CONTEXT.fileBudget ?? 80000;
+  const filesText = truncateFiles(deliverable.files, perFile, totalBudget);
 
   const adversarialClause = judgeId.includes('adversarial')
     ? '\n\nIMPORTANT: You are an adversarial judge. Look for weaknesses, gaps, and missed edge cases. Score critically — be specific about what is missing or wrong.'
     : '';
 
-  return `You are an impartial competition judge. Evaluate the following deliverable against each rubric criterion.${adversarialClause}
+  return `You are an impartial competition judge. Evaluate the following deliverable against the problem statement and rubric criteria.${adversarialClause}
 
-## Rubric Criteria
-${criteriaList}
+# Competition Brief
+${briefContext}
 
 ## Deliverable Files
 ${filesText || '(no files submitted)'}
 
-## Instructions
+## Scoring Instructions
+For each rubric criterion, evaluate whether the deliverable:
+1. Addresses the stated problem and its requirements
+2. Honors the constraints listed above
+3. Produced the expected deliverable files
+4. Demonstrates quality and completeness relative to the criterion
+
 Return ONLY a JSON object with this exact shape (no markdown, no prose):
 {
   "scores": [
-    { "criterionId": "<id>", "score": <number 0–maxScore>, "commentary": "<1–2 sentences>" }
+    { "criterionId": "<id>", "score": <number 0–maxScore>, "commentary": "<2–3 sentences referencing specific deliverable content>" }
   ]
 }`;
 }
@@ -65,13 +71,14 @@ Return ONLY a JSON object with this exact shape (no markdown, no prose):
  * unparseable output — the automated scorer acts as the safety net.
  */
 export async function aiJudge(
+  brief: Brief,
   deliverable: Deliverable,
   rubric: Rubric,
   options: AiJudgeOptions,
 ): Promise<JudgeResult> {
   const { judgeId, claudeBin = 'claude' } = options;
 
-  const prompt = buildJudgePrompt(deliverable, rubric, judgeId);
+  const prompt = buildJudgePrompt(brief, deliverable, rubric, judgeId);
 
   let scores: CriterionScore[] = rubric.criteria.map((c) => ({
     criterionId: c.id,
