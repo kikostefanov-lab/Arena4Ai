@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import type { Brief, Deliverable, TeamPresentation } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { extractJson } from '../utils/extract-json.js';
+import { buildBriefContext, truncateFiles, PRESENTER_CONTEXT } from '../utils/brief-context.js';
 
 export interface PresentationOptions {
   claudeBin?: string;
@@ -38,19 +39,8 @@ export async function generatePresentation(
     };
   }
 
-  const filesSections = deliverable.files
-    .map((f) => {
-      // Truncate large files to keep prompt manageable
-      const content = f.content.length > 8000
-        ? f.content.slice(0, 8000) + '\n... [truncated]'
-        : f.content;
-      return `### ${f.path}\n\`\`\`\n${content}\n\`\`\``;
-    })
-    .join('\n\n');
-
-  const criteriaList = brief.rubric.criteria
-    .map((c) => `- **${c.id}**: ${c.description}`)
-    .join('\n');
+  const briefContext = buildBriefContext(brief, PRESENTER_CONTEXT);
+  const filesSections = truncateFiles(deliverable.files, PRESENTER_CONTEXT.fileTruncation!, PRESENTER_CONTEXT.fileBudget!);
 
   const criterionIds = brief.rubric.criteria.map((c) => c.id);
 
@@ -60,14 +50,7 @@ that connect back to the original problem and judging criteria.
 
 Write as if you are explaining to a smart person who does NOT read code.
 
-## Original Problem
-${brief.problem}
-
-## Constraints
-${brief.constraints.join('\n')}
-
-## Judging Criteria
-${criteriaList}
+${briefContext}
 
 ## Team: ${deliverable.teamId} (${teamModel})
 ### Deliverables
