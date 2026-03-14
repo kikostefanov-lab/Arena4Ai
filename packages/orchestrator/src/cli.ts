@@ -182,6 +182,112 @@ program
     });
   });
 
+// ── re-evaluate ──────────────────────────────────────────────────────────────
+program
+  .command('re-evaluate')
+  .description('Re-run downstream stages (judge/presentation/synthesis) on completed competitions')
+  .argument('[competition-id]', 'Competition ID to re-evaluate (omit with --all)')
+  .option('--stage <stage>', 'Stage to re-run: judge, presentation, synthesis, all', 'all')
+  .option('--all', 'Re-evaluate all completed competitions')
+  .action(async (competitionId: string | undefined, opts: {
+    stage: string;
+    all?: boolean;
+  }) => {
+    if (!process.env.DATABASE_URL) {
+      console.error('[arena] re-evaluate requires DATABASE_URL');
+      process.exit(1);
+    }
+
+    const { db } = await import('./db/client.js');
+    const { CompetitionRepository } = await import('./db/repository.js');
+    const repo = new CompetitionRepository(db);
+
+    let ids: string[];
+    if (opts.all) {
+      const comps = await repo.list();
+      ids = comps
+        .filter((c: any) => c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE')
+        .map((c: any) => c.id);
+    } else if (competitionId) {
+      ids = [competitionId];
+    } else {
+      console.error('[arena] provide a competition ID or --all');
+      process.exit(1);
+    }
+
+    const stages = opts.stage === 'all'
+      ? ['presentation', 'judge', 'synthesis'] as const
+      : [opts.stage] as const;
+
+    console.log(`[arena] re-evaluating ${ids.length} competition(s), stages: ${stages.join(' → ')}`);
+
+    for (const id of ids) {
+      const comp = await repo.getCompetition(id);
+      const result = await repo.getResult(id);
+      if (!comp || !result) {
+        console.error(`[arena] skip ${id}: missing competition or result`);
+        continue;
+      }
+
+      const brief = comp.brief as import('@arena/shared').Brief;
+      const rawDeliverables = (result.deliverables ?? []) as Array<{ teamId: string; files: Array<{ path: string; content: string }> }>;
+
+      if (rawDeliverables.length === 0) {
+        console.error(`[arena] skip ${id}: no deliverables`);
+        continue;
+      }
+
+      // DB deliverables may lack collectedAt — backfill for type compat
+      const deliverables: import('@arena/shared').Deliverable[] = rawDeliverables.map((d) => ({
+        ...d,
+        collectedAt: (d as any).collectedAt ?? new Date().toISOString(),
+      }));
+
+      // Archive current results before overwriting
+      await repo.archiveResult(id, opts.stage);
+      console.log(`[arena] ${id}: archived current results`);
+
+      for (const stage of stages) {
+        if (stage === 'presentation') {
+          const { generateAllPresentations } = await import('./presentation/presentation-generator.js');
+          const teamModels = new Map((comp.teams as any[]).map((t: any) => [t.id, t.model]));
+          const presentations = await generateAllPresentations(brief, deliverables, teamModels);
+          await repo.updatePresentations(id, presentations);
+          console.log(`[arena] ${id}: presentations regenerated (${presentations.length} teams)`);
+        }
+
+        if (stage === 'judge') {
+          const { aiJudge, JUDGE_IDS } = await import('./judging/ai-judge.js');
+          const { computeOverallScore } = await import('./judging/score-aggregator.js');
+          const scorecards = [];
+          for (const d of deliverables) {
+            const jr = await aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiClaude });
+            const finalScore = computeOverallScore(jr.scores, brief.rubric);
+            scorecards.push({ teamId: d.teamId, finalScore, judgeResults: [jr] });
+          }
+          scorecards.sort((a, b) => b.finalScore - a.finalScore);
+          const winnerId = scorecards[0]?.teamId ?? null;
+          await repo.updateScorecards(id, scorecards, winnerId);
+          console.log(`[arena] ${id}: re-judged → winner: ${winnerId} (${scorecards.map(s => `${s.teamId}:${s.finalScore.toFixed(3)}`).join(', ')})`);
+        }
+
+        if (stage === 'synthesis') {
+          const { synthesizeDeliverables } = await import('./synthesis/merge-engine.js');
+          const currentResult = await repo.getResult(id);
+          const presentations = (currentResult?.presentations ?? []) as import('@arena/shared').TeamPresentation[];
+          const synthesis = await synthesizeDeliverables(brief, deliverables, {}, presentations);
+          if (synthesis) {
+            await repo.saveSynthesis(id, synthesis);
+            console.log(`[arena] ${id}: synthesis regenerated`);
+          }
+        }
+      }
+    }
+
+    console.log(`[arena] re-evaluation complete`);
+    process.exit(0);
+  });
+
 // ── tournament ────────────────────────────────────────────────────────────────
 const tournamentCmd = program.command('tournament').description('Tournament commands');
 const tournamentRunCmd = tournamentCmd.command('run').description('Run a round-robin tournament from a YAML brief file');
