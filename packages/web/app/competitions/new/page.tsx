@@ -496,26 +496,35 @@ export default function NewCompetitionPage() {
   }, [searchParams]);
 
   // Pre-fill from a brief library entry if ?briefSlug=<id>
+  const [editBriefId, setEditBriefId] = useState<string | null>(null);
   useEffect(() => {
     const briefSlug = searchParams.get('briefSlug');
     if (!briefSlug) return;
+    const isEdit = searchParams.get('mode') === 'edit';
     fetch('/api/briefs')
       .then(r => r.ok ? r.json() : [])
-      .then((briefs: Array<{ id: string; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; tags?: string[]; deliverableType?: DeliverableType; domainHint?: string }>) => {
-        const brief = briefs.find((b) => b.id === briefSlug);
-        if (!brief) return;
-        if (brief.title) setTitle(brief.title);
-        if (brief.format && ['SPRINT','HACKATHON','RELAY_RACE','RED_VS_BLUE'].includes(brief.format)) setFormat(brief.format as Format);
-        if (brief.timeLimitMs) setTimeLimitMins(Math.round(brief.timeLimitMs / 60000));
-        if (brief.problem) setProblem(brief.problem);
-        if (brief.constraints?.length) setConstraints(brief.constraints.join('\n'));
-        if (brief.deliverables?.length) setDeliverables(brief.deliverables.join('\n'));
-        if (brief.rubric?.criteria?.length) setCriteria(brief.rubric.criteria);
-        if (brief.deliverableType) setDeliverableType(brief.deliverableType);
-        if (brief.domainHint && VALID_DOMAIN_HINTS.includes(brief.domainHint as DomainHint)) {
-          setDomainHint(brief.domainHint as DomainHint);
+      .then((items: Array<{ id: string; brief?: Record<string, any>; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; tags?: string[]; deliverableType?: DeliverableType; domainHint?: string }>) => {
+        const item = items.find((b) => b.id === briefSlug);
+        if (!item) return;
+        // Support both new shape (data nested in .brief) and legacy flat shape
+        const b = item.brief && typeof item.brief === 'object' ? item.brief as Record<string, any> : item;
+        if (b.title) setTitle(b.title as string);
+        if (b.format && ['SPRINT','HACKATHON','RELAY_RACE','RED_VS_BLUE'].includes(b.format as string)) setFormat(b.format as Format);
+        if (b.timeLimitMs) setTimeLimitMins(Math.round((b.timeLimitMs as number) / 60000));
+        if (b.problem) setProblem(b.problem as string);
+        if (Array.isArray(b.constraints) && b.constraints.length) setConstraints(b.constraints.join('\n'));
+        if (Array.isArray(b.deliverables) && b.deliverables.length) setDeliverables(b.deliverables.join('\n'));
+        if (b.rubric?.criteria?.length) setCriteria(b.rubric.criteria as RubricCriterion[]);
+        if (b.deliverableType) setDeliverableType(b.deliverableType as DeliverableType);
+        if (b.domainHint && VALID_DOMAIN_HINTS.includes(b.domainHint as DomainHint)) {
+          setDomainHint(b.domainHint as DomainHint);
         }
-        setExpandedStep(3); // jump to teams step since brief is pre-filled
+        if (isEdit) {
+          setEditBriefId(item.id);
+          setExpandedStep(1); // stay on brief editing step
+        } else {
+          setExpandedStep(3); // jump to teams step since brief is pre-filled
+        }
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -644,7 +653,7 @@ export default function NewCompetitionPage() {
   const handleSaveToLibrary = async () => {
     try {
       const briefObj = {
-        id: `brief-${Date.now()}`,
+        id: editBriefId ?? `brief-${Date.now()}`,
         title,
         format,
         problem,
@@ -655,13 +664,25 @@ export default function NewCompetitionPage() {
         deliverableType,
         ...(domainHint ? { domainHint } : {}),
       };
-      const res = await fetch('/api/briefs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brief: briefObj, source: 'generated', tags: [] }),
-      });
-      if (!res.ok) throw new Error('Save failed');
-      setSaveToast('Brief saved to library');
+      if (editBriefId) {
+        // Update existing brief
+        const res = await fetch(`/api/briefs/${encodeURIComponent(editBriefId)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ brief: briefObj, tags: [] }),
+        });
+        if (!res.ok) throw new Error('Update failed');
+        setSaveToast('Brief updated in library');
+      } else {
+        // Create new brief
+        const res = await fetch('/api/briefs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ brief: briefObj, source: 'generated', tags: [] }),
+        });
+        if (!res.ok) throw new Error('Save failed');
+        setSaveToast('Brief saved to library');
+      }
       setTimeout(() => setSaveToast(null), 3000);
     } catch {
       setSaveToast('Failed to save brief');
@@ -2060,7 +2081,7 @@ export default function NewCompetitionPage() {
                   transition: 'all 0.15s', flexShrink: 0,
                 }}
               >
-                📚 Save to Library
+                {editBriefId ? '📚 Update in Library' : '📚 Save to Library'}
               </button>
             )}
           </div>
