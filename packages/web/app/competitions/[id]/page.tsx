@@ -95,14 +95,20 @@ function getModelName(model: string): string {
   return model.split(':')[0].toLowerCase();
 }
 
-function ctrlBtn(color: string, bg: string): React.CSSProperties {
+/** Shared style for all action buttons in the arena header — matches TopBar nav button sizing */
+function actionBtn(color: string, bg: string, opts?: { disabled?: boolean }): React.CSSProperties {
   return {
-    fontSize: '0.72rem', fontWeight: 700, padding: '0.4rem 1rem',
+    fontSize: '10px', fontWeight: 700, padding: '5px 10px',
     background: bg, color, border: `1px solid ${color}`,
-    borderRadius: '6px', cursor: 'pointer', letterSpacing: '0.5px', fontFamily: 'inherit',
-    transition: 'all 0.15s ease',
+    borderRadius: '5px', cursor: opts?.disabled ? 'not-allowed' : 'pointer',
+    letterSpacing: '1px', fontFamily: 'inherit',
+    transition: 'all 0.15s ease', flexShrink: 0,
+    display: 'inline-flex', alignItems: 'center', gap: '4px',
+    textDecoration: 'none', textTransform: 'uppercase' as const,
   };
 }
+// backward compat alias
+const ctrlBtn = actionBtn;
 
 // ─── Activity spinner ────────────────────────────────────────────────────────
 
@@ -2552,13 +2558,17 @@ export default function CompetitionPage() {
       >
         {/* ── Header ───────────────────────────────────────────────────────── */}
         <header style={{
-          display: 'flex', alignItems: 'center', gap: '0.85rem',
-          padding: isMobile ? '0.5rem 0.75rem' : '0.7rem 1.4rem',
+          display: 'flex', flexDirection: 'column', gap: '0.4rem',
+          padding: isMobile ? '0.5rem 0.75rem' : '0.55rem 1.4rem',
           borderBottom: '1px solid #0a2235',
           background: 'linear-gradient(180deg, rgba(2,8,20,0.98) 0%, rgba(0,4,8,0.98) 100%)',
-          flexShrink: 0, flexWrap: isMobile ? 'wrap' : 'nowrap',
-          overflow: 'hidden',
+          flexShrink: 0,
         }}>
+          {/* Row 1: ARENA + Title + State + Timer */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.85rem',
+            flexWrap: 'nowrap', overflow: 'hidden',
+          }}>
           <a href="/" style={{
             fontSize: '0.75rem', color: '#00f0ff', fontWeight: 800,
             letterSpacing: '2.5px', textDecoration: 'none', flexShrink: 0,
@@ -2619,6 +2629,25 @@ export default function CompetitionPage() {
             )}
           </div>
 
+            {!isTerminal && (
+              <div style={{
+                fontFamily: 'monospace',
+                color: isRunning ? '#00f0ff' : '#4a8fa8',
+                fontSize: '0.95rem', fontWeight: 800,
+                flexShrink: 0, minWidth: '4rem', textAlign: 'right',
+                letterSpacing: '0.5px', transition: 'color 0.3s ease',
+              }}>
+                {formatElapsed(elapsed)}
+              </div>
+            )}
+          </div>
+
+          {/* Row 2: Action buttons */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+            flexWrap: 'wrap',
+          }}>
+
           {state === 'RUNNING' && (
             <div style={{ display: 'flex', gap: '0.45rem' }}>
               {!isPaused
@@ -2629,69 +2658,36 @@ export default function CompetitionPage() {
             </div>
           )}
 
-          <button onClick={() => setBriefOpen(o => !o)} style={{
-            fontSize: '0.70rem', color: briefOpen ? '#00f0ff' : '#4a8fa8',
-            background: briefOpen ? 'rgba(0,240,255,0.1)' : 'transparent',
-            border: `1px solid ${briefOpen ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
-            borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-            letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: '0.35rem',
-            transition: 'all 0.15s ease',
-          }}>
+          <button onClick={() => setBriefOpen(o => !o)} style={actionBtn(
+            briefOpen ? '#00f0ff' : '#4a8fa8',
+            briefOpen ? 'rgba(0,240,255,0.1)' : 'transparent',
+          )}>
             📋 BRIEF
           </button>
 
 
           {isComplete && brief && (
-            <button
-              onClick={handleSaveBrief}
-              style={{
-                fontSize: '0.70rem',
-                color: saveBriefLabel === '✓ Saved' ? '#22c55e' : saveBriefLabel === 'Failed' ? '#ef4444' : '#4a8fa8',
-                background: saveBriefLabel === '✓ Saved' ? 'rgba(34,197,94,0.08)' : 'transparent',
-                border: `1px solid ${saveBriefLabel === '✓ Saved' ? 'rgba(34,197,94,0.35)' : '#0a2235'}`,
-                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-                letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.35rem',
-                transition: 'all 0.15s ease', fontFamily: 'inherit',
-              }}
-              title="Save this brief to the library"
-            >
+            <button onClick={handleSaveBrief} style={actionBtn(
+              saveBriefLabel === '✓ Saved' ? '#22c55e' : saveBriefLabel === 'Failed' ? '#ef4444' : '#4a8fa8',
+              saveBriefLabel === '✓ Saved' ? 'rgba(34,197,94,0.08)' : 'transparent',
+            )} title="Save this brief to the library">
               {saveBriefLabel}
             </button>
           )}
 
-          <button
-            onClick={handleCopyLink}
-            style={{
-              fontSize: '0.70rem', color: copyLabel === '✓ Copied' ? '#00f0ff' : '#4a8fa8',
-              background: copyLabel === '✓ Copied' ? 'rgba(0,240,255,0.1)' : 'transparent',
-              border: `1px solid ${copyLabel === '✓ Copied' ? 'rgba(0,240,255,0.4)' : '#0a2235'}`,
-              borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-              letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: '0.35rem',
-              transition: 'all 0.15s ease', fontFamily: 'inherit',
-            }}
-            title="Copy link to this competition"
-          >
+          <button onClick={handleCopyLink} style={actionBtn(
+            copyLabel === '✓ Copied' ? '#00f0ff' : '#4a8fa8',
+            copyLabel === '✓ Copied' ? 'rgba(0,240,255,0.1)' : 'transparent',
+          )} title="Copy link to this competition">
             {copyLabel}
           </button>
 
           {isTerminal && brief && teams.length > 0 && (
-            <button
-              onClick={handleRematch}
-              disabled={rematchLoading}
-              style={{
-                fontSize: '0.70rem', color: rematchLoading ? '#1e4a5a' : '#00f0ff',
-                background: rematchLoading ? 'transparent' : 'rgba(0,240,255,0.08)',
-                border: `1px solid ${rematchLoading ? '#0a2235' : 'rgba(0,240,255,0.35)'}`,
-                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-                letterSpacing: '0.5px', fontWeight: 600, cursor: rematchLoading ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.35rem',
-                transition: 'all 0.15s ease', fontFamily: 'inherit',
-              }}
-              title="Start a new competition with the same brief and models"
-            >
+            <button onClick={handleRematch} disabled={rematchLoading} style={actionBtn(
+              rematchLoading ? '#1e4a5a' : '#00f0ff',
+              rematchLoading ? 'transparent' : 'rgba(0,240,255,0.08)',
+              { disabled: rematchLoading },
+            )} title="Start a new competition with the same brief and models">
               {rematchLoading
                 ? <><ActivitySpinner color="#00f0ff" active={true} /> REMATCH</>
                 : '⟳ REMATCH'}
@@ -2699,14 +2695,7 @@ export default function CompetitionPage() {
           )}
 
           {isComplete && (
-            <a href={`/competitions/${id}/replay`} style={{
-              fontSize: '0.70rem', color: '#4a8fa8', textDecoration: 'none',
-              border: '1px solid #0a2235', borderRadius: '6px',
-              padding: '0.35rem 0.75rem', flexShrink: 0,
-              letterSpacing: '0.5px', fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: '0.35rem',
-              transition: 'all 0.15s ease',
-            }}>
+            <a href={`/competitions/${id}/replay`} style={actionBtn('#4a8fa8', 'transparent')}>
               ▶ REPLAY
             </a>
           )}
@@ -2717,29 +2706,15 @@ export default function CompetitionPage() {
               onClick={reelStatus.status === 'idle' || reelStatus.status === 'error' ? handleGenerateReel : undefined}
               disabled={reelStatus.status === 'rendering'}
               style={{
-                position: 'relative', overflow: 'hidden',
-                fontSize: '0.70rem',
-                color: reelStatus.status === 'done'
-                  ? '#ff6600'
-                  : reelStatus.status === 'error'
-                  ? '#ef4444'
-                  : reelStatus.status === 'rendering'
-                  ? '#00f0ff'
-                  : '#4a8fa8',
-                background: reelStatus.status === 'done'
-                  ? 'rgba(255,102,0,0.08)'
-                  : 'transparent',
-                border: `1px solid ${
-                  reelStatus.status === 'done' ? 'rgba(255,102,0,0.4)'
-                  : reelStatus.status === 'error' ? 'rgba(239,68,68,0.4)'
-                  : reelStatus.status === 'rendering' ? 'rgba(0,240,255,0.35)'
-                  : '#0a2235'}`,
-                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-                letterSpacing: '0.5px', fontWeight: 600,
-                cursor: reelStatus.status === 'rendering' ? 'not-allowed' : 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.35rem',
-                transition: 'all 0.15s ease', fontFamily: 'inherit',
-                minWidth: 120,
+                ...actionBtn(
+                  reelStatus.status === 'done' ? '#ff6600'
+                    : reelStatus.status === 'error' ? '#ef4444'
+                    : reelStatus.status === 'rendering' ? '#00f0ff'
+                    : '#4a8fa8',
+                  reelStatus.status === 'done' ? 'rgba(255,102,0,0.08)' : 'transparent',
+                  { disabled: reelStatus.status === 'rendering' },
+                ),
+                position: 'relative', overflow: 'hidden', minWidth: 120,
               }}
               title={reelStatus.status === 'error' ? reelStatus.message : 'Generate a shareable video reel'}
             >
@@ -2767,20 +2742,7 @@ export default function CompetitionPage() {
 
           {/* Regenerate Reel button — shown when a reel is already done */}
           {isComplete && reelStatus.status === 'done' && (
-            <button
-              onClick={handleGenerateReel}
-              style={{
-                fontSize: '0.70rem', color: '#4a8fa8',
-                background: 'transparent',
-                border: '1px solid #0a2235',
-                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-                letterSpacing: '0.5px', fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.35rem',
-                transition: 'all 0.15s ease', fontFamily: 'inherit',
-              }}
-              title="Re-generate the reel with latest data"
-            >
+            <button onClick={handleGenerateReel} style={actionBtn('#4a8fa8', 'transparent')} title="Re-generate the reel with latest data">
               🔄 Regenerate
             </button>
           )}
@@ -2790,14 +2752,7 @@ export default function CompetitionPage() {
             href={`/competitions/${id}/spectate`}
             target="_blank"
             rel="noopener noreferrer"
-            style={{
-              fontSize: '0.70rem', color: '#4a8fa8', textDecoration: 'none',
-              border: '1px solid #0a2235', borderRadius: '6px',
-              padding: '0.35rem 0.75rem', flexShrink: 0,
-              letterSpacing: '0.5px', fontWeight: 600,
-              display: 'flex', alignItems: 'center', gap: '0.35rem',
-              transition: 'all 0.15s ease',
-            }}
+            style={actionBtn('#4a8fa8', 'transparent')}
             title="Open fullscreen spectator view"
           >
             ⤢ Spectate
@@ -2805,20 +2760,10 @@ export default function CompetitionPage() {
 
           {/* Notification toggle — shown when competition is in progress */}
           {!isTerminal && !notifyDenied && (
-            <button
-              onClick={handleNotifyToggle}
-              style={{
-                fontSize: '0.70rem',
-                color: notifyActive ? '#00f0ff' : '#4a8fa8',
-                background: notifyActive ? 'rgba(0,240,255,0.08)' : 'transparent',
-                border: `1px solid ${notifyActive ? 'rgba(0,240,255,0.35)' : '#0a2235'}`,
-                borderRadius: '6px', padding: '0.35rem 0.75rem', flexShrink: 0,
-                letterSpacing: '0.5px', fontWeight: 600, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '0.35rem',
-                transition: 'all 0.15s ease', fontFamily: 'inherit',
-              }}
-              title={notifyActive ? 'Click to cancel notification' : 'Notify me when this competition finishes'}
-            >
+            <button onClick={handleNotifyToggle} style={actionBtn(
+              notifyActive ? '#00f0ff' : '#4a8fa8',
+              notifyActive ? 'rgba(0,240,255,0.08)' : 'transparent',
+            )} title={notifyActive ? 'Click to cancel notification' : 'Notify me when this competition finishes'}>
               {notifyActive ? '🔕 Notifying…' : '🔔 Notify'}
             </button>
           )}
@@ -2833,31 +2778,15 @@ export default function CompetitionPage() {
 
           {/* Battle / Log view toggle (desktop only) */}
           {!isMobile && (
-            <button
-              onClick={() => setViewMode(v => v === 'battle' ? 'log' : 'battle')}
-              style={{
-                fontSize: '0.58rem', fontWeight: 700, padding: '0.3rem 0.7rem',
-                background: viewMode === 'battle' ? 'rgba(0,240,255,0.15)' : 'rgba(0,240,255,0.08)',
-                color: '#00f0ff',
-                border: '1px solid rgba(0,240,255,0.3)', borderRadius: '5px',
-                cursor: 'pointer', fontFamily: MONOSPACE_FONT, letterSpacing: '0.5px',
-              }}
-            >
+            <button onClick={() => setViewMode(v => v === 'battle' ? 'log' : 'battle')} style={actionBtn(
+              '#00f0ff',
+              viewMode === 'battle' ? 'rgba(0,240,255,0.15)' : 'rgba(0,240,255,0.08)',
+            )}>
               {viewMode === 'battle' ? '📋 Log' : '⚔ Battle'}
             </button>
           )}
 
-          {!isTerminal && (
-            <div style={{
-              fontFamily: 'monospace',
-              color: isRunning ? '#00f0ff' : '#4a8fa8',
-              fontSize: '0.95rem', fontWeight: 800,
-              flexShrink: 0, minWidth: '4rem', textAlign: 'right',
-              letterSpacing: '0.5px', transition: 'color 0.3s ease',
-            }}>
-              {formatElapsed(elapsed)}
-            </div>
-          )}
+          </div>
         </header>
 
         {/* ── Reel progress card ───────────────────────────────────────────── */}
