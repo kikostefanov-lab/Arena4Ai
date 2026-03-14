@@ -98,7 +98,20 @@ generateBriefRouter.post('/generate', async (req, res) => {
     template.deliverableType = deliverableType;
   }
 
-  const prompt = buildGenerationPrompt(idea, answers, template, learnings);
+  // Inject DB-sourced learnings when available
+  let dbLearnings: string[] = learnings ?? [];
+  if (process.env.DATABASE_URL && !learnings?.length) {
+    try {
+      const { db } = await import('../../db/client.js');
+      const { getGeneratorLearnings } = await import('../../telemetry/learnings.js');
+      const learned = await getGeneratorLearnings(db);
+      if (learned) dbLearnings = [learned];
+    } catch {
+      // Non-critical — proceed without learnings
+    }
+  }
+
+  const prompt = buildGenerationPrompt(idea, answers, template, dbLearnings.length > 0 ? dbLearnings : undefined);
 
   try {
     const output = await spawnClaude(prompt);
@@ -157,7 +170,21 @@ generateBriefRouter.post('/', async (req, res) => {
 
     // Step 2: generate with domain template (no answers since this is single-shot)
     const template = DOMAIN_TEMPLATES[domain];
-    const prompt = buildGenerationPrompt(idea, [], template);
+
+    // Inject DB-sourced learnings when available
+    let legacyLearnings: string[] | undefined;
+    if (process.env.DATABASE_URL) {
+      try {
+        const { db } = await import('../../db/client.js');
+        const { getGeneratorLearnings } = await import('../../telemetry/learnings.js');
+        const learned = await getGeneratorLearnings(db);
+        if (learned) legacyLearnings = [learned];
+      } catch {
+        // Non-critical
+      }
+    }
+
+    const prompt = buildGenerationPrompt(idea, [], template, legacyLearnings);
 
     const output = await spawnClaude(prompt);
     const brief = JSON.parse(extractJson(output));
