@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Sprint 5 complete. 255 tests passing.**
+**Status: Sprint 6 complete. 255 tests passing.**
 
 ## Running the Stack
 
@@ -269,6 +269,18 @@ npx tsx packages/orchestrator/src/cli.ts re-evaluate <id> --stage judge
 npx tsx packages/orchestrator/src/cli.ts re-evaluate --all --stage all
 ```
 Stages: `judge`, `presentation`, `synthesis`, `all`. Archives results before overwriting (→ `results_history` table).
+
+### Live battle visualization (Sprint 6)
+Competition detail page default view. Canvas 2D arena with procedural wireframe TRON gladiators.
+- `packages/web/components/BattleArena.tsx` — main component (Canvas + HUD overlay + mini-log)
+- `packages/web/lib/arena/` — gladiator renderer, poses (8 states × 3 builds), event processor, particles, types
+- Momentum system: events → energy (0–1) → posture (aggressive/neutral/defensive)
+- 8 animation states: idle, thinking, strike, power, hit, triumph, kneel, salute
+- Event mapping: FILE_CREATE/FILE_MODIFY→strike, TOOL_CALL→power, ERROR→hit, REASONING→thinking (sustained)
+- View toggle: `⚔ Battle` / `📋 Log` (persisted in localStorage, mobile falls back to Log)
+- N-team ring formation for 3-4 teams, face-off layout for 2 teams
+- End sequence: freeze→judging scan→winner triumph/loser kneel
+- No backend changes — pure client-side Canvas 2D + React
 
 ### DB persistence for CLI `run`
 When `DATABASE_URL` is set, the CLI `run` command persists to DB:
