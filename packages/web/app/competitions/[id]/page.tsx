@@ -6,6 +6,7 @@ import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
+import BattleArena from '../../../components/BattleArena';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -2140,6 +2141,15 @@ export default function CompetitionPage() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // Battle/Log view mode
+  const [viewMode, setViewMode] = useState<'battle' | 'log'>(() => {
+    if (typeof window === 'undefined') return 'battle';
+    return (localStorage.getItem('arena-view-mode') as 'battle' | 'log') ?? 'battle';
+  });
+  useEffect(() => {
+    localStorage.setItem('arena-view-mode', viewMode);
+  }, [viewMode]);
+
   // Resizable score drawer
   const [scoreDrawerHeight, setScoreDrawerHeight] = useState(SCORE_DRAWER_COLLAPSED);
   const [bottomMaximized, setBottomMaximized] = useState(false);
@@ -2516,6 +2526,17 @@ export default function CompetitionPage() {
     (sum, evs) => sum + evs.length, 0,
   ) + broadcastEvents.length;
 
+  // Merged + sorted events for BattleArena
+  const allEventsSorted = useMemo(() => {
+    const all: Array<{ eventId: string; type: string; teamId?: string; timestamp: string; payload?: any }> = [];
+    for (const [, evts] of teamEvents) all.push(...evts);
+    all.push(...broadcastEvents);
+    all.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    return all;
+  }, [teamEvents, broadcastEvents]);
+
+  const effectiveView = isMobile ? 'log' : viewMode;
+
   return (
     <>
       <div
@@ -2810,6 +2831,22 @@ export default function CompetitionPage() {
             </span>
           )}
 
+          {/* Battle / Log view toggle (desktop only) */}
+          {!isMobile && (
+            <button
+              onClick={() => setViewMode(v => v === 'battle' ? 'log' : 'battle')}
+              style={{
+                fontSize: '0.58rem', fontWeight: 700, padding: '0.3rem 0.7rem',
+                background: viewMode === 'battle' ? 'rgba(0,240,255,0.15)' : 'rgba(0,240,255,0.08)',
+                color: '#00f0ff',
+                border: '1px solid rgba(0,240,255,0.3)', borderRadius: '5px',
+                cursor: 'pointer', fontFamily: MONOSPACE_FONT, letterSpacing: '0.5px',
+              }}
+            >
+              {viewMode === 'battle' ? '📋 Log' : '⚔ Battle'}
+            </button>
+          )}
+
           {!isTerminal && (
             <div style={{
               fontFamily: 'monospace',
@@ -2973,50 +3010,64 @@ export default function CompetitionPage() {
         {/* ── Commentary bar ───────────────────────────────────────────────── */}
         <CommentaryBar events={broadcastEvents} />
 
-        {/* ── Lanes ────────────────────────────────────────────────────────── */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : `repeat(${numTeams}, 1fr)`,
-          overflow: isMobile ? 'auto' : 'hidden',
-          flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0,
-        }}>
-          {orderedTeams.map((team, i) => {
-            // Broadcast events (TIME_UP, TIME_WARNING) are shown in the StateBanner,
-            // not injected into each lane to avoid duplicate rows.
-            const events = (teamEvents.get(team.id) ?? [])
-              .slice()
-              .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        {/* ── Battle Arena / Lanes ─────────────────────────────────────────── */}
+        {effectiveView === 'battle' ? (
+          <div style={{ flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0 }}>
+            <BattleArena
+              teams={orderedTeams}
+              events={allEventsSorted}
+              state={state}
+              elapsedMs={elapsed}
+              timeLimitMs={brief?.timeLimitMs ?? 300000}
+              scores={result?.teams?.map((t) => ({ teamId: t.teamId, finalScore: t.totalScore })) ?? undefined}
+              winnerId={result?.winnerId ?? undefined}
+            />
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : `repeat(${numTeams}, 1fr)`,
+            overflow: isMobile ? 'auto' : 'hidden',
+            flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0,
+          }}>
+            {orderedTeams.map((team, i) => {
+              // Broadcast events (TIME_UP, TIME_WARNING) are shown in the StateBanner,
+              // not injected into each lane to avoid duplicate rows.
+              const events = (teamEvents.get(team.id) ?? [])
+                .slice()
+                .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-            const color = LANE_COLORS[i] ?? '#4a8fa8';
+              const color = LANE_COLORS[i] ?? '#4a8fa8';
 
-            return (
-              <LanePanel
-                key={team.id}
-                ref={(el) => { laneRefs.current[i] = el; }}
-                team={team}
-                color={color}
-                events={events}
-                borderLeft={i > 0}
-                isRunning={isRunning}
-                isPaused={isPaused}
-                competitionStartTime={competitionStartTime}
-                eventCounts={eventCountsRef.current.get(team.id)}
-                teamIndex={i}
-              />
-            );
-          })}
+              return (
+                <LanePanel
+                  key={team.id}
+                  ref={(el) => { laneRefs.current[i] = el; }}
+                  team={team}
+                  color={color}
+                  events={events}
+                  borderLeft={i > 0}
+                  isRunning={isRunning}
+                  isPaused={isPaused}
+                  competitionStartTime={competitionStartTime}
+                  eventCounts={eventCountsRef.current.get(team.id)}
+                  teamIndex={i}
+                />
+              );
+            })}
 
-          {orderedTeams.length === 0 && (
-            <div style={{
-              display: 'flex', flexDirection: 'column',
-              alignItems: 'center', justifyContent: 'center',
-              color: '#0e3050', fontSize: '0.82rem', gap: '0.75rem',
-            }}>
-              <ActivitySpinner color="#3b82f6" active={true} />
-              <span>Waiting for competition data...</span>
-            </div>
-          )}
-        </div>
+            {orderedTeams.length === 0 && (
+              <div style={{
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', justifyContent: 'center',
+                color: '#0e3050', fontSize: '0.82rem', gap: '0.75rem',
+              }}>
+                <ActivitySpinner color="#3b82f6" active={true} />
+                <span>Waiting for competition data...</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── Resize handle (only visible when there are results and not maximized) ── */}
         {result && !bottomMaximized && (
