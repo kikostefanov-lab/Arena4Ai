@@ -288,6 +288,80 @@ program
     process.exit(0);
   });
 
+// ── seed-quality-signals ──────────────────────────────────────────────────────
+program
+  .command('seed-quality-signals')
+  .description('Compute and upsert quality signals for all completed competitions')
+  .action(async () => {
+    if (!process.env.DATABASE_URL) {
+      console.error('[arena] seed-quality-signals requires DATABASE_URL');
+      process.exit(1);
+    }
+
+    const { db } = await import('./db/client.js');
+    const { CompetitionRepository } = await import('./db/repository.js');
+    const { computeHeuristicSignals } = await import('./telemetry/quality-analyzer.js');
+    const { briefQualitySignals } = await import('./db/schema.js');
+
+    const repo = new CompetitionRepository(db);
+    const comps = await repo.list(500);
+    const completed = comps.filter(
+      (c: any) => c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE' || c.state === 'SCORED',
+    );
+
+    console.log(`[arena] found ${completed.length} completed competitions`);
+
+    let seeded = 0;
+    for (const comp of completed) {
+      const result = await repo.getResult(comp.id);
+      if (!result?.scorecards || !Array.isArray(result.scorecards)) {
+        console.warn(`[arena] skip ${comp.id}: no scorecards`);
+        continue;
+      }
+
+      const brief = comp.brief as Record<string, any>;
+      const expectedDeliverables: string[] = Array.isArray(brief?.deliverables) ? brief.deliverables : [];
+      const deliverables = (result.deliverables ?? []) as Array<{ teamId: string; files: Array<{ path: string; content: string }> }>;
+
+      const signals = computeHeuristicSignals(
+        result.scorecards as any[],
+        expectedDeliverables,
+        deliverables,
+      );
+
+      await db.insert(briefQualitySignals).values({
+        competitionId: comp.id,
+        scoreSpread: String(signals.scoreSpread),
+        tied: signals.tied,
+        allEights: signals.allEights,
+        criterionSignals: signals.criterionSignals as any,
+        expectedFilesProduced: signals.expectedFilesProduced as any,
+        totalFilesProduced: signals.totalFilesProduced,
+        totalContentSize: signals.totalContentSize,
+        synthesisTriggered: result.synthesis != null,
+      }).onConflictDoUpdate({
+        target: briefQualitySignals.competitionId,
+        set: {
+          scoreSpread: String(signals.scoreSpread),
+          tied: signals.tied,
+          allEights: signals.allEights,
+          criterionSignals: signals.criterionSignals as any,
+          expectedFilesProduced: signals.expectedFilesProduced as any,
+          totalFilesProduced: signals.totalFilesProduced,
+          totalContentSize: signals.totalContentSize,
+          synthesisTriggered: result.synthesis != null,
+          computedAt: new Date(),
+        },
+      });
+
+      seeded++;
+      console.log(`[arena] ${comp.id}: signals upserted (spread=${signals.scoreSpread.toFixed(3)}, tied=${signals.tied}, allEights=${signals.allEights})`);
+    }
+
+    console.log(`[arena] seeded quality signals for ${seeded} competitions`);
+    process.exit(0);
+  });
+
 // ── tournament ────────────────────────────────────────────────────────────────
 const tournamentCmd = program.command('tournament').description('Tournament commands');
 const tournamentRunCmd = tournamentCmd.command('run').description('Run a round-robin tournament from a YAML brief file');
