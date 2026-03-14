@@ -510,7 +510,7 @@ export default function BattleArena({
       style={{
         position: 'relative',
         width: '100%',
-        height: 'min(60vh, 500px)',
+        height: '100%',
         overflow: 'hidden',
         borderRadius: '8px',
         border: '1px solid rgba(0,240,255,0.1)',
