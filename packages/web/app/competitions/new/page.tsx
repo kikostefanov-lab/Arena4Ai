@@ -525,6 +525,8 @@ export default function NewCompetitionPage() {
         } else {
           setExpandedStep(3); // jump to teams step since brief is pre-filled
         }
+        // Auto-run quality check on loaded briefs
+        setTimeout(() => runQualityCheck(b as Record<string, unknown>), 300);
       })
       .catch(() => {});
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -649,6 +651,14 @@ export default function NewCompetitionPage() {
       setQualityLoading(false);
     }
   };
+
+  // Auto-run quality check when form fields change (debounced)
+  useEffect(() => {
+    if (!title.trim() || !problem.trim()) { setQualityReport(null); return; }
+    const timer = setTimeout(() => { runQualityCheck(); }, 2000);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, problem, constraints, deliverables, criteria, deliverableType]);
 
   const handleSaveToLibrary = async () => {
     try {
