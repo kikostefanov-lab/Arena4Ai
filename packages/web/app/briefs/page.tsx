@@ -402,20 +402,34 @@ export default function BriefsPage() {
                     </p>
                   )}
 
-                  {/* Launch button */}
-                  <Link
-                    href={`/competitions/new?briefSlug=${encodeURIComponent(item.id)}`}
-                    className="launch-btn"
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      gap: '0.4rem', fontSize: '0.62rem', fontWeight: 700,
-                      padding: '0.5rem 1rem', background: '#00f0ff', color: '#000408',
-                      borderRadius: '5px', textDecoration: 'none', letterSpacing: '0.5px',
-                      marginTop: 'auto',
-                    }}
-                  >
-                    ⚔ Launch →
-                  </Link>
+                  {/* Action buttons */}
+                  <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+                    <Link
+                      href={`/competitions/new?briefSlug=${encodeURIComponent(item.id)}`}
+                      className="launch-btn"
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        gap: '0.4rem', fontSize: '0.62rem', fontWeight: 700,
+                        padding: '0.5rem 1rem', background: '#00f0ff', color: '#000408',
+                        borderRadius: '5px', textDecoration: 'none', letterSpacing: '0.5px',
+                        flex: 1,
+                      }}
+                    >
+                      ⚔ Launch
+                    </Link>
+                    <Link
+                      href={`/competitions/new?briefSlug=${encodeURIComponent(item.id)}&mode=edit`}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        gap: '0.3rem', fontSize: '0.62rem', fontWeight: 700,
+                        padding: '0.5rem 0.75rem', background: 'rgba(0,128,255,0.08)', color: '#0080ff',
+                        border: '1px solid rgba(0,128,255,0.35)', borderRadius: '5px',
+                        textDecoration: 'none', letterSpacing: '0.5px',
+                      }}
+                    >
+                      ✏ Edit
+                    </Link>
+                  </div>
                 </div>
               );
             })}
