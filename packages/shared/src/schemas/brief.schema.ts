@@ -27,7 +27,7 @@ export const briefSchema = z.object({
   expectedOutput: z.string().optional(),
   tags: z.array(z.string()).optional(),
   deliverableType: z.enum(['code', 'document', 'analysis', 'presentation', 'plan', 'mixed']).default('code'),
-  domainHint: z.enum(['software', 'research', 'creative', 'security', 'business', 'ideation']).optional(),
+  domainHint: z.enum(['software', 'research', 'creative', 'security', 'business', 'ideation', 'strategy']).optional(),
 });
 
 export type BriefInput = z.infer<typeof briefSchema>;
