@@ -3012,7 +3012,7 @@ export default function CompetitionPage() {
 
         {/* ── Battle Arena / Lanes ─────────────────────────────────────────── */}
         {effectiveView === 'battle' ? (
-          <div style={{ flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0 }}>
+          <div style={{ flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0, overflow: 'hidden' }}>
             <BattleArena
               teams={orderedTeams}
               events={allEventsSorted}
