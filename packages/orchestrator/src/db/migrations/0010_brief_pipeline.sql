@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS briefs (
   brief JSONB NOT NULL,
   source TEXT NOT NULL,
   quality_score NUMERIC,
-  tags TEXT[],
+  tags JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
