@@ -691,6 +691,7 @@ function ScoreDrawer({
   const hasForge = result.forge != null && result.forge.length > 0;
   const [synthRunning, setSynthRunning] = useState(false);
   const [synthError, setSynthError] = useState<string | null>(null);
+  const [reJudging, setReJudging] = useState(false);
 
   // E1: Score animation
   const [scoreProgress, setScoreProgress] = useState(0);
@@ -1122,6 +1123,31 @@ function ScoreDrawer({
                     {result.summary}
                   </div>
                 )}
+
+                {/* Re-judge button */}
+                <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid #0a2235', display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    disabled={reJudging}
+                    onClick={async () => {
+                      setReJudging(true);
+                      try {
+                        const res = await fetch(`/api/competitions/${competitionId}/re-judge`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ adversarial: true }),
+                        });
+                        if (res.ok) {
+                          window.location.reload();
+                        }
+                      } catch { /* ignore */ } finally {
+                        setReJudging(false);
+                      }
+                    }}
+                    style={actionBtn('#ff6600', 'rgba(255,102,0,0.08)', { disabled: reJudging })}
+                  >
+                    {reJudging ? 'Re-judging...' : 'Re-judge (adversarial)'}
+                  </button>
+                </div>
               </div>
             )}
 

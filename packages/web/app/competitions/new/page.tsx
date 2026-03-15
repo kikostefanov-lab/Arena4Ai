@@ -437,6 +437,7 @@ export default function NewCompetitionPage() {
   const [deliverableType, setDeliverableType] = useState<DeliverableType>('code');
   const [domainHint, setDomainHint] = useState<DomainHint>('');
   const [domainHintOpen, setDomainHintOpen] = useState(false);
+  const [adversarialJudge, setAdversarialJudge] = useState(false);
   const [teams, setTeams] = useState<Array<{ id: string; model: Model; persona: string; agentId?: string }>>([
     { id: 'team-a', model: 'claude' as Model, persona: 'speedrunner' },
     { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
@@ -833,6 +834,7 @@ export default function NewCompetitionPage() {
           ...(domainHint ? { domainHint } : {}),
         },
         teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona, ...(t.agentId ? { agentId: t.agentId } : {}) })),
+        adversarialJudge,
         options: { claudeBin: 'claude', logDir: '/tmp/arena-logs' },
       };
       const res = await fetch('/api/competitions', {
@@ -1584,6 +1586,24 @@ export default function NewCompetitionPage() {
                       </div>
                     </div>
                   )}
+                </div>
+
+                {/* Adversarial judge toggle */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={adversarialJudge}
+                      onChange={(e) => setAdversarialJudge(e.target.checked)}
+                      style={{ accentColor: '#00f0ff', width: '14px', height: '14px' }}
+                    />
+                    <span style={{ fontSize: '0.65rem', color: '#7cc6db', fontFamily: MONOSPACE_FONT, letterSpacing: '0.5px' }}>
+                      Adversarial Judge (dual AI cross-check)
+                    </span>
+                  </label>
+                  <div style={{ fontSize: '0.58rem', color: '#1e4a5a', marginTop: '0.2rem', marginLeft: '1.6rem', fontFamily: BODY_FONT }}>
+                    Runs two independent AI judges and averages their scores for more reliable results.
+                  </div>
                 </div>
 
                 {/* Time limit */}
