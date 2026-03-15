@@ -2,6 +2,19 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeOutputFormat, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+
+function stripMarkdownFences(content: string, format: ForgeOutputFormat): string {
+  if (format === 'markdown') return content;
+  const lines = content.split('\n');
+  if (lines[0]?.trim().startsWith('```')) {
+    lines.shift();
+    const lastIdx = lines.length - 1;
+    if (lastIdx >= 0 && lines[lastIdx].trim() === '```') {
+      lines.pop();
+    }
+  }
+  return lines.join('\n').trim();
+}
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, FORGE_CONTEXT } from '../utils/brief-context.js';
 
@@ -699,6 +712,36 @@ const GENERIC_DEFAULT: { domain: ForgeDomain; types: ForgeArtifactType[] } = {
   types: ['roadmap', 'task_graph', 'repo_blueprint', 'api_contracts'],
 };
 
+const DELIVERABLE_TYPE_FALLBACK: Record<string, { domain: ForgeDomain; types: ForgeArtifactType[] }> = {
+  code:         { domain: 'software',  types: DOMAIN_TYPE_DEFAULTS.software },
+  document:     { domain: 'research',  types: DOMAIN_TYPE_DEFAULTS.research },
+  analysis:     { domain: 'business',  types: DOMAIN_TYPE_DEFAULTS.business },
+  plan:         { domain: 'strategy',  types: DOMAIN_TYPE_DEFAULTS.strategy },
+  presentation: { domain: 'creative',  types: DOMAIN_TYPE_DEFAULTS.creative },
+  mixed:        GENERIC_DEFAULT,
+};
+
+const ARTIFACT_RELEVANCE_KEYWORDS: Partial<Record<ForgeArtifactType, string[]>> = {
+  dockerfile: ['docker', 'container', 'deploy', 'kubernetes', 'k8s', 'devops', 'image'],
+  sql_schema: ['database', 'sql', 'schema', 'postgres', 'mysql', 'table', 'query', 'migration'],
+  github_actions: ['ci', 'cd', 'pipeline', 'github', 'workflow', 'actions', 'deploy'],
+  environment_template: ['env', 'config', 'secret', 'api key', 'credentials', '.env'],
+};
+
+function filterByRelevance(types: ForgeArtifactType[], brief: Brief): ForgeArtifactType[] {
+  const text = [
+    brief.problem ?? '',
+    ...(brief.constraints ?? []),
+    ...(brief.deliverables ?? []),
+  ].join(' ').toLowerCase();
+
+  return types.filter((t) => {
+    const keywords = ARTIFACT_RELEVANCE_KEYWORDS[t];
+    if (!keywords) return true; // no keywords defined — always pass
+    return keywords.some((kw) => text.includes(kw));
+  });
+}
+
 // ─── AI domain selection ──────────────────────────────────────────────────────
 
 const DOMAIN_SELECTION_SYSTEM_PROMPT = `You are a classifier. Given a competition brief, select the most relevant domain and 3-4 artifact types to generate.
@@ -753,13 +796,13 @@ Deliverables: ${brief.deliverables?.join(', ') ?? 'unspecified'}${deliverableTyp
     const validDomains: ForgeDomain[] = ['software', 'research', 'creative', 'security', 'business', 'ideation', 'strategy'];
     const validTypes = new Set(Object.keys(ARTIFACT_CATALOG));
 
-    if (!validDomains.includes(json.domain)) return GENERIC_DEFAULT;
+    if (!validDomains.includes(json.domain)) return DELIVERABLE_TYPE_FALLBACK[brief.deliverableType ?? 'code'] ?? GENERIC_DEFAULT;
     const types = (json.types ?? []).filter((t) => validTypes.has(t)).slice(0, 4) as ForgeArtifactType[];
-    if (types.length === 0) return GENERIC_DEFAULT;
+    if (types.length === 0) return DELIVERABLE_TYPE_FALLBACK[brief.deliverableType ?? 'code'] ?? GENERIC_DEFAULT;
 
     return { domain: json.domain, types };
   } catch {
-    return GENERIC_DEFAULT;
+    return DELIVERABLE_TYPE_FALLBACK[brief.deliverableType ?? 'code'] ?? GENERIC_DEFAULT;
   }
 }
 
@@ -962,7 +1005,8 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
   const userPrompt = buildForgeUserPrompt(input, primaryDeliverables, synthesisContext);
 
   // Step 1: select domain artifacts (short timeout — fallback available)
-  const { domain, types: selectedTypes } = await selectDomainArtifacts(input.brief);
+  const { domain, types: rawTypes } = await selectDomainArtifacts(input.brief);
+  const selectedTypes = filterByRelevance(rawTypes, input.brief);
 
   // Resolve domain artifact specs
   const domainSpecs: ArtifactSpec[] = selectedTypes
@@ -983,7 +1027,8 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
     if (prog) prog[spec.type] = 'generating';
 
     try {
-      const content = await runClaude(userPrompt, buildPrompt(spec));
+      const rawContent = await runClaude(userPrompt, buildPrompt(spec));
+      const content = stripMarkdownFences(rawContent, spec.outputFormat);
       if (prog) prog[spec.type] = 'done';
       return {
         type: spec.type,
