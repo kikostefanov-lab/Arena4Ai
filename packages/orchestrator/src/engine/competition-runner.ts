@@ -54,6 +54,8 @@ export interface RunOptions {
   skipSandbox?: boolean;
   /** Number of AI judges per deliverable. Default 1. Max 2. */
   aiJudgeCount?: 1 | 2;
+  /** Enable adversarial (dual) judging */
+  adversarialJudge?: boolean;
   /** Enable live AI commentary during the competition. Default false. */
   commentary?: boolean;
   /** Optional agent repository for DB-based persona resolution and stats updates after SCORED. */
@@ -106,6 +108,8 @@ export class CompetitionRunner extends EventEmitter {
     };
 
     this.agentRepo = options.agentRepo;
+
+    if (options.adversarialJudge) options.aiJudgeCount = 2;
 
     this.options = {
       logDir: options.logDir ?? tmpdir(),

@@ -28,6 +28,7 @@ program
   .option('--skip-sandbox', 'Skip Docker sandbox creation (use local temp dirs instead)')
   .option('--time-limit <ms>', 'Override brief time limit in milliseconds')
   .option('--commentary', 'Enable live AI commentary during the competition')
+  .option('--adversarial-judge', 'Enable dual judging with adversarial cross-check')
   .option('--teams <teams>', 'Comma-separated list of model:persona strings (overrides --team-a/--team-b)')
   .action(async (briefPath: string, opts: {
     teamA: string;
@@ -38,6 +39,7 @@ program
     skipSandbox: boolean;
     timeLimit?: string;
     commentary?: boolean;
+    adversarialJudge?: boolean;
     teams?: string;
   }) => {
     try {
@@ -71,6 +73,7 @@ program
           printResults: opts.print,
           skipSandbox: opts.skipSandbox ?? false,
           commentary: opts.commentary ?? false,
+          adversarialJudge: opts.adversarialJudge ?? false,
         },
       );
 
