@@ -139,97 +139,111 @@ export class GladiatorRenderer {
     ctx.translate(this.x, this.y);
     ctx.scale(this.currentScale * this.facing, this.currentScale);
 
-    const rgb = hexToRgb(this.color);
-    const glow = 8 + this.energy * 14; // 8-22 range
+    const { r, g, b } = this.hexToRgb();
+    const glow = 8 + this.energy * 14; // 8–22px shadow blur
+    const joints = this.currentJoints;
 
-    // Hit flash: red tint overlay
-    const drawColor = this.flash === 'hit'
-      ? `rgba(255,80,80,${0.6 + Math.random() * 0.3})`
-      : this.color;
-    const drawRgb = this.flash === 'hit' ? '255,80,80' : rgb;
+    const hipMidX = (joints.hipL[0] + joints.hipR[0]) / 2;
+    const hipMidY = (joints.hipL[1] + joints.hipR[1]) / 2;
 
-    ctx.strokeStyle = drawColor;
-    ctx.lineWidth = 2;
+    // 1. Aura (behind everything)
+    this.drawAura(ctx, 0, hipMidY - 15, r, g, b, this.energy);
+
+    // 2. Ground reflection
+    this.drawReflection(ctx, joints, r, g, b);
+
+    // 3. Circuit traces
+    this.drawCircuitTraces(ctx, joints, r, g, b, this.energy);
+
+    // 4. Armor plates (chest, hip, shin guards)
+    this.drawArmorPlates(ctx, joints, r, g, b);
+
+    // 5. Skeleton — double-stroked limbs
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.shadowColor = `rgba(${drawRgb},0.7)`;
+    ctx.shadowColor = `rgba(${r},${g},${b},0.8)`;
     ctx.shadowBlur = glow;
 
-    const j = this.currentJoints;
-    const hipMid: [number, number] = [
-      (j.hipL[0] + j.hipR[0]) / 2,
-      (j.hipL[1] + j.hipR[1]) / 2,
-    ];
+    // Outer stroke (main limb color)
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.9)`;
+    ctx.lineWidth = 2.5;
 
-    // --- Head: circle + visor ---
-    ctx.beginPath();
-    ctx.arc(j.head[0], j.head[1], 6, 0, Math.PI * 2);
-    ctx.stroke();
+    // Spine
+    this.drawLine(ctx, joints.neck, [hipMidX, hipMidY]);
 
-    // Visor line across head
-    ctx.beginPath();
-    ctx.moveTo(j.head[0] - 5, j.head[1]);
-    ctx.lineTo(j.head[0] + 5, j.head[1]);
-    ctx.stroke();
+    // Arms
+    this.drawLine(ctx, joints.shoulderL, joints.elbowL);
+    this.drawLine(ctx, joints.elbowL, joints.handL);
+    this.drawLine(ctx, joints.shoulderR, joints.elbowR);
+    this.drawLine(ctx, joints.elbowR, joints.handR);
 
-    // --- Spine: neck to hip midpoint ---
-    this.drawLine(ctx, j.neck, hipMid);
+    // Shoulder bar
+    this.drawLine(ctx, joints.shoulderL, joints.shoulderR);
 
-    // --- Shoulders ---
-    this.drawLine(ctx, j.shoulderL, j.shoulderR);
+    // Hips
+    this.drawLine(ctx, joints.hipL, joints.hipR);
 
-    // --- Left arm ---
-    this.drawLine(ctx, j.shoulderL, j.elbowL);
-    this.drawLine(ctx, j.elbowL, j.handL);
+    // Legs
+    this.drawLine(ctx, joints.hipL, joints.kneeL);
+    this.drawLine(ctx, joints.kneeL, joints.footL);
+    this.drawLine(ctx, joints.hipR, joints.kneeR);
+    this.drawLine(ctx, joints.kneeR, joints.footR);
 
-    // --- Right arm ---
-    this.drawLine(ctx, j.shoulderR, j.elbowR);
-    this.drawLine(ctx, j.elbowR, j.handR);
-
-    // --- Hip bar ---
-    this.drawLine(ctx, j.hipL, j.hipR);
-
-    // --- Left leg ---
-    this.drawLine(ctx, j.hipL, j.kneeL);
-    this.drawLine(ctx, j.kneeL, j.footL);
-
-    // --- Right leg ---
-    this.drawLine(ctx, j.hipR, j.kneeR);
-    this.drawLine(ctx, j.kneeR, j.footR);
-
-    // --- Circuit accent lines on torso (dimmed) ---
-    ctx.save();
-    ctx.globalAlpha = 0.25;
-    ctx.strokeStyle = `rgba(${rgb},0.4)`;
+    // Inner stroke (brighter, thinner — gives depth)
+    ctx.strokeStyle = `rgba(${r},${g},${b},0.4)`;
     ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
+    this.drawLine(ctx, joints.neck, [hipMidX, hipMidY]);
+    this.drawLine(ctx, joints.shoulderL, joints.elbowL);
+    this.drawLine(ctx, joints.elbowL, joints.handL);
+    this.drawLine(ctx, joints.shoulderR, joints.elbowR);
+    this.drawLine(ctx, joints.elbowR, joints.handR);
+    this.drawLine(ctx, joints.hipL, joints.kneeL);
+    this.drawLine(ctx, joints.kneeL, joints.footL);
+    this.drawLine(ctx, joints.hipR, joints.kneeR);
+    this.drawLine(ctx, joints.kneeR, joints.footR);
 
-    // Cross-chest accent
-    const chestMid: [number, number] = [
-      (j.shoulderL[0] + j.shoulderR[0]) / 2,
-      (j.shoulderL[1] + j.shoulderR[1]) / 2,
-    ];
-    const torsoMid: [number, number] = [
-      (chestMid[0] + hipMid[0]) / 2,
-      (chestMid[1] + hipMid[1]) / 2,
-    ];
-    this.drawLine(ctx, [chestMid[0] - 6, chestMid[1] + 4], [torsoMid[0] + 4, torsoMid[1]]);
-    this.drawLine(ctx, [chestMid[0] + 6, chestMid[1] + 4], [torsoMid[0] - 4, torsoMid[1]]);
-    ctx.restore();
+    // 6. Shoulder plates
+    this.drawShoulders(ctx, joints.shoulderL[0], joints.shoulderL[1], joints.shoulderR[0], joints.shoulderR[1], r, g, b);
 
-    // --- Power orb during power pose ---
+    // 7. Helmet (replaces simple circle head)
+    this.drawHelmet(ctx, joints.head[0], joints.head[1], r, g, b);
+
+    // 8. Weapon
+    ctx.shadowBlur = glow;
+    this.drawWeapon(ctx, joints, r, g, b, this.energy);
+    ctx.shadowBlur = 0;
+
+    // 9. Hit flash overlay
+    if (this.flash === 'hit') {
+      const hitAlpha = 0.6 + Math.random() * 0.3;
+      ctx.fillStyle = `rgba(255,80,80,${hitAlpha})`;
+      ctx.fillRect(-15, joints.head[1] - 14, 30, joints.footL[1] - joints.head[1] + 20);
+    }
+
+    // 10. Power orb (during power flash)
     if (this.flash === 'power') {
-      ctx.save();
-      const orbX = (j.handL[0] + j.handR[0]) / 2;
-      const orbY = (j.handL[1] + j.handR[1]) / 2;
+      const handMidX = (joints.handL[0] + joints.handR[0]) / 2;
+      const handMidY = (joints.handL[1] + joints.handR[1]) / 2;
       const orbSize = 6 + Math.random() * 4;
-      ctx.fillStyle = `rgba(${rgb},${0.4 + Math.random() * 0.3})`;
-      ctx.shadowColor = `rgba(${rgb},0.9)`;
-      ctx.shadowBlur = 20;
       ctx.beginPath();
-      ctx.arc(orbX, orbY, orbSize, 0, Math.PI * 2);
+      ctx.arc(handMidX, handMidY, orbSize, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.7)`;
+      ctx.shadowColor = `rgba(${r},${g},${b},1)`;
+      ctx.shadowBlur = 20;
       ctx.fill();
-      ctx.restore();
+      ctx.shadowBlur = 0;
+    }
+
+    // Weight shift — slight horizontal lean (slow sine)
+    const weightShift = Math.sin(this.breathPhase * 0.4) * 1.5;
+    ctx.translate(weightShift, 0);
+
+    // Visor flicker (every ~3s — breathPhase increments at 0.002/ms, so 3s = 6 phase units)
+    // sin(phase * 1.05) cycles every ~6 rad of phase ≈ 3000ms at 0.002/ms
+    if (Math.sin(this.breathPhase * 1.05) > 0.97) {
+      ctx.fillStyle = `rgba(${r},${g},${b},1.0)`;
+      ctx.fillRect(joints.head[0] - 5, joints.head[1] - 2, 10, 2);
     }
 
     ctx.restore();
