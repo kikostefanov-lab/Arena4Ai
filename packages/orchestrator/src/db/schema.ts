@@ -1,6 +1,6 @@
 import { pgTable, text, jsonb, timestamp, serial, index, uniqueIndex, boolean, integer, numeric } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+
 import type { TeamPresentation, ForgeRun } from '@arena/shared';
 import type { ForgeOutput } from '@arena/shared';
 
@@ -95,26 +95,6 @@ export const agents = pgTable('agents', {
   index('agents_persona_id_idx').on(table.personaId),
 ]);
 
-export const agentProfiles = pgTable('agent_profiles', {
-  id:               text('id').primaryKey(),
-  name:             text('name').notNull(),
-  description:      text('description'),
-  provider:         text('provider').notNull(),
-  modelVariant:     text('model_variant').notNull(),
-  systemPrompt:     text('system_prompt').notNull(),
-  avatar:           text('avatar'),
-  tags:             jsonb('tags').$type<string[]>(),
-  retired:          boolean('retired').default(false).notNull(),
-  createdBy:        text('created_by').notNull(),
-  forkedFromId:     text('forked_from_id').references((): AnyPgColumn => agentProfiles.id, { onDelete: 'set null' }),
-  statsWins:        integer('stats_wins').default(0).notNull(),
-  statsLosses:      integer('stats_losses').default(0).notNull(),
-  statsTotal:       integer('stats_total').default(0).notNull(),
-  statsAvgScore:    numeric('stats_avg_score'),
-  statsLastUsedAt:  timestamp('stats_last_used_at', { withTimezone: true }),
-  createdAt:        timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt:        timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-});
 
 export const resultsHistory = pgTable('results_history', {
   id:              text('id').primaryKey().default(sql`gen_random_uuid()`),
