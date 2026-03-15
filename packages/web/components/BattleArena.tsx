@@ -261,7 +261,7 @@ export default function BattleArena({
     const W = sizeRef.current.w || 800;
     const H = sizeRef.current.h || 600;
     const positions = computePositions(teams, W, H);
-    const scale = Math.min(W, H) / 500;
+    const scale = Math.min(W, H) / 270;
 
     gladiatorsRef.current = teams.map((t, i) => {
       const pos = positions[i];

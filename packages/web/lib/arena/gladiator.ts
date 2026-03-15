@@ -115,7 +115,7 @@ export class GladiatorRenderer {
     }
 
     // Energy-based scale adjustment (1.0 at 0 energy, 1.06 at full)
-    this.currentScale = this.baseScale * (1.0 + energy * 0.06);
+    this.currentScale = this.baseScale * (1.0 + energy * 0.04);
 
     // Lerp all joints toward target
     const joints = {} as JointPositions;
