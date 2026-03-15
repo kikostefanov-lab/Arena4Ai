@@ -29,6 +29,7 @@ interface CompetitionSummary {
   teams: Team[];
   winnerId: string | null;
   notes?: string | null;
+  scorecards?: Array<{ teamId: string; finalScore?: number }> | null;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -584,6 +585,35 @@ export default function GalleryPage() {
                           <span style={{ fontSize: '0.6rem', color: '#3d7d94', fontStyle: 'italic' }}>
                             {comp.notes}
                           </span>
+                        </div>
+                      )}
+
+                      {/* Score bars for completed competitions */}
+                      {(comp.state === 'COMPLETE' || comp.state === 'FORGE_COMPLETE') &&
+                        Array.isArray(comp.scorecards) && comp.scorecards.length > 0 && (
+                        <div style={{ paddingLeft: '1.6rem', marginTop: '0.4rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          {[...comp.scorecards]
+                            .sort((a, b) => (b.finalScore ?? 0) - (a.finalScore ?? 0))
+                            .map((sc) => {
+                              const team = comp.teams?.find((t) => t.id === sc.teamId);
+                              if (!team) return null;
+                              const score = sc.finalScore ?? 0;
+                              const color = getModelColor(team.model);
+                              const isWinner = team.id === comp.winnerId;
+                              return (
+                                <div key={sc.teamId} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                                  <span style={{ fontSize: '0.55rem', color: color, fontWeight: 600, minWidth: '5.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                    {isWinner ? '🏆 ' : ''}{resolveTeamLabel(comp.teams, team.id, team.model)}
+                                  </span>
+                                  <div style={{ flex: 1, height: '4px', background: '#0a2235', borderRadius: '2px', overflow: 'hidden' }}>
+                                    <div style={{ width: `${score * 100}%`, height: '100%', background: color, borderRadius: '2px', transition: 'width 0.3s ease' }} />
+                                  </div>
+                                  <span style={{ fontSize: '0.55rem', color: '#4a8fa8', fontWeight: 700, minWidth: '2.2rem', textAlign: 'right' }}>
+                                    {Math.round(score * 100)}%
+                                  </span>
+                                </div>
+                              );
+                            })}
                         </div>
                       )}
                     </div>
