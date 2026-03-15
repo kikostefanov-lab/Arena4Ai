@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Sprint 6 complete. 255 tests passing.**
+**Status: Sprint 7A complete. 255 tests passing.**
 
 ## Running the Stack
 
@@ -168,18 +168,20 @@ Legacy single `ForgeOutput` records are wrapped into a 1-element array on read (
 ### Commentary agent
 Enable with `--commentary` flag or `commentary: true` in RunOptions. Batches 5 events → Claude generates one witty sentence → emitted as `COMMENTARY` ArenaEvent (gold bar in UI).
 
+### TopBar navigation (Sprint 7A)
+4 nav items + CTA: **Competitions** (`/`) | **Briefs** (`/briefs`) | **Stats** (`/stats`) | **Armory** (`/agent-armory`) | **⚔ New Battle** (`/competitions/new`)
+
+Old routes redirect: `/analytics` → `/stats?tab=analytics`, `/leaderboard` → `/stats?tab=leaderboard`, `/compare` → `/stats?tab=compare`, `/personas` → `/agent-armory?tab=personas`
+
 ### Web UI pages
-- `/` — gallery with state/model filters, health dot, auto-refresh, tournament list
-- `/competitions/new` — brief builder with AI generator (✨), example picker, YAML import (📂)
-- `/competitions/:id` — live arena + tabs: Scores, Presentations, Files, Synthesis, Forge; Rematch/Copy/Download/🎬 Reel buttons
+- `/` — gallery with state/model filters, health dot, auto-refresh, score bars on cards, tournament list
+- `/competitions/new` — brief builder with AI generator (✨), intake questions, quality scorer, example picker, YAML import (📂)
+- `/competitions/:id` — live battle arena (default) or log view (toggle); tabs: Scores, Presentations, Files, Synthesis, Forge
 - `/competitions/:id/replay` — replay viewer with scrubber and 1×–10× speed
-- `/leaderboard` — model win-rate leaderboard
-- `/analytics` — competition stats
-- `/tournaments/new` — tournament creation
+- `/stats` — tabbed page: Analytics (default), Leaderboard, Compare
+- `/briefs` — brief library with search + tag filters, source badges, quality scores
 - `/tournaments/:id` — tournament standings + match history
-- `/briefs` — brief library with search + tag filters
-- `/compare` — head-to-head model stats
-- `/personas` — custom persona library (localStorage)
+- `/agent-armory` — tabbed: Agent Roster, Personas, Agent Builder (reads `?tab` from URL)
 
 ### DB schema (Drizzle + PostgreSQL)
 - `competitions`: id, brief (jsonb), teams (jsonb), state, startedAt, completedAt
