@@ -47,7 +47,7 @@ const BASE_POSES: Record<PoseName, JointPositions> = {
     elbowL:    [-24, -30],
     elbowR:    [28, -38],
     handL:     [-22, -16],
-    handR:     [42, -35],    // right arm extended forward
+    handR:     [35, -35],    // right arm extended forward
     hipL:      [-10, 0],
     hipR:      [10, 0],
     kneeL:     [-14, 20],
@@ -91,14 +91,14 @@ const BASE_POSES: Record<PoseName, JointPositions> = {
   },
 
   triumph: {
-    head:      [0, -60],
+    head:      [0, -54],
     neck:      [0, -48],
     shoulderL: [-18, -44],
     shoulderR: [18, -44],
     elbowL:    [-26, -56],
     elbowR:    [26, -56],
-    handL:     [-22, -70],   // arms raised overhead
-    handR:     [22, -70],
+    handL:     [-18, -60],   // arms raised overhead
+    handR:     [18, -60],
     hipL:      [-10, 0],
     hipR:      [10, 0],
     kneeL:     [-12, 22],
