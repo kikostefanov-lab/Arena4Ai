@@ -52,6 +52,7 @@ export default function GalleryPage() {
   const [competitions, setCompetitions] = useState<CompetitionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [everLoaded, setEverLoaded] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [stateFilter, setStateFilter] = useState<string>('ALL');
@@ -79,11 +80,11 @@ export default function GalleryPage() {
   useEffect(() => {
     let cancelled = false;
     const doFetch = (attempt: number) => {
-      fetch('/api/competitions')
+      fetch('/api/competitions', { cache: 'no-store' })
         .then((r) => r.json())
         .then((data: CompetitionSummary[]) => {
           if (cancelled) return;
-          if (Array.isArray(data)) { setCompetitions(data); setLoading(false); }
+          if (Array.isArray(data)) { setCompetitions(data); setLoading(false); setEverLoaded(true); }
           else if (attempt < 2) { setTimeout(() => doFetch(attempt + 1), 2000); }
           else { setLoading(false); }
         })
@@ -101,7 +102,7 @@ export default function GalleryPage() {
   useEffect(() => {
     const refresh = () => {
       if (document.visibilityState !== 'visible') return;
-      fetch('/api/competitions')
+      fetch('/api/competitions', { cache: 'no-store' })
         .then((r) => r.json())
         .then((data: CompetitionSummary[]) => { if (Array.isArray(data)) setCompetitions(data); })
         .catch(() => { /* silently ignore refresh errors */ });
@@ -393,7 +394,7 @@ export default function GalleryPage() {
         )}
 
         {/* Empty State */}
-        {!loading && !error && competitions.length === 0 && (
+        {!loading && !error && everLoaded && competitions.length === 0 && (
           <div style={{
             textAlign: 'center',
             padding: '5rem 2rem',
