@@ -9,6 +9,12 @@ import type { ReelData, ReelTeam } from '@arena/video';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+interface ReelKeyEvent {
+  frameOffset: number;
+  teamId: string;
+  type: 'strike' | 'power' | 'hit';
+}
+
 type ReelStatus =
   | { status: 'idle' }
   | { status: 'rendering'; progress: number }
@@ -173,6 +179,36 @@ function buildReelData(competition: any, events: any[]): ReelData {
     .sort((a, b) => a.relativeMs - b.relativeMs)
     .slice(0, 5);
 
+  // Extract key events for BattleHighlights scene (4-6 events, spaced across timeline)
+  const battleEvents: ReelKeyEvent[] = [];
+  const BATTLE_FRAMES = 180; // 6s at 30fps
+
+  const significantEvents = events
+    .filter((e: any) => ['FILE_CREATE', 'FILE_MODIFY', 'TOOL_CALL', 'ERROR'].includes(e.type))
+    .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  if (significantEvents.length > 0) {
+    const startTime = new Date(significantEvents[0].timestamp).getTime();
+    const endTime = new Date(significantEvents[significantEvents.length - 1].timestamp).getTime();
+    const duration = endTime - startTime || 1;
+
+    const step = Math.max(1, Math.floor(significantEvents.length / 6));
+    const sampled = [];
+    for (let i = 0; i < significantEvents.length && sampled.length < 6; i += step) {
+      sampled.push(significantEvents[i]);
+    }
+
+    for (const ev of sampled) {
+      const relTime = new Date(ev.timestamp).getTime() - startTime;
+      const rawOffset = Math.round((relTime / duration) * (BATTLE_FRAMES - 30)) + 10;
+      const frameOffset = Math.max(10, Math.min(160, rawOffset)); // clamp to 10–160
+      const type = ev.type === 'ERROR' ? 'hit' as const
+        : ev.type === 'TOOL_CALL' ? 'power' as const
+        : 'strike' as const;
+      battleEvents.push({ frameOffset, teamId: ev.teamId, type });
+    }
+  }
+
   const synthesis = result?.synthesis ?? null;
   const synthesisQuote = synthesis?.synthesis
     ? extractFirstSentence(synthesis.synthesis)
@@ -186,6 +222,7 @@ function buildReelData(competition: any, events: any[]): ReelData {
     teams: reelTeams,
     winnerId: result?.winnerId ?? null,
     keyMoments: allMoments,
+    keyEvents: battleEvents,
     synthesisQuote,
     hasSynthesis: synthesis !== null,
     hasForge: !!(result?.forge && result.forge.length > 0),
