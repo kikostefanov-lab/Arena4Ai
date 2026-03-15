@@ -6,12 +6,10 @@ import { usePathname } from 'next/navigation';
 import { MONOSPACE_FONT, FONT_WEIGHT_EXTRABOLD } from '../lib/design-tokens';
 
 const NAV_LINKS = [
-  { href: '/briefs',          label: 'Briefs'       },
-  { href: '/leaderboard',     label: 'Leaderboard'  },
-  { href: '/analytics',       label: 'Analytics'    },
-  { href: '/tournaments/new', label: 'Tournaments'  },
-  { href: '/compare',         label: 'Compare'      },
-  { href: '/agent-armory',    label: 'Armory'       },
+  { href: '/',              label: 'Competitions' },
+  { href: '/briefs',        label: 'Briefs'       },
+  { href: '/stats',         label: 'Stats'        },
+  { href: '/agent-armory',  label: 'Armory'       },
 ];
 
 export function TopBar() {
@@ -56,7 +54,7 @@ export function TopBar() {
             key={href}
             href={href}
             className="arena-btn topbar-nav-btn"
-            style={pathname === href ? {
+            style={(href === '/' ? pathname === '/' : pathname.startsWith(href)) ? {
               borderColor: 'rgba(0,240,255,0.6)',
               background: 'rgba(0,240,255,0.1)',
             } : undefined}
@@ -92,7 +90,7 @@ export function TopBar() {
               key={href}
               href={href}
               className="topbar-dropdown-item"
-              style={pathname === href ? {
+              style={(href === '/' ? pathname === '/' : pathname.startsWith(href)) ? {
                 color: '#00f0ff',
                 borderLeftColor: '#00f0ff',
               } : undefined}
