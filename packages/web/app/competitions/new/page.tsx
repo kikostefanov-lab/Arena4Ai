@@ -128,7 +128,8 @@ function ExampleChips({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const existing = new Set(value.split('\n').map((s) => s.trim()).filter(Boolean));
+  const valueStr = typeof value === 'string' ? value : Array.isArray(value) ? value.join('\n') : '';
+  const existing = new Set(valueStr.split('\n').map((s) => s.trim()).filter(Boolean));
   const available = examples.filter((e) => !existing.has(e));
   if (available.length === 0) return null;
 
@@ -608,8 +609,8 @@ export default function NewCompetitionPage() {
       const brief = await res.json();
       if (brief.title) setTitle(brief.title);
       if (brief.problem) setProblem(brief.problem);
-      if (brief.constraints) setConstraints(brief.constraints);
-      if (brief.deliverables) setDeliverables(brief.deliverables);
+      if (brief.constraints) setConstraints(Array.isArray(brief.constraints) ? brief.constraints.join('\n') : brief.constraints);
+      if (brief.deliverables) setDeliverables(Array.isArray(brief.deliverables) ? brief.deliverables.join('\n') : brief.deliverables);
       if (brief.expectedOutput !== undefined) setExpectedOutput(brief.expectedOutput);
       if (brief.criteria) setCriteria(brief.criteria);
       if (brief.deliverableType) setDeliverableType(brief.deliverableType);
@@ -720,8 +721,8 @@ export default function NewCompetitionPage() {
       const brief = await res.json();
       if (brief.title) setTitle(brief.title);
       if (brief.problem) setProblem(brief.problem);
-      if (brief.constraints) setConstraints(brief.constraints);
-      if (brief.deliverables) setDeliverables(brief.deliverables);
+      if (brief.constraints) setConstraints(Array.isArray(brief.constraints) ? brief.constraints.join('\n') : brief.constraints);
+      if (brief.deliverables) setDeliverables(Array.isArray(brief.deliverables) ? brief.deliverables.join('\n') : brief.deliverables);
       if (brief.expectedOutput !== undefined) setExpectedOutput(brief.expectedOutput);
       if (brief.criteria) setCriteria(brief.criteria);
       setShowGenerator(false);
