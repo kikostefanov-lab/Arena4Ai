@@ -83,7 +83,9 @@ program
         try {
           const { db } = await import('./db/client.js');
           const { CompetitionRepository } = await import('./db/repository.js');
+          const { AgentRepository } = await import('./db/agent-repository.js');
           const repo = new CompetitionRepository(db);
+          (runner as any).agentRepo = new AgentRepository(db);
           await repo.create(runner.competitionId, brief, teams);
 
           runner.on('stateChange', (state) => {

@@ -253,6 +253,19 @@ export class CompetitionRunner extends EventEmitter {
       );
       this._activeAdapters.push(...adapters);
 
+      // Auto-resolve agentId for stats tracking — match model:persona to existing agents in DB
+      if (this.agentRepo) {
+        for (const team of teams) {
+          if (team.agentId) continue; // already set via Armory
+          const [provider] = team.model.split(':');
+          const persona = team.persona ?? 'pragmatist';
+          try {
+            const match = await this.agentRepo.findByProviderAndModel(provider, persona);
+            if (match) team.agentId = match.id;
+          } catch { /* non-fatal — stats are advisory */ }
+        }
+      }
+
       // ── RUNNING ──────────────────────────────────────────────────────────
       this.advance(CompetitionState.RUNNING);
       this.competition.startedAt = new Date().toISOString();
