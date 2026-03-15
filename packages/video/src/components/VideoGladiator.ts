@@ -67,7 +67,7 @@ const HELMET_PATHS: Record<ModelType, [number, number][]> = {
 
 /** Lerp between two joint sets */
 function lerpJoints(a: Joints, b: Joints, t: number): Joints {
-  const result = {} as any;
+  const result = {} as Joints;
   for (const key of Object.keys(a) as (keyof Joints)[]) {
     result[key] = [
       a[key][0] + (b[key][0] - a[key][0]) * t,
@@ -226,7 +226,7 @@ export function renderVideoGladiator(
 
   // Hit flash
   if (currentPose === 'hit') {
-    ctx.fillStyle = `rgba(255,80,80,${0.6 + Math.random() * 0.2})`;
+    ctx.fillStyle = `rgba(255,80,80,${0.6 + (Math.sin(frame * 7.3) * 0.5 + 0.5) * 0.2})`;
     ctx.fillRect(-15, joints.head[1] - 14, 30, 60);
   }
 

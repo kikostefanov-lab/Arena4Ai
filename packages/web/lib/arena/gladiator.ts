@@ -139,6 +139,10 @@ export class GladiatorRenderer {
     ctx.translate(this.x, this.y);
     ctx.scale(this.currentScale * this.facing, this.currentScale);
 
+    // Weight shift — slight horizontal lean (slow sine), applied before all drawing
+    const weightShift = Math.sin(this.breathPhase * 0.4) * 1.5;
+    ctx.translate(weightShift, 0);
+
     const { r, g, b } = this.hexToRgb();
     const glow = 8 + this.energy * 14; // 8–22px shadow blur
     const joints = this.currentJoints;
@@ -234,10 +238,6 @@ export class GladiatorRenderer {
       ctx.fill();
       ctx.shadowBlur = 0;
     }
-
-    // Weight shift — slight horizontal lean (slow sine)
-    const weightShift = Math.sin(this.breathPhase * 0.4) * 1.5;
-    ctx.translate(weightShift, 0);
 
     // Visor flicker (every ~3s — breathPhase increments at 0.002/ms, so 3s = 6 phase units)
     // sin(phase * 1.05) cycles every ~6 rad of phase ≈ 3000ms at 0.002/ms
