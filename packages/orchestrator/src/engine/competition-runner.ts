@@ -390,6 +390,35 @@ export class CompetitionRunner extends EventEmitter {
         );
       }
 
+      // Fire-and-forget quality signal computation — feeds the self-improving brief generator
+      try {
+        const { computeHeuristicSignals } = await import('../telemetry/quality-analyzer.js');
+        const { briefQualitySignals } = await import('../db/schema.js');
+        const signals = computeHeuristicSignals(scorecards, brief.deliverables ?? [], deliverables);
+        if (process.env.DATABASE_URL) {
+          const { db } = await import('../db/client.js');
+          await db.insert(briefQualitySignals).values({
+            competitionId: this.competitionId,
+            scoreSpread: String(signals.scoreSpread),
+            tied: signals.tied,
+            allEights: signals.allEights,
+            criterionSignals: signals.criterionSignals,
+            expectedFilesProduced: signals.expectedFilesProduced,
+            totalFilesProduced: signals.totalFilesProduced,
+            totalContentSize: signals.totalContentSize,
+          }).onConflictDoUpdate({
+            target: briefQualitySignals.competitionId,
+            set: {
+              computedAt: new Date(),
+              scoreSpread: String(signals.scoreSpread),
+              tied: signals.tied,
+              allEights: signals.allEights,
+              criterionSignals: signals.criterionSignals,
+            },
+          }).catch(() => {});
+        }
+      } catch { /* non-fatal — quality signals are advisory */ }
+
       // ── COMPLETE ──────────────────────────────────────────────────────────
       const synthesis: SynthesisResult | null = null; // synthesis is now on-demand via POST /synthesis
       this.advance(CompetitionState.COMPLETE);
