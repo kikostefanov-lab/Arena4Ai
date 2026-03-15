@@ -192,6 +192,21 @@ export class AgentRepository {
     }).where(eq(agents.id, id));
   }
 
+  async findByProviderAndModel(provider: string, personaOrName: string): Promise<{ id: string } | null> {
+    const rows = await this.db
+      .select({ id: agents.id })
+      .from(agents)
+      .where(
+        and(
+          eq(agents.provider, provider),
+          eq(agents.name, personaOrName),
+          eq(agents.retired, false),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
   async getByProviderAndPersonaName(
     provider: string,
     personaName: string,
