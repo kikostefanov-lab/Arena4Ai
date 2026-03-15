@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   MONOSPACE_FONT, BODY_FONT, KICKER_STYLE,
   getModelColor,
@@ -20,8 +21,13 @@ const TABS = [
   { id: 'builder',  label: '🔨 Agent Builder' },
 ] as const;
 
-export default function AgentArmoryPage() {
-  const [activeTab, setActiveTab]               = useState<Tab>('roster');
+const VALID_TABS: Tab[] = ['roster', 'personas', 'builder'];
+
+function AgentArmoryInner() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const initialTab: Tab = VALID_TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'roster';
+  const [activeTab, setActiveTab]               = useState<Tab>(initialTab);
   const [agents, setAgents]                     = useState<Agent[]>([]);
   const [retiredAgents, setRetiredAgents]       = useState<Agent[]>([]);
   const [personas, setPersonas]                 = useState<Persona[]>([]);
@@ -417,5 +423,17 @@ export default function AgentArmoryPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AgentArmoryPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <p style={{ color: '#4a8fa8', fontFamily: MONOSPACE_FONT, fontSize: '0.75rem' }}>Loading...</p>
+      </div>
+    }>
+      <AgentArmoryInner />
+    </Suspense>
   );
 }
