@@ -182,6 +182,7 @@ export class CompetitionRepository {
         completedAt: competitions.completedAt,
         notes: competitions.notes,
         winnerId: results.winnerId,
+        scorecards: results.scorecards,
       })
       .from(competitions)
       .leftJoin(results, eq(results.competitionId, competitions.id))
