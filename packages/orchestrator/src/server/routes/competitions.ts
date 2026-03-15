@@ -15,6 +15,9 @@ import { synthesizeDeliverables } from '../../synthesis/merge-engine.js';
 import type { TeamDeliverable } from '../../db/schema.js';
 import { buildDeliverableFilename, buildForgeFilename } from '../../utils/naming.js';
 import type { AgentRepository } from '../../db/agent-repository.js';
+import { aiJudge, JUDGE_IDS } from '../../judging/ai-judge.js';
+import { computeOverallScore } from '../../judging/score-aggregator.js';
+import type { JudgeResult } from '@arena/shared';
 
 export function createCompetitionsRouter(agentRepo?: AgentRepository): Router {
   const competitionsRouter = Router();
@@ -24,6 +27,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   const body = req.body as {
     brief?: unknown;
     teams?: unknown;
+    adversarialJudge?: boolean;
     options?: { skipSandbox?: boolean; claudeBin?: string; logDir?: string; commentary?: boolean };
   };
 
@@ -58,6 +62,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     claudeBin: body.options?.claudeBin,
     logDir: body.options?.logDir,
     commentary: body.options?.commentary ?? false,
+    adversarialJudge: body.adversarialJudge === true,
     agentRepo,
   };
 
@@ -396,6 +401,91 @@ competitionsRouter.patch('/:id/notes', async (req: Request, res: Response) => {
   if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
   await repo.updateNotes(id, notes);
   res.json({ ok: true });
+});
+
+// POST /competitions/:id/re-judge — re-run judging (optionally adversarial)
+competitionsRouter.post('/:id/re-judge', requireApiKey, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const adversarial = (req.body as { adversarial?: boolean })?.adversarial ?? true;
+
+  const [comp, result] = await Promise.all([repo.getCompetition(id), repo.getResult(id)]);
+  if (!comp) { res.status(404).json({ error: 'Competition not found' }); return; }
+  if (!result) { res.status(409).json({ error: 'No results found' }); return; }
+
+  const terminalStates = [
+    CompetitionState.COMPLETE,
+    CompetitionState.SCORED,
+    CompetitionState.FORGE_COMPLETE,
+  ];
+  if (!terminalStates.includes(comp.state as CompetitionState)) {
+    res.status(409).json({ error: `Cannot re-judge in ${comp.state} state` });
+    return;
+  }
+
+  const deliverables = (result.deliverables as Deliverable[]) ?? [];
+  if (deliverables.length === 0) {
+    res.status(409).json({ error: 'No deliverables found' });
+    return;
+  }
+
+  // Backfill collectedAt for DB deliverables that may lack it
+  for (const d of deliverables) {
+    if (!(d as any).collectedAt) (d as any).collectedAt = new Date().toISOString();
+  }
+
+  const brief = comp.brief as Brief;
+
+  try {
+    // Archive current results
+    await repo.archiveResult(id, 'judge');
+
+    // Run standard judge for each team
+    const standardResults: JudgeResult[] = await Promise.all(
+      deliverables.map((d) => aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiClaude })),
+    );
+
+    // Optionally run adversarial judge
+    let adversarialResults: JudgeResult[] = [];
+    if (adversarial) {
+      adversarialResults = await Promise.all(
+        deliverables.map((d) => aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiAdversarial })),
+      );
+    }
+
+    // Build scorecards: average scores across all judges per team
+    const scorecards = deliverables.map((d) => {
+      const teamJudgeResults: JudgeResult[] = [
+        ...standardResults.filter((r) => r.teamId === d.teamId),
+        ...adversarialResults.filter((r) => r.teamId === d.teamId),
+      ];
+
+      const overallScores = teamJudgeResults.map((jr) => computeOverallScore(jr.scores, brief.rubric));
+      const finalScore = overallScores.length > 0
+        ? overallScores.reduce((a, b) => a + b, 0) / overallScores.length
+        : 0;
+
+      return { teamId: d.teamId, finalScore, judgeResults: teamJudgeResults };
+    });
+
+    scorecards.sort((a, b) => b.finalScore - a.finalScore);
+    const winnerId = scorecards[0]?.teamId ?? null;
+
+    await repo.updateScorecards(id, scorecards, winnerId);
+
+    res.json({
+      ok: true,
+      winnerId,
+      adversarial,
+      scorecards: scorecards.map((s) => ({
+        teamId: s.teamId,
+        finalScore: s.finalScore,
+        judgeCount: s.judgeResults.length,
+      })),
+    });
+  } catch (err) {
+    console.error(`[arena] re-judge failed for ${id}:`, (err as Error).message);
+    res.status(500).json({ error: 'Re-judge failed', details: (err as Error).message });
+  }
 });
 
 // DELETE /competitions/:id — remove a competition and all its data
