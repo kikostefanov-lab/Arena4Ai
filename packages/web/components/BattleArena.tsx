@@ -331,7 +331,7 @@ export default function BattleArena({
 
         // Reposition gladiators on resize
         const positions = computePositions(teams, width, height);
-        const scale = Math.min(width, height) / 500;
+        const scale = Math.min(width, height) / 270;
         gladiatorsRef.current = teams.map((t, i) => {
           const pos = positions[i];
           const g = new GladiatorRenderer(
