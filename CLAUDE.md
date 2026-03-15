@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Sprint 7A complete. 255 tests passing.**
+**Status: Sprint 7B complete. 255 tests passing.**
 
 ## Running the Stack
 
@@ -271,6 +271,24 @@ npx tsx packages/orchestrator/src/cli.ts re-evaluate <id> --stage judge
 npx tsx packages/orchestrator/src/cli.ts re-evaluate --all --stage all
 ```
 Stages: `judge`, `presentation`, `synthesis`, `all`. Archives results before overwriting (→ `results_history` table).
+
+### Adversarial judge mode (Sprint 7B)
+Enable dual judging (standard + adversarial) for higher-quality scoring.
+- `adversarialJudge: true` in `POST /competitions` body or `--adversarial-judge` CLI flag
+- `POST /competitions/:id/re-judge` — re-judge completed competition with adversarial mode, averages scores
+- New Battle page has adversarial toggle in Advanced section
+- Score tab has "Re-judge (adversarial)" button on completed competitions
+
+### Forge artifact relevance (Sprint 7B)
+- `DELIVERABLE_TYPE_FALLBACK` — maps deliverableType to domain when AI classifier fails (document→research, analysis→business, plan→strategy)
+- `ARTIFACT_RELEVANCE_KEYWORDS` — conditional filter: dockerfile only when brief mentions docker/deploy, sql_schema only for database briefs, etc.
+- `filterByRelevance()` applied after domain selection, before artifact generation
+- `stripMarkdownFences()` — post-processing to remove ``` fences from SQL/YAML/Dockerfile/CSV artifacts
+
+### Agent stats auto-resolve (Sprint 7B)
+- `findByProviderAndModel()` on AgentRepository — matches `provider + persona` to existing agents
+- Competition runner auto-resolves `agentId` before execution, so stats accumulate regardless of launch method (CLI, New Battle, or Armory)
+- CLI now wires `agentRepo` when `DATABASE_URL` is set
 
 ### Live battle visualization (Sprint 6)
 Competition detail page default view. Canvas 2D arena with procedural wireframe TRON gladiators.
