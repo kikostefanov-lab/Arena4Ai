@@ -25,6 +25,8 @@ export interface GeminiAdapterOptions {
   geminiBin?: string;
   /** Optional sandbox manager for Docker-based isolation. */
   sandbox?: SandboxManager;
+  /** Optional model variant to pass as --model flag to the CLI. */
+  modelVariant?: string;
 }
 
 /**
@@ -36,10 +38,12 @@ export interface GeminiAdapterOptions {
  */
 export class GeminiAdapter extends BaseAdapter {
   private readonly geminiBin: string;
+  private modelVariant?: string;
 
   constructor(teamId: string, options: GeminiAdapterOptions) {
     super(teamId, options.workdir, options.competitionId, options.sandbox);
     this.geminiBin = options.geminiBin ?? 'gemini';
+    this.modelVariant = options.modelVariant;
   }
 
   // injectBrief, collectDeliverables, shutdown, done — inherited from BaseAdapter
@@ -59,19 +63,24 @@ export class GeminiAdapter extends BaseAdapter {
     this.executionDone = new Promise<void>((resolve, reject) => {
       // gemini -p <prompt> --yolo  — non-interactive, auto-approve all tools
       // Read prompt from temp file via shell command substitution to avoid arg length issues
-      const geminiArgs = ['--yolo'];
+      const sandboxGeminiArgs = ['-p', this.promptText, '--yolo'];
+      if (this.modelVariant) {
+        sandboxGeminiArgs.push('--model', this.modelVariant);
+      }
+
+      const modelFlag = this.modelVariant ? ` --model ${this.modelVariant}` : '';
 
       const child = this.sandbox
         ? this.sandbox.spawnInContainer(
             this.teamId,
             this.workdir,
             this.geminiBin,
-            ['-p', this.promptText, '--yolo'],
+            sandboxGeminiArgs,
             claudeEnv(),
           )
         : spawn(
             '/bin/sh',
-            ['-c', `"${this.geminiBin}" -p "$(cat "${promptFile}")" --yolo`],
+            ['-c', `"${this.geminiBin}" -p "$(cat "${promptFile}")" --yolo${modelFlag}`],
             {
               cwd: this.workdir,
               stdio: ['ignore', 'pipe', 'pipe'],
