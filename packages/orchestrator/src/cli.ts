@@ -29,6 +29,10 @@ program
   .option('--time-limit <ms>', 'Override brief time limit in milliseconds')
   .option('--commentary', 'Enable live AI commentary during the competition')
   .option('--adversarial-judge', 'Enable dual judging with adversarial cross-check')
+  .option('--model-a <model>', 'Model variant for team A (e.g. claude-opus-4-6)')
+  .option('--model-b <model>', 'Model variant for team B')
+  .option('--model-c <model>', 'Model variant for team C')
+  .option('--model-d <model>', 'Model variant for team D')
   .option('--teams <teams>', 'Comma-separated list of model:persona strings (overrides --team-a/--team-b)')
   .action(async (briefPath: string, opts: {
     teamA: string;
@@ -40,6 +44,10 @@ program
     timeLimit?: string;
     commentary?: boolean;
     adversarialJudge?: boolean;
+    modelA?: string;
+    modelB?: string;
+    modelC?: string;
+    modelD?: string;
     teams?: string;
   }) => {
     try {
@@ -54,15 +62,20 @@ program
         brief.timeLimitMs = ms;
       }
 
-      const makeTeam = (id: string, modelSpec: string): Team => {
+      const makeTeam = (id: string, modelSpec: string, modelVariant?: string): Team => {
         const [model, persona = 'pragmatist'] = modelSpec.split(':');
-        return { id, model, persona };
+        return { id, model, persona, ...(modelVariant ? { modelVariant } : {}) };
       };
 
+      const modelVariants = [opts.modelA, opts.modelB, opts.modelC, opts.modelD];
       const teamIds = ['team-a', 'team-b', 'team-c', 'team-d'];
       const teams: Team[] = opts.teams
-        ? opts.teams.split(',').map((t: string, i: number) => makeTeam(teamIds[i] ?? `team-${i}`, t.trim()))
-        : [makeTeam('team-a', opts.teamA), makeTeam('team-b', opts.teamB)];
+        ? opts.teams.split(',').map((t: string, i: number) =>
+            makeTeam(teamIds[i] ?? `team-${i}`, t.trim(), modelVariants[i]))
+        : [
+            makeTeam('team-a', opts.teamA, opts.modelA),
+            makeTeam('team-b', opts.teamB, opts.modelB),
+          ];
 
       const runner = new CompetitionRunner(
         brief,
@@ -378,16 +391,23 @@ tournamentRunCmd
   .option('--commentary', 'enable AI commentary per match')
   .option('--log-dir <dir>', 'directory for event logs')
   .option('--time-limit <ms>', 'time limit per match in ms', (v: string) => parseInt(v, 10))
+  .option('--models <models>', 'Comma-separated model variants matching --teams order')
   .action(async (briefPath: string, opts: {
     teams: string;
     skipSandbox?: boolean;
     commentary?: boolean;
     logDir?: string;
     timeLimit?: number;
+    models?: string;
   }) => {
     try {
       const brief = await parseBrief(resolve(briefPath));
       const teams = opts.teams.split(',').map((t: string) => t.trim()).filter(Boolean);
+      const modelList = opts.models?.split(',').map((m: string) => m.trim()) ?? [];
+      const modelVariantMap: Record<string, string> = {};
+      teams.forEach((t: string, i: number) => {
+        if (modelList[i]) modelVariantMap[t] = modelList[i];
+      });
 
       if (teams.length < 2) {
         console.error('Tournament requires at least 2 teams');
@@ -406,6 +426,7 @@ tournamentRunCmd
         commentary: opts.commentary ?? false,
         logDir: opts.logDir,
         printResults: false,
+        modelVariants: Object.keys(modelVariantMap).length > 0 ? modelVariantMap : undefined,
       });
 
       let matchNum = 0;
