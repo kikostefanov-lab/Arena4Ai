@@ -26,7 +26,7 @@ export const RemotionRoot: React.FC = () => (
       id={COMPOSITION_ID}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       component={CompetitionRecap as any}
-      durationInFrames={1260}
+      durationInFrames={1950}
       fps={30}
       width={1080}
       height={1920}

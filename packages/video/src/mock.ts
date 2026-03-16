@@ -40,6 +40,13 @@ export const mockReelData: ReelData = {
     { relativeMs: 91000,  teamId: 'team-a', label: 'Created test_fizzbuzz.py', type: 'FILE_CREATE' },
   ],
   synthesisQuote: 'Claude demonstrated a more thorough approach by including unit tests alongside the implementation.',
+  keyEvents: [
+    { frameOffset: 30, teamId: 'team-a', type: 'strike' as const },
+    { frameOffset: 60, teamId: 'team-b', type: 'power' as const },
+    { frameOffset: 100, teamId: 'team-a', type: 'power' as const },
+    { frameOffset: 130, teamId: 'team-b', type: 'strike' as const },
+    { frameOffset: 155, teamId: 'team-a', type: 'hit' as const },
+  ],
   hasSynthesis: true,
   hasForge: true,
 };
