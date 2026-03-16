@@ -21,6 +21,13 @@ export interface ReelKeyMoment {
   type: 'FILE_CREATE' | 'TOOL_CALL' | 'ERROR';
 }
 
+/** Key event for BattleHighlights scene — maps to a gladiator animation */
+export interface ReelKeyEvent {
+  frameOffset: number;   // frame within the 180-frame BattleHighlights scene
+  teamId: string;        // which gladiator reacts
+  type: 'strike' | 'power' | 'hit';  // animation to trigger
+}
+
 export interface ReelData {
   competitionId: string;
   briefTitle: string;
@@ -29,6 +36,7 @@ export interface ReelData {
   teams: ReelTeam[];
   winnerId: string | null;
   keyMoments: ReelKeyMoment[];
+  keyEvents: ReelKeyEvent[];
   synthesisQuote?: string;         // first sentence of synthesis, markdown stripped
   hasSynthesis: boolean;
   hasForge: boolean;
