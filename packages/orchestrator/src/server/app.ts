@@ -21,6 +21,7 @@ import { createPersonasRouter } from './routes/personas.js';
 import { createAgentsRouter } from './routes/agents.js';
 import { generatePersonaRouter } from './routes/generate-persona.js';
 import { seedPersonasAgents } from '../db/seed-personas-agents.js';
+import { getModelRegistry } from '../adapters/model-registry.js';
 
 const CORS = {
   origin: '*',
@@ -92,6 +93,7 @@ export function createApp(): Application {
   );
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
+  app.get('/models', (_req, res) => res.json(getModelRegistry()));
   app.use('/competitions', createLimiter, createCompetitionsRouter(agentRepo));
   // Apply tighter limits to expensive post-completion routes
   app.post('/competitions/:id/forge', forgeSynthesisLimiter);
