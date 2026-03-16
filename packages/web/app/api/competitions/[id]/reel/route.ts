@@ -5,15 +5,9 @@ import { renderMedia, selectComposition } from '@remotion/renderer';
 import { orchestratorUrl, orchestratorHeaders } from '../../../../../lib/orchestrator';
 import { getBundle } from '../../../../../lib/remotion-bundle';
 import { COMPOSITION_ID } from '@arena/video';
-import type { ReelData, ReelTeam } from '@arena/video';
+import type { ReelData, ReelTeam, ReelKeyEvent } from '@arena/video';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ReelKeyEvent {
-  frameOffset: number;
-  teamId: string;
-  type: 'strike' | 'power' | 'hit';
-}
 
 type ReelStatus =
   | { status: 'idle' }

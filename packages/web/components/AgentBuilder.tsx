@@ -60,8 +60,13 @@ export function AgentBuilder({
       .then(r => r.json())
       .then((data: { providers: ProviderConfig[] }) => {
         setProviderConfigs(data.providers);
-        // If no modelVariant set yet (new agent), pick default for current provider
-        if (!editAgent?.modelVariant) {
+        if (editAgent?.modelVariant) {
+          // Check if existing modelVariant is a custom value not in presets
+          const config = data.providers.find(c => c.id === (editAgent.provider ?? provider));
+          const isPreset = config?.presets.some(p => p.id === editAgent.modelVariant);
+          if (!isPreset) setCustomModel(true);
+        } else {
+          // New agent — pick default for current provider
           const config = data.providers.find(c => c.id === provider);
           const defaultModel = config?.presets.find(m => m.default)?.id ?? config?.presets[0]?.id ?? '';
           setModelVariant(defaultModel);

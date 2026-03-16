@@ -24,6 +24,12 @@ const MODEL_VISUALS: Record<ModelBuild, ModelVisuals> = {
   default: { helmetStyle: 'hexagonal',     weaponType: 'none',        shoulderStyle: 'symmetric' },
 };
 
+/** Pre-computed hexagonal helmet vertices — avoids trig per frame */
+const HEXAGONAL_HELMET_PTS: [number, number][] = Array.from({ length: 6 }, (_, i) => {
+  const a = (Math.PI / 3) * i - Math.PI / 2;
+  return [Math.cos(a) * 8, Math.sin(a) * 8];
+});
+
 function lerpValue(current: number, target: number, t: number): number {
   return current + (target - current) * t;
 }
@@ -54,6 +60,10 @@ export class GladiatorRenderer {
   private breathPhase = 0;
   private energy = 0;
   private currentScale: number;
+  /** Pre-parsed RGB values from hex color — avoids per-frame parsing */
+  private readonly _r: number;
+  private readonly _g: number;
+  private readonly _b: number;
 
   constructor(
     teamId: string,
@@ -74,6 +84,10 @@ export class GladiatorRenderer {
     this.facing = facing;
     this.currentJoints = getPose('idle', build);
     this.targetJoints = getPose('idle', build);
+    const rgb = hexToRgb(color).split(',');
+    this._r = Number(rgb[0]);
+    this._g = Number(rgb[1]);
+    this._b = Number(rgb[2]);
   }
 
   setBasePose(pose: BasePose): void {
@@ -143,7 +157,7 @@ export class GladiatorRenderer {
     const weightShift = Math.sin(this.breathPhase * 0.4) * 1.5;
     ctx.translate(weightShift, 0);
 
-    const { r, g, b } = this.hexToRgb();
+    const r = this._r, g = this._g, b = this._b;
     const glow = 8 + this.energy * 14; // 8–22px shadow blur
     const joints = this.currentJoints;
 
@@ -269,16 +283,6 @@ export class GladiatorRenderer {
     ctx.stroke();
   }
 
-  /** Parse hex color to {r, g, b} */
-  private hexToRgb(): { r: number; g: number; b: number } {
-    const hex = this.color.replace('#', '');
-    return {
-      r: parseInt(hex.substring(0, 2), 16),
-      g: parseInt(hex.substring(2, 4), 16),
-      b: parseInt(hex.substring(4, 6), 16),
-    };
-  }
-
   /** Draw model-specific angular helmet around the head joint */
   private drawHelmet(ctx: CanvasRenderingContext2D, headX: number, headY: number, r: number, g: number, b: number): void {
     const visuals = MODEL_VISUALS[this.build];
@@ -314,12 +318,10 @@ export class GladiatorRenderer {
         ctx.lineTo(-6, 2);
         ctx.lineTo(-6, -6);
         break;
-      case 'hexagonal': // Default — standard hex
+      case 'hexagonal': // Default — standard hex (pre-computed vertices)
       default:
-        for (let i = 0; i < 6; i++) {
-          const angle = (Math.PI / 3) * i - Math.PI / 2;
-          const px = Math.cos(angle) * 8;
-          const py = Math.sin(angle) * 8;
+        for (let i = 0; i < HEXAGONAL_HELMET_PTS.length; i++) {
+          const [px, py] = HEXAGONAL_HELMET_PTS[i];
           i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
         }
         break;
