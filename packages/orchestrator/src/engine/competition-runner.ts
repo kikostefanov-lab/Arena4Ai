@@ -199,10 +199,12 @@ export class CompetitionRunner extends EventEmitter {
           // 1. New UI path: agentId → DB lookup
           // 2. Legacy/CLI path: provider + persona name → DB lookup → fallback to hardcoded
           let systemPrompt: string;
+          let resolvedAgent: { modelVariant?: string } | null = null;
 
           if (team.agentId && this.agentRepo) {
             // New UI path: agentId → DB lookup
             const agent = await this.agentRepo.get(team.agentId);
+            resolvedAgent = agent;
             systemPrompt = agent?.persona?.systemPrompt
               ?? resolvePersona(personaId ?? team.persona, brief.format).systemPrompt;
           } else if (this.agentRepo) {
@@ -212,6 +214,7 @@ export class CompetitionRunner extends EventEmitter {
               ? await this.agentRepo.getByProviderAndPersonaName(provider, pName)
               : null;
             if (dbAgent?.persona) {
+              resolvedAgent = dbAgent;
               systemPrompt = dbAgent.persona.systemPrompt;
               if (!team.agentId) (team as any).agentId = dbAgent.id;
             } else {
@@ -222,6 +225,8 @@ export class CompetitionRunner extends EventEmitter {
             systemPrompt = resolvePersona(personaId ?? team.persona, brief.format).systemPrompt;
           }
 
+          const modelVariant = (team as any).modelVariant ?? resolvedAgent?.modelVariant;
+
           let adapter: BaseAdapter;
           switch (provider) {
             case 'codex':
@@ -230,6 +235,7 @@ export class CompetitionRunner extends EventEmitter {
                 competitionId: this.competition.id,
                 codexBin: this.options.codexBin,
                 sandbox: sandboxManager,
+                modelVariant,
               });
               break;
             case 'gemini':
@@ -238,6 +244,7 @@ export class CompetitionRunner extends EventEmitter {
                 competitionId: this.competition.id,
                 geminiBin: this.options.geminiBin,
                 sandbox: sandboxManager,
+                modelVariant,
               });
               break;
             case 'claude':
@@ -247,6 +254,7 @@ export class CompetitionRunner extends EventEmitter {
                 competitionId: this.competition.id,
                 claudeBin: this.options.claudeBin,
                 sandbox: sandboxManager,
+                modelVariant,
               });
           }
 

@@ -10,6 +10,8 @@ export interface TournamentOptions extends RunOptions {
   type?: 'ROUND_ROBIN' | 'SWISS';
   /** Swiss only: number of rounds. Default: ceil(log2(teams.length)) */
   swissRounds?: number;
+  /** Map of model:persona string → model variant override */
+  modelVariants?: Record<string, string>;
 }
 
 export interface TournamentRanking {
@@ -137,9 +139,20 @@ async function runMatch(
   teamB: string,
   options: RunOptions,
   emitter: EventEmitter,
+  modelVariants?: Record<string, string>,
 ): Promise<{ matchId: string; winner: string | null; scorecards: Array<{ teamId: string; finalScore?: number }> }> {
-  const teamAEntry = { id: 'team-a', model: teamA, persona: teamA.split(':')[1] ?? 'default' };
-  const teamBEntry = { id: 'team-b', model: teamB, persona: teamB.split(':')[1] ?? 'default' };
+  const teamAEntry = {
+    id: 'team-a',
+    model: teamA,
+    persona: teamA.split(':')[1] ?? 'default',
+    ...(modelVariants?.[teamA] ? { modelVariant: modelVariants[teamA] } : {}),
+  };
+  const teamBEntry = {
+    id: 'team-b',
+    model: teamB,
+    persona: teamB.split(':')[1] ?? 'default',
+    ...(modelVariants?.[teamB] ? { modelVariant: modelVariants[teamB] } : {}),
+  };
 
   const runner = new CompetitionRunner(brief, [teamAEntry, teamBEntry], options);
   emitter.emit('matchStart', { teamA, teamB, competitionId: runner.competitionId, runner });
@@ -216,7 +229,7 @@ export class TournamentRunner extends EventEmitter {
       if (this._cancelled) break;
 
       try {
-        const { matchId, winner, scorecards } = await runMatch(brief, teamA, teamB, options, this);
+        const { matchId, winner, scorecards } = await runMatch(brief, teamA, teamB, options, this, options.modelVariants);
         matchIds.push(matchId);
 
         // Accumulate scores
@@ -293,7 +306,7 @@ export class TournamentRunner extends EventEmitter {
         if (this._cancelled) break;
 
         try {
-          const { matchId, winner, scorecards } = await runMatch(brief, teamA, teamB, options, this);
+          const { matchId, winner, scorecards } = await runMatch(brief, teamA, teamB, options, this, options.modelVariants);
           matchIds.push(matchId);
 
           // Track played pair

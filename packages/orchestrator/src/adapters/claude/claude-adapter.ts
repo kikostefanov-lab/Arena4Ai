@@ -18,6 +18,8 @@ export interface ClaudeAdapterOptions {
   claudeBin?: string;
   /** Optional sandbox manager for Docker-based isolation. */
   sandbox?: SandboxManager;
+  /** Optional model variant to pass as --model flag to the CLI. */
+  modelVariant?: string;
 }
 
 /**
@@ -34,10 +36,12 @@ export interface ClaudeAdapterOptions {
  */
 export class ClaudeAdapter extends BaseAdapter {
   private readonly claudeBin: string;
+  private modelVariant?: string;
 
   constructor(teamId: string, options: ClaudeAdapterOptions) {
     super(teamId, options.workdir, options.competitionId, options.sandbox);
     this.claudeBin = options.claudeBin ?? 'claude';
+    this.modelVariant = options.modelVariant;
   }
 
   // injectBrief, collectDeliverables, shutdown, done — inherited from BaseAdapter
@@ -56,6 +60,10 @@ export class ClaudeAdapter extends BaseAdapter {
         '--verbose',
         '--dangerously-skip-permissions',
       ];
+
+      if (this.modelVariant) {
+        claudeArgs.push('--model', this.modelVariant);
+      }
 
       const child = this.sandbox
         ? this.sandbox.spawnInContainer(

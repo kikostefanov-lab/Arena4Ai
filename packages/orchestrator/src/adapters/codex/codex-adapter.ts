@@ -23,6 +23,8 @@ export interface CodexAdapterOptions {
   codexBin?: string;
   /** Optional sandbox manager for Docker-based isolation. */
   sandbox?: SandboxManager;
+  /** Optional model variant to pass as -m flag to the CLI. */
+  modelVariant?: string;
 }
 
 /**
@@ -34,10 +36,12 @@ export interface CodexAdapterOptions {
  */
 export class CodexAdapter extends BaseAdapter {
   private readonly codexBin: string;
+  private modelVariant?: string;
 
   constructor(teamId: string, options: CodexAdapterOptions) {
     super(teamId, options.workdir, options.competitionId, options.sandbox);
     this.codexBin = options.codexBin ?? 'codex';
+    this.modelVariant = options.modelVariant;
   }
 
   // injectBrief, collectDeliverables, shutdown, done — inherited from BaseAdapter
@@ -59,17 +63,25 @@ export class CodexAdapter extends BaseAdapter {
       //   --skip-git-repo-check   — allow running in temp workdirs outside a git repo
       //   -s workspace-write      — allow writing files in the workdir
       // Use shell to read prompt from temp file via command substitution
+      const sandboxArgs = ['exec', '--skip-git-repo-check', '-s', 'workspace-write'];
+      if (this.modelVariant) {
+        sandboxArgs.push('-m', this.modelVariant);
+      }
+      sandboxArgs.push(this.promptText);
+
+      const modelFlag = this.modelVariant ? ` -m ${this.modelVariant}` : '';
+
       const child = this.sandbox
         ? this.sandbox.spawnInContainer(
             this.teamId,
             this.workdir,
             this.codexBin,
-            ['exec', '--skip-git-repo-check', '-s', 'workspace-write', this.promptText],
+            sandboxArgs,
             claudeEnv(),
           )
         : spawn(
             '/bin/sh',
-            ['-c', `"${this.codexBin}" exec --skip-git-repo-check -s workspace-write "$(cat "${promptFile}")"`],
+            ['-c', `"${this.codexBin}" exec --skip-git-repo-check -s workspace-write${modelFlag} "$(cat "${promptFile}")"`],
             {
               cwd: this.workdir,
               stdio: ['ignore', 'pipe', 'pipe'],

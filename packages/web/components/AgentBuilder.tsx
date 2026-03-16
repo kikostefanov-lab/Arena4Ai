@@ -14,11 +14,8 @@ import { PersonaForm, type PersonaFormData } from './PersonaForm';
 const PROVIDERS = ['claude', 'codex', 'gemini'] as const;
 type Provider = typeof PROVIDERS[number];
 
-const MODEL_VARIANTS: Record<Provider, string[]> = {
-  claude: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5-20251001'],
-  codex:  ['codex-standard'],
-  gemini: ['gemini-2-flash'],
-};
+interface ModelPreset { id: string; label: string; default?: boolean; }
+interface ProviderConfig { id: string; label: string; presets: ModelPreset[]; allowCustom: boolean; }
 
 interface Props {
   /** Pre-populated personas list from parent (skips internal fetch if provided). */
@@ -43,9 +40,12 @@ export function AgentBuilder({
   const [internalPersonas, setInternalPersonas] = useState<Persona[]>([]);
   const personas = personasProp ?? internalPersonas;
 
+  const [providerConfigs, setProviderConfigs] = useState<ProviderConfig[]>([]);
+  const [customModel, setCustomModel]         = useState(false);
+
   const [selectedPersonaId, setPersonaId]     = useState<string>(editAgent?.personaId ?? '');
   const [provider, setProvider]               = useState<Provider>((editAgent?.provider as Provider) ?? 'claude');
-  const [modelVariant, setModelVariant]       = useState<string>(editAgent?.modelVariant ?? 'claude-sonnet-4-6');
+  const [modelVariant, setModelVariant]       = useState<string>(editAgent?.modelVariant ?? '');
   const [name, setName]                       = useState<string>(forkedFromId ? `my-${editAgent?.name ?? ''}` : (editAgent?.name ?? ''));
   const [showPersonaForm, setShowPersonaForm] = useState(false);
   const [saving, setSaving]                   = useState(false);
@@ -53,6 +53,22 @@ export function AgentBuilder({
 
   const isEdit = !!editAgent && !forkedFromId;
   const isFork = !!forkedFromId;
+
+  // Fetch model registry
+  useEffect(() => {
+    fetch('/api/models')
+      .then(r => r.json())
+      .then((data: { providers: ProviderConfig[] }) => {
+        setProviderConfigs(data.providers);
+        // If no modelVariant set yet (new agent), pick default for current provider
+        if (!editAgent?.modelVariant) {
+          const config = data.providers.find(c => c.id === provider);
+          const defaultModel = config?.presets.find(m => m.default)?.id ?? config?.presets[0]?.id ?? '';
+          setModelVariant(defaultModel);
+        }
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Only fetch internally when parent doesn't supply the list
   useEffect(() => {
@@ -202,7 +218,13 @@ export function AgentBuilder({
             {PROVIDERS.map(p => (
               <button
                 key={p} type="button"
-                onClick={() => { setProvider(p); setModelVariant(MODEL_VARIANTS[p][0]); }}
+                onClick={() => {
+                  setProvider(p);
+                  const config = providerConfigs.find(c => c.id === p);
+                  const defaultModel = config?.presets.find(m => m.default)?.id ?? config?.presets[0]?.id ?? '';
+                  setModelVariant(defaultModel);
+                  setCustomModel(false);
+                }}
                 style={{
                   padding: '0.35rem 0.9rem', borderRadius: 20, fontSize: '0.75rem', cursor: 'pointer',
                   background: provider === p ? 'rgba(0,240,255,0.15)' : 'rgba(0,240,255,0.04)',
@@ -217,12 +239,60 @@ export function AgentBuilder({
           </div>
         </div>
 
-        {/* 3. Model variant */}
+        {/* 3. Model variant (combobox: presets + custom) */}
         <div>
           <label style={labelStyle}>Model Variant</label>
-          <select value={modelVariant} onChange={e => setModelVariant(e.target.value)} style={inputStyle}>
-            {MODEL_VARIANTS[provider].map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
+          {(() => {
+            const config = providerConfigs.find(c => c.id === provider);
+            const presets = config?.presets ?? [];
+            const allowCustom = config?.allowCustom ?? true;
+
+            if (customModel) {
+              return (
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <input
+                    value={modelVariant}
+                    onChange={e => setModelVariant(e.target.value)}
+                    placeholder="Enter model ID…"
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const defaultModel = presets.find(m => m.default)?.id ?? presets[0]?.id ?? '';
+                      setModelVariant(defaultModel);
+                      setCustomModel(false);
+                    }}
+                    style={{
+                      fontSize: '0.65rem', padding: '0.35rem 0.7rem', background: 'rgba(0,240,255,0.06)',
+                      border: '1px solid rgba(0,240,255,0.2)', borderRadius: 4, color: '#00f0ff',
+                      cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: MONOSPACE_FONT,
+                    }}
+                  >
+                    Presets
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <select
+                value={modelVariant}
+                onChange={e => {
+                  if (e.target.value === '__custom__') {
+                    setCustomModel(true);
+                    setModelVariant('');
+                  } else {
+                    setModelVariant(e.target.value);
+                  }
+                }}
+                style={inputStyle}
+              >
+                {presets.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+                {allowCustom && <option value="__custom__">Custom model…</option>}
+              </select>
+            );
+          })()}
         </div>
 
         {/* 4. Name */}
