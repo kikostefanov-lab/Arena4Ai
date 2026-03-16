@@ -1991,6 +1991,11 @@ export default function NewCompetitionPage() {
                                     }}
                                   >
                                     {agent.persona?.avatar ?? '🤖'} {agent.name}
+                                    {agent.modelVariant && (
+                                      <span style={{ fontSize: '0.5rem', color: '#4a8fa8', display: 'block', marginTop: 2 }}>
+                                        {agent.modelVariant}
+                                      </span>
+                                    )}
                                   </button>
                                 );
                               })
