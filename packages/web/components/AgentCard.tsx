@@ -76,7 +76,7 @@ export function AgentCard({ agent, onEdit, onFork, onRetire }: AgentCardProps) {
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
             }}>
-              {agent.provider}
+              {agent.provider}{agent.modelVariant ? ` · ${agent.modelVariant}` : ''}
             </span>
             {/* Fork badge */}
             {agent.forkedFromId && (
