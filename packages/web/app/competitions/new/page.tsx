@@ -613,7 +613,8 @@ export default function NewCompetitionPage() {
       if (brief.constraints) setConstraints(Array.isArray(brief.constraints) ? brief.constraints.join('\n') : brief.constraints);
       if (brief.deliverables) setDeliverables(Array.isArray(brief.deliverables) ? brief.deliverables.join('\n') : brief.deliverables);
       if (brief.expectedOutput !== undefined) setExpectedOutput(brief.expectedOutput);
-      if (brief.criteria) setCriteria(brief.criteria);
+      const briefCriteria = brief.rubric?.criteria ?? brief.criteria;
+      if (briefCriteria) setCriteria(briefCriteria);
       if (brief.deliverableType) setDeliverableType(brief.deliverableType);
       if (brief.domainHint && VALID_DOMAIN_HINTS.includes(brief.domainHint as DomainHint)) {
         setDomainHint(brief.domainHint as DomainHint);
@@ -725,7 +726,8 @@ export default function NewCompetitionPage() {
       if (brief.constraints) setConstraints(Array.isArray(brief.constraints) ? brief.constraints.join('\n') : brief.constraints);
       if (brief.deliverables) setDeliverables(Array.isArray(brief.deliverables) ? brief.deliverables.join('\n') : brief.deliverables);
       if (brief.expectedOutput !== undefined) setExpectedOutput(brief.expectedOutput);
-      if (brief.criteria) setCriteria(brief.criteria);
+      const briefCriteria = brief.rubric?.criteria ?? brief.criteria;
+      if (briefCriteria) setCriteria(briefCriteria);
       setShowGenerator(false);
       setIdeaText('');
     } catch {
