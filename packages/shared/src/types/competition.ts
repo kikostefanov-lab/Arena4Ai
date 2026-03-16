@@ -6,6 +6,7 @@ export interface Team {
   model: string;        // 'claude:architect'
   persona: string;      // resolved system prompt
   agentId?: string;     // optional DB agent id (new UI path)
+  modelVariant?: string; // optional model variant (e.g. 'o3', 'sonnet-4')
 }
 
 export interface RubricCriterion {
