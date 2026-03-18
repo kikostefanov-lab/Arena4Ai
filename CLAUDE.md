@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Arena4Ai — competitive AI orchestration platform. Two (or more) AI agents race to solve a structured brief, then a cross-judge scores their deliverables. Supports Claude, Codex, and Gemini.
 
-**Status: Sprint 7B complete. 255 tests passing.**
+**Status: Sprint 7D complete. 255 tests passing.**
 
 ## Running the Stack
 
@@ -42,9 +42,16 @@ npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
   --team-a claude:architect --team-b claude:speedrunner \
   --skip-sandbox --commentary
 
+# With specific model variants
+DATABASE_URL=postgresql://localhost/arena npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
+  --team-a claude:architect --model-a claude-opus-4-6 \
+  --team-b codex:speedrunner --model-b o3 \
+  --skip-sandbox --time-limit 120000
+
 # Round-robin tournament (all pairs compete)
 npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml \
   --teams claude:architect,claude:speedrunner,codex:standard \
+  --models claude-opus-4-6,claude-sonnet-4-6,o4-mini \
   --skip-sandbox
 
 # Re-evaluate completed competitions with new judge context
@@ -290,8 +297,22 @@ Enable dual judging (standard + adversarial) for higher-quality scoring.
 - Competition runner auto-resolves `agentId` before execution, so stats accumulate regardless of launch method (CLI, New Battle, or Armory)
 - CLI now wires `agentRepo` when `DATABASE_URL` is set
 
-### Live battle visualization (Sprint 6)
-Competition detail page default view. Canvas 2D arena with procedural wireframe TRON gladiators.
+### Model registry & variant selection (Sprint 7D)
+`packages/orchestrator/src/adapters/model-registry.ts` — central registry of known models per provider.
+- `GET /models` endpoint returns `{ providers: ProviderConfig[] }` with presets + `allowCustom: true`
+- `Team.modelVariant?: string` — optional field on Team, flows through competition runner to adapter CLI args
+- Adapters append model flag if `modelVariant` is set: Claude `--model`, Codex `-m`, Gemini `--model`
+- Resolution priority: explicit `team.modelVariant` (CLI flag) > `agent.modelVariant` (DB) > undefined (CLI default)
+- AgentBuilder UI: combobox with preset dropdown + freeform text input for custom model IDs
+- CLI: `--model-a`/`--model-b`/`--model-c`/`--model-d` for `run`, `--models` comma-list for `tournament`
+
+Presets per provider (add new models by editing `model-registry.ts`):
+- **Claude**: `claude-sonnet-4-6` (default), `claude-opus-4-6`, `claude-haiku-4-5-20251001`
+- **Codex**: `o4-mini` (default), `o3`, `codex-mini`
+- **Gemini**: `gemini-2.5-flash` (default), `gemini-2.5-pro`, `gemini-2.0-flash`
+
+### Live battle visualization (Sprint 6 + 7C)
+Competition detail page default view. Canvas 2D arena with armored TRON gladiators.
 - `packages/web/components/BattleArena.tsx` — main component (Canvas + HUD overlay + mini-log)
 - `packages/web/lib/arena/` — gladiator renderer, poses (8 states × 3 builds), event processor, particles, types
 - Momentum system: events → energy (0–1) → posture (aggressive/neutral/defensive)
@@ -301,6 +322,17 @@ Competition detail page default view. Canvas 2D arena with procedural wireframe 
 - N-team ring formation for 3-4 teams, face-off layout for 2 teams
 - End sequence: freeze→judging scan→winner triumph/loser kneel
 - No backend changes — pure client-side Canvas 2D + React
+
+### Armored gladiators (Sprint 7C)
+Model-specific armored TRON warriors replacing stick figures:
+- **Claude**: tall-crown helmet, identity disc weapon, sharp pauldrons
+- **Codex**: heavy flat-top helmet, dual arm blades, bulky pauldrons
+- **Gemini**: sleek pointed helmet, energy staff, asymmetric pauldrons
+- Shared armor: chest plate (pentagon), hip plate (trapezoid), shin guards, circuit traces, energy aura, ground reflections
+- Idle animations: breathing bob, weight shift, weapon activity, circuit flow, aura pulse, visor flicker
+- Energy-driven intensity: dim glow at low energy → bright glow + forward lean at high energy
+- Scale: ~2.2× base (up from ~1.4×), reduced energy boost ratio
+- RGB cached in constructor for per-frame performance; hexagonal helmet pre-computed as module constant
 
 ### DB persistence for CLI `run`
 When `DATABASE_URL` is set, the CLI `run` command persists to DB:
@@ -329,7 +361,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 ### Remotion video reels
 On-demand ESPN-style recap video generation from completed competition pages.
 
-**Package:** `packages/video/` (`@arena/video`) — Remotion 4.x, 1080×1920 @ 30fps, 42s (1260 frames)
+**Package:** `packages/video/` (`@arena/video`) — Remotion 4.x, 1080×1920 @ 30fps, 65s (1950 frames)
 
 **API routes (Next.js web):**
 - `POST /api/competitions/:id/reel` — trigger render (202 async); atomic lock via `{ flag: 'wx' }` prevents double-renders; re-POSTing a done/error reel deletes old files and re-renders
@@ -345,25 +377,29 @@ On-demand ESPN-style recap video generation from completed competition pages.
 - `team.persona` is a separate field on the team object; `team.model` is just the model prefix without `:persona`
 - Brief rubric `description` is often a placeholder `">"` — fall back to formatting the `id` (kebab-case → Title Case)
 
-**Scene timing:**
+**Scene timing (Sprint 7C — 65s total):**
 
 | Scene | Frames | Duration |
 |---|---|---|
-| IntroBumper | 0–90 | 3s |
-| Matchup | 90–210 | 4s |
-| TheBrief | 210–330 | 4s |
-| KeyMoments | 330–570 | 8s |
-| ScoreReveal | 570–900 | 11s |
-| Winner | 900–990 | 3s |
-| GoDeeper | 990–1170 | 6s |
-| Outro | 1170–1260 | 3s |
+| IntroBumper | 0–120 | 4s |
+| Matchup | 120–300 | 6s |
+| BattleHighlights | 300–480 | 6s (NEW) |
+| TheBrief | 480–660 | 6s |
+| KeyMoments | 660–960 | 10s |
+| ScoreReveal | 960–1380 | 14s |
+| Winner | 1380–1500 | 4s |
+| GoDeeper | 1500–1770 | 9s |
+| Outro | 1770–1950 | 6s |
 
 **Scene design:**
 - **Matchup**: N-team support; each team swoops from unique direction (left/top/right by index); badge size adapts to team count
+- **BattleHighlights**: Canvas arena with `VideoGladiator` renderer; 4-6 key events from competition history drive gladiator animations; `ReelKeyEvent` type carries `frameOffset`, `teamId`, `type`
 - **TheBrief**: Description truncated to 130 chars; criteria as animated pip+icon rows
 - **KeyMoments**: Per-agent directional swoop (agent 0=left, 1=right, 2=bottom, 3=top); card layout with team color stripe
 - **ScoreReveal**: Full scores grid all N teams × all criteria with animated bars; Ken Burns pan+zoom; ranked final scores
 - **Winner**: Radiating spokes, conic score ring, top-3 criteria, pulsing glow
+
+**VideoGladiator** (`packages/video/src/components/VideoGladiator.ts`): Frame-based gladiator renderer for Remotion. Pure function — no mutable state, no rAF. Full armor rendering (shoulders, plates, weapons, reflection, helmet) matching the live arena gladiator. Uses deterministic `Math.sin(frame*)` instead of `Math.random()` for Remotion compatibility.
 
 **Audio:** `packages/video/public/arena4ai-theme.mp3` — plays via Remotion `<Audio loop>` at 75% volume, 1.5s fade-in, 2s fade-out
 
