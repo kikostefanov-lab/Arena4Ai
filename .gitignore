@@ -11,3 +11,4 @@ runs/
 .DS_Store
 .superpowers/
 .worktrees/
+.wrangler/
