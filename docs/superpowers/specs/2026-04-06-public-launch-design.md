@@ -429,3 +429,47 @@ The phases are sequenced so each one ships independently and the platform stays 
 5. **Image registry** — GitHub Container Registry (free for public), Docker Hub, or cloud-native (ECR/GCR)?
 
 These don't block the design — they're decisions to make during Phase 0.
+
+---
+
+## Appendix A — Estimated Monthly Run Cost
+
+Infrastructure cost to operate the open beta. **LLM API costs are zero for us — every LLM call uses the user's own API keys (BYOK).** Engineering build cost is intentionally not included here; it depends on who's building it.
+
+| Component | Provider options | Spec | Est. Monthly |
+|---|---|---|---|
+| K8s cluster | DO Kubernetes / GKE Autopilot | 3 nodes × 2vCPU / 4GB | $90 – $150 |
+| Managed PostgreSQL | Neon / Supabase / RDS | 2vCPU / 4GB / 50GB | $30 – $80 |
+| Managed Redis | Upstash / DO / ElastiCache | 1GB plan | $10 – $25 |
+| KMS | AWS KMS / GCP KMS | ~10K decrypts/mo | $1 – $5 |
+| Object storage (reels) | S3 / GCS / R2 | <100GB + egress | $5 – $15 |
+| Container registry | GHCR (free) / ECR | Public images free | $0 – $5 |
+| DNS + TLS | Cloudflare / cert-manager | Free tier | $0 |
+| Transactional email | Resend / Postmark | Free tier ~3K/mo | $0 – $15 |
+| Error tracking | Sentry | Free 5K events / Team plan | $0 – $26 |
+| Uptime monitoring | BetterStack / UptimeRobot | Free / cheap tier | $0 – $10 |
+| Domain (`arena4.ai`) | Registrar | ~$70/yr .ai TLD | ~$6 |
+| Stripe fees | Stripe | 2.9% + $0.30 per transaction | variable |
+| **Total infrastructure** | | | **~$150 – $350/mo** |
+
+### Cost notes
+
+- **Sandbox compute is the swing factor** — the cluster cost above assumes bursty usage with most pods idle. Sustained heavy load (lots of long competitions running concurrently) could push the cluster to ~$300+/mo on its own.
+- **Cheapest viable path**: DigitalOcean Kubernetes ($72/mo for 3 nodes) + Neon free tier + Upstash free tier + Cloudflare R2 = **under $100/mo** for early beta.
+- **Most expensive path**: GKE Autopilot + RDS + ElastiCache + Sentry Team + paid email = **~$400/mo**.
+- **Free-tier squeeze**: many vendors above (Neon, Upstash, Sentry, Resend, Cloudflare) have free tiers generous enough for the first hundred users — actual month-1 spend is likely closer to **$80–$120**.
+
+### Break-even targets
+
+| Subscribers needed | Cheapest path ($100/mo) | Mid path ($250/mo) | High path ($400/mo) |
+|---|---|---|---|
+| Pro only ($19/mo) | 6 | 14 | 22 |
+| Team only ($99/mo) | 2 | 3 | 5 |
+| Mixed (4 Pro + 1 Team) | $175/mo — covers cheapest + mid |
+
+### Not included in this estimate
+
+- **Engineering time** to build the 6 phases — scope this based on who's implementing it.
+- **One-time setup costs**: domain registration, Stripe verification, OAuth app setup, KMS key creation. All mostly free or trivial one-time fees.
+- **Legal**: ToS and Privacy Policy templates are available for free; a lawyer review for SaaS with payment processing is typically **$500–$2000 one-time** if desired.
+- **Marketing / customer acquisition**: ads, content, launch-day promotion — entirely discretionary.
