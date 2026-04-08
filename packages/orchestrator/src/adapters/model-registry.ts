@@ -47,7 +47,6 @@ const MODEL_REGISTRY: ProviderConfig[] = [
     presets: [
       { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', default: true },
       { id: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
-      { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
     ],
   },
 ];
