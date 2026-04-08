@@ -12,3 +12,6 @@ runs/
 .superpowers/
 .worktrees/
 .wrangler/
+
+# Database backups
+*.dump
