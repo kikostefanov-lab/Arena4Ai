@@ -8,6 +8,7 @@ import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
 import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
+import { getDefaultModel } from '../model-registry.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
 export interface GeminiAdapterOptions {
@@ -43,7 +44,7 @@ export class GeminiAdapter extends BaseAdapter {
   constructor(teamId: string, options: GeminiAdapterOptions) {
     super(teamId, options.workdir, options.competitionId, options.sandbox);
     this.geminiBin = options.geminiBin ?? 'gemini';
-    this.modelVariant = options.modelVariant;
+    this.modelVariant = options.modelVariant ?? getDefaultModel('gemini');
   }
 
   // injectBrief, collectDeliverables, shutdown, done — inherited from BaseAdapter

@@ -309,7 +309,7 @@ Enable dual judging (standard + adversarial) for higher-quality scoring.
 Presets per provider (add new models by editing `model-registry.ts`):
 - **Claude**: `claude-sonnet-4-6` (default), `claude-opus-4-6`, `claude-haiku-4-5-20251001`
 - **Codex**: `o4-mini` (default), `o3`, `codex-mini`
-- **Gemini**: `gemini-2.5-flash` (default), `gemini-2.5-pro`, `gemini-2.0-flash`
+- **Gemini**: `gemini-2.5-flash` (default), `gemini-2.5-pro`
 
 ### Live battle visualization (Sprint 6 + 7C)
 Competition detail page default view. Canvas 2D arena with armored TRON gladiators.
