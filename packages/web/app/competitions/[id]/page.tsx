@@ -6,7 +6,7 @@ import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
-import BattleArena from '../../../components/BattleArena';
+import ArenaViewerV2 from '../../../components/ArenaViewerV2';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -2968,7 +2968,7 @@ export default function CompetitionPage() {
         {/* ── Battle Arena / Lanes ─────────────────────────────────────────── */}
         {effectiveView === 'battle' ? (
           <div style={{ flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0, overflow: 'hidden' }}>
-            <BattleArena
+            <ArenaViewerV2
               teams={orderedTeams}
               events={allEventsSorted}
               state={state}

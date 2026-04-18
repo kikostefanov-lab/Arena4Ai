@@ -311,28 +311,29 @@ Presets per provider (add new models by editing `model-registry.ts`):
 - **Codex**: `o4-mini` (default), `o3`, `codex-mini`
 - **Gemini**: `gemini-2.5-flash` (default), `gemini-2.5-pro`
 
-### Live battle visualization (Sprint 6 + 7C)
-Competition detail page default view. Canvas 2D arena with armored TRON gladiators.
-- `packages/web/components/BattleArena.tsx` — main component (Canvas + HUD overlay + mini-log)
-- `packages/web/lib/arena/` — gladiator renderer, poses (8 states × 3 builds), event processor, particles, types
-- Momentum system: events → energy (0–1) → posture (aggressive/neutral/defensive)
-- 8 animation states: idle, thinking, strike, power, hit, triumph, kneel, salute
-- Event mapping: FILE_CREATE/FILE_MODIFY→strike, TOOL_CALL→power, ERROR→hit, REASONING→thinking (sustained)
+### Live battle visualization — Arena v2 (TRON Broadcast)
+Competition detail page default view. Canvas 2D arena with armored TRON gladiators (v2 renderer ported from design handoff).
+- `packages/web/components/ArenaViewerV2.tsx` — main component (Canvas + inline HUD: LaneHeader, MomentumMeter, PhaseChip, WinnerBanner)
+- `packages/web/lib/arena/gladiator-v2.ts` — GladiatorV2 class; public API: `setBase` / `setTerminal` / `flash` / `setEnergy` / `update` / `draw`
+- `packages/web/lib/arena/poses-v2.ts` — 8-pose library (idle, thinking, strike, power, hit, triumph, kneel, salute) + model visuals config
+- `packages/web/lib/arena/ring-v2.ts` — ArenaRingV2 (floor grid, rings, phase tint, pulses) + ShockwavesV2 (particles/confetti)
+- `packages/web/lib/arena/classify-v2.ts` — `classifyEventV2()` (event type → flash pose) + `stateToPhase()` (competition state → arena phase; no backend event changes needed)
+- `packages/web/lib/arena/poses.ts` — retained for `resolveModelBuild()` only
+- Momentum system: recent events → energy (0–1 per team, 3s window) → posture; momentum meter over 10s window
+- 8 animation states, flash > terminal > base priority in `_updateTarget()`
+- Event mapping: FILE_CREATE/FILE_MODIFY→strike, TOOL_CALL→power, ERROR→hit, REASONING→thinking (transient)
 - View toggle: `⚔ Battle` / `📋 Log` (persisted in localStorage, mobile falls back to Log)
-- N-team ring formation for 3-4 teams, face-off layout for 2 teams
-- End sequence: freeze→judging scan→winner triumph/loser kneel
-- No backend changes — pure client-side Canvas 2D + React
+- 2-team face-off layout; N-team ring formation (gladiator canvas supports it, HUD currently 2-team only)
+- End sequence: phase freeze → judging tint → winner triumph (arms high) + loser kneel + confetti
+- **Figure style:** armored silhouette with capsule limbs (dark body + bright TRON circuit edge), chest plate with center seam + sternum branches + glowing core gem, trapezoid hip plate with belt glow, model-specific helmets + pauldrons + weapons
+  - **Claude**: tall-crown helmet, identity disc weapon (spins on hand), sharp pauldrons
+  - **Codex**: heavy flat-top helmet, dual forearm blades, bulky pauldrons
+  - **Gemini**: sleek pointed helmet, energy staff, asymmetric pauldrons
+- Figure scale ~1.8× on a 1200×640 logical canvas (figure ~180 units tall)
+- Init effect keyed on `teamsKey` (stable signature of id|model|persona joined) — prevents re-init on every parent render (critical: re-init wipes terminal poses)
+- No backend changes — pure client-side Canvas 2D + React; phase derived from existing competition state
 
-### Armored gladiators (Sprint 7C)
-Model-specific armored TRON warriors replacing stick figures:
-- **Claude**: tall-crown helmet, identity disc weapon, sharp pauldrons
-- **Codex**: heavy flat-top helmet, dual arm blades, bulky pauldrons
-- **Gemini**: sleek pointed helmet, energy staff, asymmetric pauldrons
-- Shared armor: chest plate (pentagon), hip plate (trapezoid), shin guards, circuit traces, energy aura, ground reflections
-- Idle animations: breathing bob, weight shift, weapon activity, circuit flow, aura pulse, visor flicker
-- Energy-driven intensity: dim glow at low energy → bright glow + forward lean at high energy
-- Scale: ~2.2× base (up from ~1.4×), reduced energy boost ratio
-- RGB cached in constructor for per-frame performance; hexagonal helmet pre-computed as module constant
+**Remotion sync:** `packages/video/src/components/VideoGladiator.ts` uses the same v2 pose library + armor so reels match the live arena. Pure function (frame-based, no state) — ambient motion derived via `Math.sin(frame * k)`. Supports optional `terminal: 'triumph' | 'kneel'` for Winner scene.
 
 ### DB persistence for CLI `run`
 When `DATABASE_URL` is set, the CLI `run` command persists to DB:
