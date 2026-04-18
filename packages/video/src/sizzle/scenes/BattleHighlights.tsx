@@ -1,5 +1,5 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate } from 'remotion';
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { TronGrid } from '../../components/TronGrid';
 import { renderVideoGladiator, GladiatorEvent } from '../../components/VideoGladiator';
 import { ACCENT_CYAN, BG_DARK, ORBITRON, TEXT_PRIMARY, TEXT_MUTED, getModelColor } from '../../tokens';
@@ -53,7 +53,7 @@ export const BattleHighlights: React.FC = () => {
   const scale = Math.min(width, height) * 0.0028;
 
   // Shockwave pulses when strikes land (simple additive draw on canvas)
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -125,7 +125,7 @@ export const BattleHighlights: React.FC = () => {
         ref={canvasRef}
         width={width}
         height={height}
-        style={{ width: '100%', height: '100%', display: 'block' }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
       />
 
       {/* LIVE chip */}

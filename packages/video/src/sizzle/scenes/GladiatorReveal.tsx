@@ -1,5 +1,5 @@
 import { AbsoluteFill, useCurrentFrame, useVideoConfig, interpolate, spring } from 'remotion';
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import { TronGrid } from '../../components/TronGrid';
 import { renderVideoGladiator } from '../../components/VideoGladiator';
 import { ACCENT_CYAN, BG_DARK, ORBITRON, TEXT_PRIMARY, TEXT_MUTED, getModelColor } from '../../tokens';
@@ -23,7 +23,7 @@ export const GladiatorReveal: React.FC = () => {
   const exit = interpolate(frame, [190, 210], [1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
 
   // Canvas rendering — 3 gladiators positioned in the ring
-  useEffect(() => {
+  useLayoutEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
@@ -83,7 +83,7 @@ export const GladiatorReveal: React.FC = () => {
         ref={canvasRef}
         width={width}
         height={height}
-        style={{ width: '100%', height: '100%', display: 'block' }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
       />
 
       <AbsoluteFill style={{
