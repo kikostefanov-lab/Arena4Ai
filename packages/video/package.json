@@ -8,20 +8,24 @@
     "build": "tsc -p tsconfig.json",
     "build:watch": "tsc -p tsconfig.json --watch",
     "studio": "npx remotion studio src/index.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sizzle:capture": "tsx scripts/capture-sizzle-assets.ts",
+    "sizzle:render": "tsx scripts/render-sizzle.ts",
+    "sizzle": "npm run sizzle:capture && npm run sizzle:render"
   },
   "dependencies": {
-    "remotion": "^4.0.0",
-    "@remotion/renderer": "^4.0.0",
     "@remotion/bundler": "^4.0.0",
     "@remotion/google-fonts": "^4.0.0",
+    "@remotion/renderer": "^4.0.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "remotion": "^4.0.0"
   },
   "devDependencies": {
     "@remotion/cli": "^4.0.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
+    "playwright": "^1.59.1",
     "typescript": "^5.4.0"
   }
 }

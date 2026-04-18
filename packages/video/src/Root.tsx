@@ -4,12 +4,11 @@ import { loadFont } from '@remotion/google-fonts/Orbitron';
 import { CompetitionRecap } from './compositions/CompetitionRecap';
 import { mockReelData } from './mock';
 import { COMPOSITION_ID } from './index';
-import type { ReelData } from './types';
+import { Sizzle, SIZZLE_TOTAL_FRAMES } from './sizzle/Sizzle';
 
 const { waitUntilDone } = loadFont();
 
 // FontLoader: ensures Orbitron is loaded before any frame is captured.
-// Uses useState + useEffect to call delayRender exactly once.
 const FontLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [handle] = useState(() => delayRender('Loading Orbitron font'));
 
@@ -22,6 +21,7 @@ const FontLoader: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 export const RemotionRoot: React.FC = () => (
   <FontLoader>
+    {/* Per-competition recap reel */}
     <Composition
       id={COMPOSITION_ID}
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,6 +31,36 @@ export const RemotionRoot: React.FC = () => (
       width={1080}
       height={1920}
       defaultProps={mockReelData}
+    />
+
+    {/* Sizzle — landscape (YouTube, site hero) */}
+    <Composition
+      id="SizzleLandscape"
+      component={Sizzle}
+      durationInFrames={SIZZLE_TOTAL_FRAMES}
+      fps={30}
+      width={1920}
+      height={1080}
+    />
+
+    {/* Sizzle — portrait (Twitter, IG Reels, TikTok) */}
+    <Composition
+      id="SizzlePortrait"
+      component={Sizzle}
+      durationInFrames={SIZZLE_TOTAL_FRAMES}
+      fps={30}
+      width={1080}
+      height={1920}
+    />
+
+    {/* Sizzle — square (IG feed) */}
+    <Composition
+      id="SizzleSquare"
+      component={Sizzle}
+      durationInFrames={SIZZLE_TOTAL_FRAMES}
+      fps={30}
+      width={1080}
+      height={1080}
     />
   </FontLoader>
 );

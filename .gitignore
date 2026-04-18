@@ -21,3 +21,6 @@ runs/
 .playwright-mcp/
 /arena-v2-*.png
 /homepage-*.png
+
+# Rendered video outputs (regenerable from sources)
+packages/video/out/
