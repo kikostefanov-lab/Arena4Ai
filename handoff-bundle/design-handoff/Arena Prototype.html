@@ -1,0 +1,1652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Arena4Ai — Battle Arena Prototype (TRON Broadcast)</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  html, body { margin: 0; padding: 0; background: #000408; }
+  body {
+    background-image:
+      linear-gradient(rgba(0,240,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,240,255,0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-attachment: fixed;
+  }
+  #root { min-height: 100vh; }
+  input[type="range"] { cursor: pointer; }
+  code { font-family: 'JetBrains Mono', monospace; color: #ffd27a; background: rgba(255,102,0,0.08); padding: 0 4px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="env,react">
+/* global React */
+// GladiatorRenderer v2 — TRON Broadcast direction
+// Canvas 2D. Armored silhouette, team color stroke, idle swagger, flash choreography.
+//
+// Public API mirrors the real renderer so porting back is a near-copy:
+//   const g = new GladiatorV2({ teamId, build, color, x, y, scale, facing });
+//   g.setBase('idle' | 'thinking');
+//   g.setTerminal('triumph' | 'kneel' | 'salute' | null);
+//   g.flash('strike' | 'power' | 'hit');       // 400–500ms auto-clear
+//   g.setEnergy(0..1);                         // affects stance aggression
+//   g.update(dtMs, now);
+//   g.draw(ctx);
+//
+// Joints use the same 14-joint schema as lib/arena/types.ts.
+
+(function(){
+  const JOINT_NAMES = [
+    'head','neck','shoulderL','shoulderR','elbowL','elbowR',
+    'handL','handR','hipL','hipR','kneeL','kneeR','footL','footR',
+  ];
+
+  // --- Pose library — upright TRON Ares stance
+  // Figure is ~160 tall at scale=1. 8-heads-tall proportion.
+  // y=0 is hip line. Head crown around y=-112. Feet at y=+80.
+  const POSES = {
+    idle: {
+      head:[0,-100], neck:[0,-82],
+      shoulderL:[-20,-74], shoulderR:[20,-74],
+      elbowL:[-24,-42], elbowR:[24,-42],
+      handL:[-22,-10], handR:[22,-10],
+      hipL:[-12,0], hipR:[12,0],
+      kneeL:[-12,38], kneeR:[12,38],
+      footL:[-13,78], footR:[13,78],
+    },
+    thinking: {
+      head:[2,-100], neck:[0,-82],
+      shoulderL:[-20,-74], shoulderR:[20,-74],
+      elbowL:[-26,-46], elbowR:[18,-48],
+      handL:[-20,-14], handR:[8,-78], // chin-rub
+      hipL:[-12,0], hipR:[12,0],
+      kneeL:[-12,38], kneeR:[12,38],
+      footL:[-13,78], footR:[13,78],
+    },
+    strike: {
+      head:[-2,-98], neck:[0,-80],
+      shoulderL:[-18,-73], shoulderR:[22,-72],
+      elbowL:[-28,-48], elbowR:[36,-60],
+      handL:[-26,-18], handR:[58,-52],  // thrust forward
+      hipL:[-12,0], hipR:[14,0],
+      kneeL:[-14,36], kneeR:[16,40],
+      footL:[-20,78], footR:[16,78],
+    },
+    power: {
+      head:[0,-104], neck:[0,-84],
+      shoulderL:[-24,-76], shoulderR:[24,-76],
+      elbowL:[-36,-58], elbowR:[36,-58],
+      handL:[-34,-96], handR:[34,-96], // arms raised high
+      hipL:[-12,0], hipR:[12,0],
+      kneeL:[-12,38], kneeR:[12,38],
+      footL:[-13,78], footR:[13,78],
+    },
+    hit: {
+      head:[6,-92], neck:[3,-76], // knocked back
+      shoulderL:[-14,-68], shoulderR:[22,-66],
+      elbowL:[-20,-42], elbowR:[28,-38],
+      handL:[-18,-12], handR:[30,-6],
+      hipL:[-10,4], hipR:[14,4],
+      kneeL:[-12,40], kneeR:[16,42],
+      footL:[-18,80], footR:[18,80],
+    },
+    triumph: {
+      head:[0,-108], neck:[0,-88],
+      shoulderL:[-22,-80], shoulderR:[22,-80],
+      elbowL:[-34,-100], elbowR:[34,-100],
+      handL:[-32,-140], handR:[32,-140], // fists high
+      hipL:[-12,0], hipR:[12,0],
+      kneeL:[-12,38], kneeR:[12,38],
+      footL:[-13,78], footR:[13,78],
+    },
+    kneel: {
+      head:[4,-72], neck:[2,-58],
+      shoulderL:[-18,-52], shoulderR:[20,-52],
+      elbowL:[-22,-28], elbowR:[24,-28],
+      handL:[-20,-4], handR:[22,-4],
+      hipL:[-12,20], hipR:[12,20],
+      kneeL:[-14,60], kneeR:[14,40],  // one knee down
+      footL:[-14,82], footR:[14,82],
+    },
+    salute: {
+      head:[0,-100], neck:[0,-82],
+      shoulderL:[-20,-74], shoulderR:[20,-74],
+      elbowL:[-24,-42], elbowR:[12,-66],
+      handL:[-22,-10], handR:[2,-98], // hand to brow
+      hipL:[-12,0], hipR:[12,0],
+      kneeL:[-12,38], kneeR:[12,38],
+      footL:[-13,78], footR:[13,78],
+    },
+  };
+
+  // Deep clone a pose
+  function clonePose(p) {
+    const out = {};
+    for (const k of JOINT_NAMES) out[k] = [p[k][0], p[k][1]];
+    return out;
+  }
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function lerpPose(a, b, t) {
+    const out = {};
+    for (const k of JOINT_NAMES) out[k] = [lerp(a[k][0], b[k][0], t), lerp(a[k][1], b[k][1], t)];
+    return out;
+  }
+
+  // Per-model visual config
+  const MODEL_VISUALS = {
+    claude:  { helmet: 'tall-crown',   weapon: 'disc',        shoulders: 'sharp' },
+    codex:   { helmet: 'heavy-flat',   weapon: 'dual-blades', shoulders: 'bulky' },
+    gemini:  { helmet: 'sleek-pointed',weapon: 'staff',       shoulders: 'asymmetric' },
+    default: { helmet: 'hexagonal',    weapon: 'none',        shoulders: 'symmetric' },
+  };
+
+  // Hex → rgb helper (local so this file is portable)
+  function hexToRgb(hex) {
+    const s = hex.replace('#','');
+    const v = s.length === 3
+      ? s.split('').map(c => parseInt(c+c,16))
+      : [0,2,4].map(i => parseInt(s.slice(i,i+2),16));
+    return { r: v[0], g: v[1], b: v[2] };
+  }
+  function rgba(hex, a) { const c = hexToRgb(hex); return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+  class GladiatorV2 {
+    constructor(opts) {
+      this.teamId = opts.teamId;
+      this.build = opts.build || 'default';
+      this.color = opts.color;
+      this.x = opts.x;
+      this.y = opts.y;
+      this.baseScale = opts.scale || 1;
+      this.facing = opts.facing ?? 1;
+
+      this.basePoseName = 'idle';
+      this.terminalPoseName = null;
+      this.flashPoseName = null;
+      this.flashTime = 0;
+      this.flashDuration = 0;
+
+      this.current = clonePose(POSES.idle);
+      this.target = clonePose(POSES.idle);
+
+      this.breathPhase = Math.random() * Math.PI * 2;
+      this.weightPhase = Math.random() * Math.PI * 2;
+      this.energy = 0;         // 0..1
+      this.hitShake = 0;       // extra recoil shake
+      this.weaponSpin = 0;     // disc rotation accumulator
+
+      // Pre-parsed color
+      const c = hexToRgb(this.color);
+      this._r = c.r; this._g = c.g; this._b = c.b;
+
+      this._updateTarget();
+    }
+
+    setBase(pose) {
+      if (pose !== this.basePoseName) {
+        this.basePoseName = pose;
+        this._updateTarget();
+      }
+    }
+    setTerminal(pose) {
+      this.terminalPoseName = pose;
+      this._updateTarget();
+    }
+    flash(pose, duration) {
+      this.flashPoseName = pose;
+      this.flashDuration = duration ?? (pose === 'hit' ? 420 : 500);
+      this.flashTime = 0;
+      if (pose === 'hit') this.hitShake = 1;
+      this._updateTarget();
+    }
+    setEnergy(e) { this.energy = Math.max(0, Math.min(1, e)); }
+
+    _updateTarget() {
+      let poseName;
+      if (this.flashPoseName) poseName = this.flashPoseName;
+      else if (this.terminalPoseName) poseName = this.terminalPoseName;
+      else poseName = this.basePoseName;
+      this.target = POSES[poseName];
+    }
+
+    update(dtMs, now) {
+      // Flash timer
+      if (this.flashPoseName) {
+        this.flashTime += dtMs;
+        if (this.flashTime >= this.flashDuration) {
+          this.flashPoseName = null;
+          this.flashTime = 0;
+          this._updateTarget();
+        }
+      }
+
+      // Joint lerp toward target — faster during flash for snappy reads
+      const lerpT = this.flashPoseName ? 0.32 : 0.12;
+      for (const k of JOINT_NAMES) {
+        this.current[k][0] = lerp(this.current[k][0], this.target[k][0], lerpT);
+        this.current[k][1] = lerp(this.current[k][1], this.target[k][1], lerpT);
+      }
+
+      // Ambient motion
+      this.breathPhase += dtMs * 0.0018;
+      this.weightPhase += dtMs * 0.0011;
+      this.weaponSpin += dtMs * 0.003 * (0.6 + this.energy);
+
+      // Hit shake decay
+      this.hitShake *= Math.pow(0.001, dtMs / 1000);
+    }
+
+    draw(ctx) {
+      const s = this.baseScale;
+      const breath = Math.sin(this.breathPhase) * 3.5; // y-bob, amplitude px
+      const weight = Math.sin(this.weightPhase) * 1.4;  // hip sway
+      const shake = this.hitShake * (Math.random() - 0.5) * 8;
+
+      ctx.save();
+      ctx.translate(this.x + shake, this.y + breath);
+      ctx.scale(s * this.facing, s);
+
+      // Ground reflection / aura
+      this._drawGround(ctx);
+
+      // Armor layers, back to front
+      this._drawLegs(ctx, weight);
+      this._drawHip(ctx);
+      this._drawTorso(ctx);
+      this._drawArms(ctx);
+      this._drawShoulders(ctx);
+      this._drawNeck(ctx);
+      this._drawHelmet(ctx);
+      this._drawWeapon(ctx);
+
+      // Impact bloom overlay when flashing
+      if (this.flashPoseName) {
+        const k = 1 - this.flashTime / this.flashDuration;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = rgba(this.color, 0.08 * k);
+        ctx.fillRect(-60, -90, 120, 160);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
+      ctx.restore();
+    }
+
+    // ---------------- drawing helpers ----------------
+
+    _drawGround(ctx) {
+      const grad = ctx.createRadialGradient(0, 82, 6, 0, 82, 80);
+      grad.addColorStop(0, rgba(this.color, 0.55));
+      grad.addColorStop(1, rgba(this.color, 0));
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.ellipse(0, 82, 56, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    _stroke(ctx, w, a) {
+      ctx.strokeStyle = rgba(this.color, a ?? 1);
+      ctx.lineWidth = w;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 8;
+    }
+    _fill(ctx, darkness = 0.93) {
+      // Near-black armor interior tinted with team color
+      const r = Math.floor(this._r * (1 - darkness));
+      const g = Math.floor(this._g * (1 - darkness));
+      const b = Math.floor(this._b * (1 - darkness));
+      ctx.fillStyle = `rgba(${r},${g},${b},0.95)`;
+    }
+
+    /**
+     * Draw a filled capsule limb segment from (x1,y1) to (x2,y2).
+     * Produces a dark armored cylinder with a bright TRON edge line piped down
+     * one side. Reads as "muscular limb" rather than "wire".
+     */
+    _capsule(ctx, x1, y1, x2, y2, widthStart, widthEnd) {
+      const dx = x2 - x1, dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len, ny = dx / len;   // unit normal
+      const w1 = widthStart, w2 = widthEnd ?? widthStart;
+
+      // Body fill
+      this._fill(ctx, 0.94);
+      ctx.beginPath();
+      ctx.moveTo(x1 + nx * w1, y1 + ny * w1);
+      ctx.lineTo(x2 + nx * w2, y2 + ny * w2);
+      ctx.lineTo(x2 - nx * w2, y2 - ny * w2);
+      ctx.lineTo(x1 - nx * w1, y1 - ny * w1);
+      ctx.closePath();
+      ctx.fill();
+
+      // End caps (so capsule isn't flat)
+      ctx.beginPath();
+      ctx.arc(x1, y1, w1, 0, Math.PI * 2);
+      ctx.arc(x2, y2, w2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Dark outline
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(x1 + nx * w1, y1 + ny * w1);
+      ctx.lineTo(x2 + nx * w2, y2 + ny * w2);
+      ctx.moveTo(x1 - nx * w1, y1 - ny * w1);
+      ctx.lineTo(x2 - nx * w2, y2 - ny * w2);
+      ctx.stroke();
+
+      // Bright glow line down one side (TRON circuit)
+      ctx.strokeStyle = rgba(this.color, 1);
+      ctx.lineWidth = 2;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(x1 + nx * (w1 - 0.8), y1 + ny * (w1 - 0.8));
+      ctx.lineTo(x2 + nx * (w2 - 0.8), y2 + ny * (w2 - 0.8));
+      ctx.stroke();
+
+      // Secondary thin inner line on the opposite side
+      ctx.strokeStyle = rgba(this.color, 0.5);
+      ctx.lineWidth = 1;
+      ctx.shadowBlur = 4;
+      ctx.beginPath();
+      ctx.moveTo(x1 - nx * (w1 - 0.8), y1 - ny * (w1 - 0.8));
+      ctx.lineTo(x2 - nx * (w2 - 0.8), y2 - ny * (w2 - 0.8));
+      ctx.stroke();
+
+      ctx.shadowBlur = 0;
+    }
+
+    _drawHelmet(ctx) {
+      const j = this.current;
+      const [hx, hy] = j.head;
+      const vis = MODEL_VISUALS[this.build];
+      this._stroke(ctx, 2.4);
+      this._fill(ctx, 0.9);
+      ctx.beginPath();
+      if (vis.helmet === 'tall-crown') {
+        // Claude: tall crown
+        ctx.moveTo(hx-10, hy-4);
+        ctx.lineTo(hx-7, hy-20);
+        ctx.lineTo(hx+7, hy-20);
+        ctx.lineTo(hx+10, hy-4);
+        ctx.lineTo(hx+8, hy+8);
+        ctx.lineTo(hx, hy+12);
+        ctx.lineTo(hx-8, hy+8);
+        ctx.closePath();
+      } else if (vis.helmet === 'heavy-flat') {
+        // Codex: heavy flat brick
+        ctx.moveTo(hx-11, hy-6);
+        ctx.lineTo(hx-11, hy-14);
+        ctx.lineTo(hx+11, hy-14);
+        ctx.lineTo(hx+11, hy-6);
+        ctx.lineTo(hx+9, hy+10);
+        ctx.lineTo(hx-9, hy+10);
+        ctx.closePath();
+      } else if (vis.helmet === 'sleek-pointed') {
+        // Gemini: sleek pointed
+        ctx.moveTo(hx-10, hy-4);
+        ctx.lineTo(hx-4, hy-18);
+        ctx.lineTo(hx+4, hy-18);
+        ctx.lineTo(hx+10, hy-4);
+        ctx.lineTo(hx+7, hy+10);
+        ctx.lineTo(hx-7, hy+10);
+        ctx.closePath();
+      } else {
+        // hexagonal
+        for (let i = 0; i < 6; i++) {
+          const a = (Math.PI/3)*i - Math.PI/2;
+          const px = hx + Math.cos(a)*10;
+          const py = hy + Math.sin(a)*11;
+          if (i === 0) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+        }
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.stroke();
+
+      // Visor slit
+      this._stroke(ctx, 1.3, 0.8);
+      ctx.beginPath();
+      ctx.moveTo(hx-7, hy+2);
+      ctx.lineTo(hx+7, hy+2);
+      ctx.stroke();
+    }
+
+    _drawNeck(ctx) {
+      const j = this.current;
+      // Thick neck column — capsule from head base to neck joint
+      this._capsule(ctx, j.head[0], j.head[1] + 10, j.neck[0], j.neck[1], 4.5, 5.5);
+    }
+
+    _drawTorso(ctx) {
+      const j = this.current;
+      const sl = j.shoulderL, sr = j.shoulderR, hl = j.hipL, hr = j.hipR;
+
+      // Upper chest — shoulder-wide, square top (plate)
+      this._fill(ctx, 0.94);
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(sl[0] - 2, sl[1] + 2);
+      ctx.lineTo(sr[0] + 2, sr[1] + 2);
+      ctx.lineTo(sr[0] - 2, sr[1] + 26);  // rib taper
+      ctx.lineTo(hr[0] + 4, hr[1] - 4);
+      ctx.lineTo(hl[0] - 4, hl[1] - 4);
+      ctx.lineTo(sl[0] + 2, sl[1] + 26);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      // Outer color stroke (team tint)
+      ctx.strokeStyle = rgba(this.color, 0.95);
+      ctx.lineWidth = 2;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+
+      // Center chest seam — the signature TRON circuit line
+      ctx.strokeStyle = rgba(this.color, 1);
+      ctx.lineWidth = 2.4;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      ctx.moveTo(0, sl[1] + 6);
+      ctx.lineTo(0, hl[1] - 2);
+      ctx.stroke();
+
+      // Sternum branches — short diagonals
+      ctx.strokeStyle = rgba(this.color, 0.7);
+      ctx.lineWidth = 1.4;
+      ctx.shadowBlur = 6;
+      const midY = (sl[1] + hl[1]) / 2;
+      ctx.beginPath();
+      ctx.moveTo(-8, midY - 6); ctx.lineTo(0, midY - 12);
+      ctx.lineTo(8, midY - 6);
+      ctx.stroke();
+
+      // Chest core gem
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = rgba(this.color, 1);
+      ctx.beginPath();
+      ctx.arc(0, midY, 3.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath();
+      ctx.arc(0, midY, 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    _drawHip(ctx) {
+      const j = this.current;
+      // Hip plate — trapezoid, wider at top
+      this._fill(ctx, 0.94);
+      ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.moveTo(j.hipL[0] - 4, j.hipL[1] - 4);
+      ctx.lineTo(j.hipR[0] + 4, j.hipR[1] - 4);
+      ctx.lineTo(j.hipR[0] + 1, j.hipR[1] + 12);
+      ctx.lineTo(j.hipL[0] - 1, j.hipL[1] + 12);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.strokeStyle = rgba(this.color, 0.9);
+      ctx.lineWidth = 1.6;
+      ctx.shadowColor = this.color;
+      ctx.shadowBlur = 6;
+      ctx.stroke();
+
+      // Belt glow line across hips
+      ctx.strokeStyle = rgba(this.color, 1);
+      ctx.lineWidth = 2;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(j.hipL[0] - 2, j.hipL[1] + 2);
+      ctx.lineTo(j.hipR[0] + 2, j.hipR[1] + 2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    _drawShoulders(ctx) {
+      const j = this.current;
+      const vis = MODEL_VISUALS[this.build];
+      this._stroke(ctx, 2.2);
+      this._fill(ctx, 0.9);
+
+      const drawPauldron = (sx, sy, side) => {
+        ctx.beginPath();
+        if (vis.shoulders === 'sharp') {
+          ctx.moveTo(sx - side*12, sy - 4);
+          ctx.lineTo(sx + side*2, sy - 8);
+          ctx.lineTo(sx + side*5, sy + 4);
+          ctx.lineTo(sx - side*10, sy + 8);
+        } else if (vis.shoulders === 'bulky') {
+          ctx.moveTo(sx - side*14, sy - 2);
+          ctx.lineTo(sx + side*2, sy - 10);
+          ctx.lineTo(sx + side*4, sy + 6);
+          ctx.lineTo(sx - side*12, sy + 10);
+        } else if (vis.shoulders === 'asymmetric') {
+          if (side === -1) {
+            ctx.moveTo(sx - 14, sy - 4);
+            ctx.lineTo(sx - 2, sy - 10);
+            ctx.lineTo(sx + 2, sy + 4);
+            ctx.lineTo(sx - 12, sy + 8);
+          } else {
+            ctx.moveTo(sx + 2, sy - 8);
+            ctx.lineTo(sx - 2, sy - 4);
+            ctx.lineTo(sx + 6, sy + 4);
+            ctx.lineTo(sx + 10, sy + 2);
+          }
+        } else {
+          ctx.moveTo(sx - side*10, sy - 4);
+          ctx.lineTo(sx + side*2, sy - 6);
+          ctx.lineTo(sx + side*2, sy + 6);
+          ctx.lineTo(sx - side*8, sy + 6);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      };
+
+      drawPauldron(j.shoulderL[0], j.shoulderL[1], -1);
+      drawPauldron(j.shoulderR[0], j.shoulderR[1],  1);
+    }
+
+    _drawArms(ctx) {
+      const j = this.current;
+      // Upper arm (shoulder → elbow), thicker at shoulder
+      this._capsule(ctx, j.shoulderL[0], j.shoulderL[1], j.elbowL[0], j.elbowL[1], 4.5, 3.6);
+      this._capsule(ctx, j.shoulderR[0], j.shoulderR[1], j.elbowR[0], j.elbowR[1], 4.5, 3.6);
+      // Forearm (elbow → hand)
+      this._capsule(ctx, j.elbowL[0], j.elbowL[1], j.handL[0], j.handL[1], 3.6, 3.2);
+      this._capsule(ctx, j.elbowR[0], j.elbowR[1], j.handR[0], j.handR[1], 3.6, 3.2);
+
+      // Hands — small rounded knobs
+      this._fill(ctx, 0.92);
+      ctx.beginPath();
+      ctx.arc(j.handL[0], j.handL[1], 3.4, 0, Math.PI*2);
+      ctx.arc(j.handR[0], j.handR[1], 3.4, 0, Math.PI*2);
+      ctx.fill();
+      ctx.strokeStyle = rgba(this.color, 0.8);
+      ctx.lineWidth = 1.4;
+      ctx.shadowColor = this.color; ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.arc(j.handL[0], j.handL[1], 3.4, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(j.handR[0], j.handR[1], 3.4, 0, Math.PI*2);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    _drawLegs(ctx, weight) {
+      const j = this.current;
+      // Thigh (hip → knee), thick
+      this._capsule(ctx, j.hipL[0]+weight, j.hipL[1], j.kneeL[0]+weight*0.5, j.kneeL[1], 5.5, 4.2);
+      this._capsule(ctx, j.hipR[0]+weight, j.hipR[1], j.kneeR[0]+weight*0.5, j.kneeR[1], 5.5, 4.2);
+      // Shin (knee → foot)
+      this._capsule(ctx, j.kneeL[0]+weight*0.5, j.kneeL[1], j.footL[0], j.footL[1], 4.2, 3.2);
+      this._capsule(ctx, j.kneeR[0]+weight*0.5, j.kneeR[1], j.footR[0], j.footR[1], 4.2, 3.2);
+
+      // Feet — short armored blocks
+      this._fill(ctx, 0.9);
+      ctx.strokeStyle = rgba(this.color, 0.9);
+      ctx.lineWidth = 1.4;
+      ctx.shadowColor = this.color; ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.rect(j.footL[0] - 5, j.footL[1] - 2, 10, 5);
+      ctx.rect(j.footR[0] - 5, j.footR[1] - 2, 10, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    _drawWeapon(ctx) {
+      const j = this.current;
+      const vis = MODEL_VISUALS[this.build];
+      if (vis.weapon === 'none') return;
+
+      ctx.shadowColor = this.color; ctx.shadowBlur = 10;
+
+      if (vis.weapon === 'disc') {
+        // Identity disc in right hand, spinning
+        const [hx, hy] = j.handR;
+        ctx.save();
+        ctx.translate(hx, hy);
+        ctx.rotate(this.weaponSpin);
+        ctx.strokeStyle = rgba(this.color, 1);
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.arc(0, 0, 9, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.fillStyle = rgba(this.color, 0.9);
+        ctx.beginPath();
+        ctx.arc(0, 0, 3.5, 0, Math.PI*2);
+        ctx.fill();
+        // cross bars
+        ctx.strokeStyle = rgba(this.color, 0.6);
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(-9,0); ctx.lineTo(9,0);
+        ctx.moveTo(0,-9); ctx.lineTo(0,9);
+        ctx.stroke();
+        ctx.restore();
+      } else if (vis.weapon === 'dual-blades') {
+        // Short daggers at each hand, angled
+        const blade = (hx, hy, dir) => {
+          ctx.save();
+          ctx.translate(hx, hy);
+          ctx.rotate(dir * 0.4);
+          ctx.strokeStyle = rgba(this.color, 1);
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.moveTo(0, 0); ctx.lineTo(dir*14, -4);
+          ctx.stroke();
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(dir*3, 4); ctx.lineTo(dir*3, -4);
+          ctx.stroke();
+          ctx.restore();
+        };
+        blade(j.handL[0], j.handL[1], -1);
+        blade(j.handR[0], j.handR[1],  1);
+      } else if (vis.weapon === 'staff') {
+        // Long staff gripped in right hand
+        const [hx, hy] = j.handR;
+        ctx.strokeStyle = rgba(this.color, 1);
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(hx - 2, hy - 40);
+        ctx.lineTo(hx + 2, hy + 40);
+        ctx.stroke();
+        // head
+        ctx.fillStyle = rgba(this.color, 0.9);
+        ctx.beginPath();
+        ctx.arc(hx - 2, hy - 40, 4, 0, Math.PI*2);
+        ctx.fill();
+        // tip spark
+        const flick = 0.7 + Math.sin(this.breathPhase * 4) * 0.3;
+        ctx.fillStyle = rgba(this.color, flick);
+        ctx.beginPath();
+        ctx.arc(hx - 2, hy - 44, 2, 0, Math.PI*2);
+        ctx.fill();
+      }
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  // Expose
+  window.GladiatorV2 = GladiatorV2;
+  window.POSES = POSES;
+  window.MODEL_VISUALS = MODEL_VISUALS;
+})();
+
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* global window */
+// Ring + stage rendering. Draws grid floor, inner/outer arena rings,
+// tick marks, impact pulses, and phase tinting.
+
+(function(){
+  function hexToRgb(hex) {
+    const s = hex.replace('#','');
+    const v = s.length === 3
+      ? s.split('').map(c => parseInt(c+c,16))
+      : [0,2,4].map(i => parseInt(s.slice(i,i+2),16));
+    return { r: v[0], g: v[1], b: v[2] };
+  }
+  function rgba(hex, a) { const c = hexToRgb(hex); return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+  class ArenaRing {
+    constructor(cx, cy, rx, ry) {
+      this.cx = cx; this.cy = cy; this.rx = rx; this.ry = ry;
+      this.pulses = [];           // [{t, dur, color}]
+      this.phaseTint = '#00f0ff'; // cyan default
+      this.phaseIntensity = 0;    // 0..1 ring glow
+    }
+
+    setPhase(phase, winnerColor) {
+      // active = cyan; judging = orange; reveal = winner color
+      if (phase === 'reveal' && winnerColor) {
+        this.phaseTint = winnerColor; this.phaseIntensity = 0.9;
+      } else if (phase === 'judging' || phase === 'freeze') {
+        this.phaseTint = '#ff6600'; this.phaseIntensity = 0.7;
+      } else {
+        this.phaseTint = '#00f0ff'; this.phaseIntensity = 0.45;
+      }
+    }
+
+    pulse(color) {
+      this.pulses.push({ t: 0, dur: 500, color });
+    }
+
+    update(dtMs) {
+      this.pulses = this.pulses.filter(p => (p.t += dtMs) < p.dur);
+    }
+
+    drawGrid(ctx, dim = 1) {
+      const { cx, cy, rx, ry } = this;
+      ctx.save();
+      ctx.globalAlpha = 0.5 * dim;
+
+      // Perspective floor grid — skewed rows of cyan lines
+      ctx.strokeStyle = rgba('#00f0ff', 0.18);
+      ctx.lineWidth = 1;
+      const rows = 10;
+      for (let i = 0; i <= rows; i++) {
+        const t = i / rows;
+        const y = cy - ry * 0.3 + t * ry * 1.3;
+        const widthT = 0.3 + t * 0.9;
+        const w = rx * widthT;
+        ctx.beginPath();
+        ctx.moveTo(cx - w, y);
+        ctx.lineTo(cx + w, y);
+        ctx.stroke();
+      }
+      // Vertical lines (radial-ish)
+      const cols = 12;
+      for (let i = 0; i <= cols; i++) {
+        const t = i / cols;
+        const x0 = cx + (t - 0.5) * rx * 0.6;
+        const x1 = cx + (t - 0.5) * rx * 2.4;
+        ctx.beginPath();
+        ctx.moveTo(x0, cy - ry * 0.3);
+        ctx.lineTo(x1, cy + ry);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    drawRing(ctx) {
+      const { cx, cy, rx, ry, phaseTint, phaseIntensity } = this;
+
+      ctx.save();
+
+      // Outer ring
+      ctx.strokeStyle = rgba(phaseTint, 0.9 * phaseIntensity + 0.1);
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = phaseTint;
+      ctx.shadowBlur = 18 * phaseIntensity;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Inner ring
+      ctx.strokeStyle = rgba(phaseTint, 0.35);
+      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 6;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, rx * 0.92, ry * 0.92, 0, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Tick marks
+      ctx.strokeStyle = rgba(phaseTint, 0.6);
+      ctx.lineWidth = 1.2;
+      ctx.shadowBlur = 4;
+      const ticks = 36;
+      for (let i = 0; i < ticks; i++) {
+        const a = (i / ticks) * Math.PI * 2;
+        const long = i % 3 === 0;
+        const l = long ? 10 : 5;
+        const x0 = cx + Math.cos(a) * rx;
+        const y0 = cy + Math.sin(a) * ry;
+        const x1 = cx + Math.cos(a) * (rx + l);
+        const y1 = cy + Math.sin(a) * (ry + l);
+        ctx.beginPath();
+        ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
+
+      // Pulses
+      for (const p of this.pulses) {
+        const k = p.t / p.dur;
+        const ease = 1 - Math.pow(1 - k, 3);
+        const alpha = (1 - k) * 0.6;
+        ctx.strokeStyle = rgba(p.color, alpha);
+        ctx.lineWidth = 2 + (1 - k) * 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, rx * (1 + ease * 0.08), ry * (1 + ease * 0.08), 0, 0, Math.PI*2);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+  }
+
+  // --- Particle system — shockwaves, sparks, triumph confetti
+  class Shockwaves {
+    constructor() { this.list = []; }
+
+    spawnShockwave(x, y, color) {
+      this.list.push({ kind: 'shock', x, y, color, t: 0, dur: 420, r: 8 });
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 80 + Math.random() * 120;
+        this.list.push({
+          kind: 'spark', x, y, color, t: 0, dur: 500 + Math.random()*200,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40,
+          size: 1.5 + Math.random() * 1.5,
+        });
+      }
+    }
+
+    spawnConfetti(x, y, color) {
+      for (let i = 0; i < 36; i++) {
+        const a = -Math.PI/2 + (Math.random() - 0.5) * Math.PI * 0.9;
+        const sp = 120 + Math.random() * 180;
+        this.list.push({
+          kind: 'spark', x, y, color, t: 0, dur: 1200 + Math.random()*500,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          size: 1.5 + Math.random() * 2,
+          gravity: 260,
+        });
+      }
+    }
+
+    update(dtMs) {
+      const dt = dtMs / 1000;
+      for (const p of this.list) {
+        p.t += dtMs;
+        if (p.kind === 'spark') {
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
+          p.vy += (p.gravity ?? 120) * dt;
+        } else if (p.kind === 'shock') {
+          p.r = 8 + (p.t / p.dur) * 55;
+        }
+      }
+      this.list = this.list.filter(p => p.t < p.dur);
+    }
+
+    draw(ctx) {
+      ctx.save();
+      for (const p of this.list) {
+        const k = p.t / p.dur;
+        if (p.kind === 'shock') {
+          ctx.strokeStyle = rgba(p.color, (1 - k) * 0.8);
+          ctx.lineWidth = 2.2 * (1 - k) + 0.5;
+          ctx.shadowColor = p.color; ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.stroke();
+        } else if (p.kind === 'spark') {
+          ctx.fillStyle = rgba(p.color, 1 - k);
+          ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * (1 - k * 0.4), 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+  }
+
+  window.ArenaRing = ArenaRing;
+  window.Shockwaves = Shockwaves;
+})();
+
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* global React */
+// HUD components — lane headers, momentum meter, winner banner.
+
+(function(){
+  const { useMemo } = React;
+
+  function hexToRgb(hex) {
+    const s = hex.replace('#','');
+    const v = s.length === 3
+      ? s.split('').map(c => parseInt(c+c,16))
+      : [0,2,4].map(i => parseInt(s.slice(i,i+2),16));
+    return { r: v[0], g: v[1], b: v[2] };
+  }
+  const rgba = (hex, a) => { const c = hexToRgb(hex); return `rgba(${c.r},${c.g},${c.b},${a})`; };
+
+  // Lane header chip — shows model + persona + state
+  function LaneHeader({ team, color, align, latest }) {
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 4,
+        alignItems: align === 'right' ? 'flex-end' : 'flex-start',
+        fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: 8,
+          padding: '6px 12px', borderRadius: 4,
+          border: `1px solid ${rgba(color, 0.45)}`,
+          background: rgba(color, 0.08),
+          fontFamily: "'Orbitron', monospace",
+          fontWeight: 800, fontSize: 12, letterSpacing: 2,
+          color, textTransform: 'uppercase',
+        }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: color, boxShadow: `0 0 10px ${color}`,
+          }}/>
+          {team.model}{team.persona ? `:${team.persona}` : ''}
+        </div>
+        <div style={{ color: rgba(color, 0.55), fontSize: 10, letterSpacing: 1.5, minHeight: 14 }}>
+          {latest || '—'}
+        </div>
+      </div>
+    );
+  }
+
+  // Momentum meter — horizontal bar leaning toward whichever team has more recent activity
+  function MomentumMeter({ momentum, teamA, teamB, colorA, colorB }) {
+    // momentum in [-1, 1]: -1 = all A, +1 = all B
+    const pct = (momentum + 1) / 2 * 100;
+    return (
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 6,
+        padding: '10px 14px',
+        border: '1px solid #0a2235',
+        background: '#040c18',
+        borderRadius: 6,
+        fontFamily: "'JetBrains Mono', monospace",
+      }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          fontFamily: "'Orbitron', monospace", fontSize: 9, fontWeight: 800,
+          letterSpacing: 2, textTransform: 'uppercase',
+        }}>
+          <span style={{ color: colorA }}>◀ {teamA.model}</span>
+          <span style={{ color: '#4a8fa8' }}>MOMENTUM · last 10s</span>
+          <span style={{ color: colorB }}>{teamB.model} ▶</span>
+        </div>
+        <div style={{
+          position: 'relative', height: 10,
+          background: '#01060c', borderRadius: 2,
+          border: '1px solid #0a2235', overflow: 'hidden',
+        }}>
+          {/* A side */}
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, right: '50%',
+            width: `${50 - pct/2 * (momentum < 0 ? 1 : 0) - (momentum < 0 ? Math.abs(momentum) * 50 : 0)}%`,
+            display: momentum < 0 ? 'block' : 'none',
+          }}/>
+          {/* Correct, single bar from center */}
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0,
+            left: momentum < 0 ? `${50 + momentum * 50}%` : '50%',
+            width: `${Math.abs(momentum) * 50}%`,
+            background: momentum < 0
+              ? `linear-gradient(90deg, ${colorA}, ${rgba(colorA, 0.5)})`
+              : `linear-gradient(90deg, ${rgba(colorB, 0.5)}, ${colorB})`,
+            boxShadow: `0 0 12px ${momentum < 0 ? colorA : colorB}`,
+            transition: 'left 180ms ease, width 180ms ease',
+          }}/>
+          {/* Center divider */}
+          <div style={{
+            position: 'absolute', top: -2, bottom: -2, left: '50%',
+            width: 1, background: '#4a8fa8', opacity: 0.6,
+          }}/>
+        </div>
+      </div>
+    );
+  }
+
+  // Winner banner — full-bleed inside canvas area
+  function WinnerBanner({ winner, color, visible }) {
+    const opacity = visible ? 1 : 0;
+    return (
+      <div style={{
+        position: 'absolute',
+        left: '50%', top: '55%',
+        transform: 'translate(-50%, -50%)',
+        opacity, transition: 'opacity 600ms ease',
+        pointerEvents: 'none',
+        textAlign: 'center',
+      }}>
+        <div style={{
+          fontFamily: "'Orbitron', monospace",
+          fontSize: 10, fontWeight: 800, letterSpacing: 6,
+          color: rgba(color, 0.7), textTransform: 'uppercase', marginBottom: 8,
+        }}>◆ VICTOR ◆</div>
+        <div style={{
+          fontFamily: "'Orbitron', monospace",
+          fontSize: 64, fontWeight: 900, letterSpacing: 4,
+          color, textTransform: 'uppercase',
+          textShadow: `0 0 30px ${color}, 0 0 60px ${rgba(color, 0.6)}`,
+          lineHeight: 1,
+        }}>{winner}</div>
+        <div style={{
+          fontFamily: "'Orbitron', monospace",
+          fontSize: 11, fontWeight: 800, letterSpacing: 4,
+          color: rgba(color, 0.8), textTransform: 'uppercase', marginTop: 10,
+        }}>WINS</div>
+      </div>
+    );
+  }
+
+  // Phase chip (freeze / judging)
+  function PhaseChip({ phase }) {
+    if (phase === 'active') return null;
+    const label = phase === 'freeze' ? "TIME'S UP" : phase === 'judging' ? 'JUDGING...' : '';
+    if (!label) return null;
+    return (
+      <div style={{
+        position: 'absolute', left: '50%', top: 18,
+        transform: 'translateX(-50%)',
+        fontFamily: "'Orbitron', monospace",
+        fontSize: 11, fontWeight: 800, letterSpacing: 4,
+        padding: '6px 14px',
+        border: '1px solid rgba(255,102,0,0.4)',
+        background: 'rgba(255,102,0,0.08)',
+        color: '#ff6600', textTransform: 'uppercase',
+        borderRadius: 4,
+      }}>{label}</div>
+    );
+  }
+
+  window.LaneHeader = LaneHeader;
+  window.MomentumMeter = MomentumMeter;
+  window.WinnerBanner = WinnerBanner;
+  window.PhaseChip = PhaseChip;
+})();
+
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* global window */
+// Synthetic event stream. Produces a realistic mix of file/tool/reasoning
+// events for both teams, driving the arena's flash system.
+
+(function(){
+  // Event types mirror classifyEvent() in real app
+  const EVENT_TYPES = [
+    { type: 'REASONING',  flash: 'thinking', weight: 4 },
+    { type: 'TOOL_CALL',  flash: 'power',    weight: 2 },
+    { type: 'FILE_CREATE',flash: 'strike',   weight: 3 },
+    { type: 'FILE_EDIT',  flash: 'strike',   weight: 2 },
+    { type: 'HIT',        flash: 'hit',      weight: 1 }, // synthetic counter-hit for choreography
+  ];
+
+  function weightedPick(list) {
+    const total = list.reduce((s, x) => s + x.weight, 0);
+    let r = Math.random() * total;
+    for (const x of list) { r -= x.weight; if (r <= 0) return x; }
+    return list[0];
+  }
+
+  class EventStream {
+    constructor(teamIds, durationMs = 30000) {
+      this.teamIds = teamIds;
+      this.durationMs = durationMs;
+      this.events = this._generate();
+    }
+
+    _generate() {
+      const out = [];
+      let t = 600;
+      while (t < this.durationMs - 1500) {
+        const teamId = this.teamIds[Math.floor(Math.random() * this.teamIds.length)];
+        // Bursty: 50% chance we stay on same team for 2-3 events
+        const burst = 1 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < burst && t < this.durationMs - 1500; i++) {
+          const pick = weightedPick(EVENT_TYPES);
+          out.push({
+            eventId: `ev_${out.length}`,
+            type: pick.type,
+            flash: pick.flash,
+            teamId,
+            t,
+          });
+          t += 300 + Math.random() * 800;
+        }
+        t += 200 + Math.random() * 500;
+      }
+      return out;
+    }
+
+    // Events up to time t (ms)
+    eventsUpTo(t) {
+      return this.events.filter(e => e.t <= t);
+    }
+
+    // Events in window [t - win, t]
+    eventsInWindow(t, win) {
+      return this.events.filter(e => e.t <= t && e.t > t - win);
+    }
+
+    total() { return this.events.length; }
+  }
+
+  window.EventStream = EventStream;
+})();
+
+</script>
+
+<script type="text/babel" data-presets="env,react">
+/* global React, ReactDOM, GladiatorV2, ArenaRing, Shockwaves, EventStream,
+   LaneHeader, MomentumMeter, WinnerBanner, PhaseChip */
+
+const { useRef, useEffect, useState, useMemo, useCallback } = React;
+
+// --- Config ---------------------------------------------------------------
+const MODEL_COLORS = {
+  claude: '#ff6600',
+  codex:  '#0066ff',
+  gemini: '#00f0ff',
+};
+const getModelColor = (m) => MODEL_COLORS[(m||'').split(':')[0]] ?? '#4a8fa8';
+
+const DEFAULT_TWEAKS = /*EDITMODE-BEGIN*/{
+  "strokeWeight": 3,
+  "glowIntensity": 1,
+  "breathAmplitude": 3.5,
+  "figureScale": 1.8,
+  "cameraBehavior": "focus",
+  "showMomentum": true,
+  "ringTicks": true,
+  "backgroundDim": 0.6,
+  "matchDurationSec": 30
+}/*EDITMODE-END*/;
+
+// Canvas is logical size; component scales to container
+const CW = 1200, CH = 640;
+const MATCH_PHASES = [
+  { phase: 'active',  until: 0.80 }, // 0–80% → fighting
+  { phase: 'freeze',  until: 0.85 }, // 80–85% → freeze
+  { phase: 'judging', until: 0.92 }, // 85–92% → judging
+  { phase: 'reveal',  until: 1.0  }, // 92–100% → winner
+];
+
+function phaseAt(tNorm) {
+  for (const p of MATCH_PHASES) if (tNorm <= p.until) return p.phase;
+  return 'reveal';
+}
+
+// --- Main App -------------------------------------------------------------
+function App() {
+  const [tweaks, setTweaks] = useState(DEFAULT_TWEAKS);
+  const [tweaksOpen, setTweaksOpen] = useState(false);
+
+  // Two teams hardcoded for the prototype. Claude vs Gemini.
+  const teams = useMemo(() => ([
+    { id: 'a', model: 'claude', persona: 'architect' },
+    { id: 'b', model: 'gemini', persona: 'synth' },
+  ]), []);
+
+  const durationMs = tweaks.matchDurationSec * 1000;
+  const stream = useMemo(() => new EventStream(teams.map(t=>t.id), durationMs), [teams, durationMs]);
+
+  // Winner decided by total momentum in active phase — fun but deterministic-ish
+  const winnerId = useMemo(() => {
+    const counts = { a: 0, b: 0 };
+    for (const e of stream.events) counts[e.teamId] = (counts[e.teamId] || 0) + 1;
+    return counts.a >= counts.b ? 'a' : 'b';
+  }, [stream]);
+
+  // Playback — state drives UI; refs drive RAF loop (no re-subscribe per frame)
+  const [playing, setPlaying] = useState(true);
+  const [cursorMs, setCursorMs] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const playingRef = useRef(true);
+  const cursorRef = useRef(0);
+  const speedRef = useRef(1);
+  const tweaksRef = useRef(tweaks);
+  const durationRef = useRef(durationMs);
+  const streamRef = useRef(stream);
+
+  useEffect(() => { playingRef.current = playing; }, [playing]);
+  useEffect(() => { cursorRef.current = cursorMs; }, [cursorMs]);
+  useEffect(() => { speedRef.current = speed; }, [speed]);
+  useEffect(() => { tweaksRef.current = tweaks; }, [tweaks]);
+  useEffect(() => { durationRef.current = durationMs; }, [durationMs]);
+  useEffect(() => { streamRef.current = stream; }, [stream]);
+
+  // Canvas + renderers
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const ringRef = useRef(null);
+  const shockRef = useRef(null);
+  const gladsRef = useRef(null);
+  const lastEventIdxRef = useRef(0);
+  const lastFrameTsRef = useRef(0);
+  const cameraRef = useRef({ x: 0, y: 0, zoom: 1, tx: 0, ty: 0, tzoom: 1 });
+  const latestActionRef = useRef({ a: '', b: '' });
+
+  // Init renderers when teams or tweaks change
+  useEffect(() => {
+    const scale = tweaks.figureScale;
+    const groundY = CH * 0.68;
+    gladsRef.current = {
+      a: new GladiatorV2({
+        teamId: 'a', build: 'claude', color: getModelColor('claude'),
+        x: CW * 0.30, y: groundY, scale, facing: 1,
+      }),
+      b: new GladiatorV2({
+        teamId: 'b', build: 'gemini', color: getModelColor('gemini'),
+        x: CW * 0.70, y: groundY, scale, facing: -1,
+      }),
+    };
+    ringRef.current = new ArenaRing(CW / 2, CH * 0.76, CW * 0.38, CH * 0.10);
+    shockRef.current = new Shockwaves();
+    lastEventIdxRef.current = 0;
+  }, [tweaks.figureScale]);
+
+  // Reset playback when stream changes
+  useEffect(() => {
+    setCursorMs(0);
+    lastEventIdxRef.current = 0;
+    if (shockRef.current) shockRef.current.list = [];
+  }, [stream]);
+
+  // Restore cursor
+  useEffect(() => {
+    const stored = Number(localStorage.getItem('arena_cursor') || 0);
+    if (stored && stored < durationMs) setCursorMs(stored);
+  }, [durationMs]);
+  useEffect(() => { localStorage.setItem('arena_cursor', String(cursorMs)); }, [cursorMs]);
+
+  // Main RAF loop — mounts once, reads mutable state from refs
+  useEffect(() => {
+    let raf = 0;
+    let uiTickCounter = 0;
+    const step = (ts) => {
+      const last = lastFrameTsRef.current || ts;
+      let dt = ts - last;
+      lastFrameTsRef.current = ts;
+      if (dt > 100) dt = 16;
+
+      let cur = cursorRef.current;
+      if (playingRef.current) {
+        cur = Math.min(durationRef.current, cur + dt * speedRef.current);
+        cursorRef.current = cur;
+        // Throttle React state updates to every ~3 frames so the scrubber
+        // and momentum HUD reflect reality without thrashing re-renders.
+        uiTickCounter++;
+        if (uiTickCounter % 3 === 0) setCursorMs(cur);
+      }
+
+      drawFrame(dt, cur);
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  // Draw one frame — reads ref snapshots, never closes over state
+  const drawFrame = (dt, cur) => {
+    const tweaks = tweaksRef.current;
+    const stream = streamRef.current;
+    const durationMs = durationRef.current;
+    const ctx = canvasRef.current?.getContext('2d');
+    if (!ctx) return;
+    const glads = gladsRef.current;
+    const ring = ringRef.current;
+    const shock = shockRef.current;
+    if (!glads || !ring || !shock) return;
+
+    const tNorm = cur / durationMs;
+    const phase = phaseAt(tNorm);
+
+    // Fire new events since last frame
+    const allEvents = stream.events;
+    while (
+      lastEventIdxRef.current < allEvents.length &&
+      allEvents[lastEventIdxRef.current].t <= cur
+    ) {
+      const e = allEvents[lastEventIdxRef.current++];
+      const g = glads[e.teamId];
+      const opp = glads[e.teamId === 'a' ? 'b' : 'a'];
+      if (!g) continue;
+      if (e.flash === 'thinking') {
+        g.setBase('thinking');
+        setTimeout(() => g.setBase('idle'), 400 + Math.random()*300);
+        latestActionRef.current[e.teamId] = '> reasoning...';
+      } else if (e.flash === 'strike' || e.flash === 'power') {
+        g.flash(e.flash);
+        // Spawn shockwave at opponent center
+        const tx = opp.x; const ty = opp.y - 20;
+        shock.spawnShockwave(tx, ty, g.color);
+        ring.pulse(g.color);
+        // Camera nudge toward striker
+        if (tweaks.cameraBehavior === 'focus') {
+          cameraRef.current.tx = (g.x - CW / 2) * 0.08;
+          cameraRef.current.tzoom = 1.05;
+          clearTimeout(window.__camTimer);
+          window.__camTimer = setTimeout(() => {
+            cameraRef.current.tx = 0; cameraRef.current.tzoom = 1;
+          }, 350);
+        }
+        // Opponent hit reaction
+        opp.flash('hit');
+        latestActionRef.current[e.teamId] = e.flash === 'strike' ? '> write <file>' : '> exec <tool>';
+      }
+    }
+
+    // Phase transitions
+    const winner = teams.find(t => t.id === winnerId);
+    const loser = teams.find(t => t.id !== winnerId);
+    const winnerColor = getModelColor(winner.model);
+
+    if (phase === 'reveal') {
+      glads[winnerId].setTerminal('triumph');
+      const lid = loser.id;
+      glads[lid].setTerminal('kneel');
+      // Winner camera zoom
+      if (tweaks.cameraBehavior === 'focus') {
+        cameraRef.current.tx = (glads[winnerId].x - CW / 2) * 0.25;
+        cameraRef.current.tzoom = 1.18;
+      }
+      // Confetti once
+      if (!ring._confettiFired) {
+        shock.spawnConfetti(glads[winnerId].x, glads[winnerId].y - 60, winnerColor);
+        ring._confettiFired = true;
+      }
+    } else {
+      if (ring._confettiFired) ring._confettiFired = false;
+      glads.a.setTerminal(null);
+      glads.b.setTerminal(null);
+    }
+    ring.setPhase(phase, winnerColor);
+
+    // Energy from recent activity per team
+    const win = 3000;
+    const recent = stream.eventsInWindow(cur, win);
+    const countA = recent.filter(e => e.teamId === 'a').length;
+    const countB = recent.filter(e => e.teamId === 'b').length;
+    glads.a.setEnergy(Math.min(1, countA / 5));
+    glads.b.setEnergy(Math.min(1, countB / 5));
+
+    // Updates
+    glads.a.update(dt, cur);
+    glads.b.update(dt, cur);
+    ring.update(dt);
+    shock.update(dt);
+
+    // Ease camera
+    const cam = cameraRef.current;
+    cam.x += (cam.tx - cam.x) * 0.08;
+    cam.zoom += (cam.tzoom - cam.zoom) * 0.08;
+
+    // --- Render ---
+    ctx.clearRect(0, 0, CW, CH);
+    // Background
+    ctx.fillStyle = '#01060c';
+    ctx.fillRect(0, 0, CW, CH);
+
+    // Subtle scanlines
+    ctx.fillStyle = 'rgba(0,240,255,0.02)';
+    for (let y = 0; y < CH; y += 3) ctx.fillRect(0, y, CW, 1);
+
+    // Camera transform
+    ctx.save();
+    ctx.translate(CW/2, CH/2);
+    ctx.scale(cam.zoom, cam.zoom);
+    ctx.translate(-CW/2 - cam.x, -CH/2);
+
+    // Floor grid (dims during reveal)
+    const dim = phase === 'reveal' ? 0.3 : tweaks.backgroundDim;
+    ring.drawGrid(ctx, dim);
+
+    // Ring
+    if (tweaks.ringTicks) ring.drawRing(ctx);
+
+    // Gladiators — draw loser first so winner is on top during reveal
+    if (phase === 'reveal') {
+      glads[loser.id].draw(ctx);
+      glads[winnerId].draw(ctx);
+    } else {
+      glads.a.draw(ctx);
+      glads.b.draw(ctx);
+    }
+
+    // Shockwaves on top
+    shock.draw(ctx);
+
+    ctx.restore();
+  };
+
+  // Momentum for HUD
+  const momentum = useMemo(() => {
+    const recent = stream.eventsInWindow(cursorMs, 10000);
+    const a = recent.filter(e => e.teamId === 'a').length;
+    const b = recent.filter(e => e.teamId === 'b').length;
+    const total = a + b;
+    if (!total) return 0;
+    return (b - a) / total; // -1..1
+  }, [cursorMs, stream]);
+
+  const phase = phaseAt(cursorMs / durationMs);
+  const winner = teams.find(t => t.id === winnerId);
+  const winnerColor = getModelColor(winner.model);
+
+  // --- Edit mode wiring ---
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === '__activate_edit_mode') setTweaksOpen(true);
+      else if (e.data?.type === '__deactivate_edit_mode') setTweaksOpen(false);
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  const updateTweak = (key, val) => {
+    const next = { ...tweaks, [key]: val };
+    setTweaks(next);
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits: { [key]: val } }, '*');
+  };
+
+  // --- Render ---
+  return (
+    <div style={{ minHeight: '100vh', background: '#000408', color: '#c8eef8',
+      fontFamily: "'JetBrains Mono', monospace", padding: '20px 24px',
+    }}>
+      {/* Top bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+        <div>
+          <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 10, fontWeight: 800, letterSpacing: 5, color: '#00f0ff', textTransform: 'uppercase', marginBottom: 4 }}>
+            ◆ Arena4Ai · Prototype
+          </div>
+          <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 22, fontWeight: 800, color: '#c8eef8', letterSpacing: 1 }}>
+            Battle Arena · <span style={{ color: '#00f0ff' }}>TRON Broadcast</span>
+          </div>
+        </div>
+        <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 11, fontWeight: 800, letterSpacing: 3, color: '#4a8fa8', textTransform: 'uppercase' }}>
+          {phase === 'active' ? 'LIVE' : phase.toUpperCase()}
+        </div>
+      </div>
+
+      {/* Lane headers */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16,
+        marginBottom: 12, alignItems: 'center',
+      }}>
+        <LaneHeader team={teams[0]} color={getModelColor(teams[0].model)} align="left"
+          latest={latestActionRef.current.a}/>
+        <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 18, fontWeight: 900,
+          color: '#1e4a5a', letterSpacing: 4 }}>VS</div>
+        <LaneHeader team={teams[1]} color={getModelColor(teams[1].model)} align="right"
+          latest={latestActionRef.current.b}/>
+      </div>
+
+      {/* Canvas stage */}
+      <div ref={containerRef} style={{
+        position: 'relative',
+        border: '1px solid #0a2235',
+        background: '#01060c',
+        borderRadius: 8,
+        overflow: 'hidden',
+        aspectRatio: `${CW}/${CH}`,
+        maxWidth: 1400, margin: '0 auto',
+      }}>
+        <canvas ref={canvasRef} width={CW} height={CH}
+          style={{ width: '100%', height: '100%', display: 'block' }}/>
+        <PhaseChip phase={phase}/>
+        <WinnerBanner winner={winner.model.toUpperCase()} color={winnerColor}
+          visible={phase === 'reveal'}/>
+
+        {/* Corner accents */}
+        <div style={{ position: 'absolute', top: 8, left: 8, width: 12, height: 12,
+          borderTop: '1px solid #00f0ff', borderLeft: '1px solid #00f0ff', opacity: 0.5 }}/>
+        <div style={{ position: 'absolute', top: 8, right: 8, width: 12, height: 12,
+          borderTop: '1px solid #00f0ff', borderRight: '1px solid #00f0ff', opacity: 0.5 }}/>
+        <div style={{ position: 'absolute', bottom: 8, left: 8, width: 12, height: 12,
+          borderBottom: '1px solid #00f0ff', borderLeft: '1px solid #00f0ff', opacity: 0.5 }}/>
+        <div style={{ position: 'absolute', bottom: 8, right: 8, width: 12, height: 12,
+          borderBottom: '1px solid #00f0ff', borderRight: '1px solid #00f0ff', opacity: 0.5 }}/>
+      </div>
+
+      {/* HUD — momentum meter */}
+      {tweaks.showMomentum && (
+        <div style={{ maxWidth: 1400, margin: '14px auto 0' }}>
+          <MomentumMeter momentum={momentum}
+            teamA={teams[0]} teamB={teams[1]}
+            colorA={getModelColor(teams[0].model)}
+            colorB={getModelColor(teams[1].model)}/>
+        </div>
+      )}
+
+      {/* Scrubber */}
+      <div style={{ maxWidth: 1400, margin: '12px auto 0',
+        display: 'flex', gap: 12, alignItems: 'center',
+        padding: '10px 14px',
+        border: '1px solid #0a2235', background: '#040c18', borderRadius: 6,
+      }}>
+        <button onClick={() => setPlaying(!playing)} style={btnStyle(playing)}>
+          {playing ? '❚❚ PAUSE' : '▶ PLAY'}
+        </button>
+        <button onClick={() => { cursorRef.current = 0; setCursorMs(0); lastEventIdxRef.current = 0; shockRef.current.list = []; if (ringRef.current) ringRef.current._confettiFired = false; }}
+          style={btnStyle(false)}>⟲ RESTART</button>
+        <input type="range" min={0} max={durationMs} value={cursorMs}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            cursorRef.current = v;
+            setCursorMs(v);
+            // Re-process events up to new cursor
+            lastEventIdxRef.current = stream.eventsUpTo(v).length;
+            // Reset confetti so rewinding before reveal re-fires it
+            if (ringRef.current) ringRef.current._confettiFired = false;
+          }}
+          style={{ flex: 1, accentColor: '#00f0ff' }}/>
+        <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 11, fontWeight: 800, letterSpacing: 2, color: '#00f0ff', minWidth: 80, textAlign: 'right' }}>
+          {(cursorMs/1000).toFixed(1)}s
+        </div>
+        <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}
+          style={{ ...btnStyle(false), padding: '6px 10px' }}>
+          <option value={0.25}>0.25×</option>
+          <option value={0.5}>0.5×</option>
+          <option value={1}>1×</option>
+          <option value={2}>2×</option>
+          <option value={4}>4×</option>
+        </select>
+      </div>
+
+      {/* Tweaks panel */}
+      {tweaksOpen && (
+        <TweaksPanel tweaks={tweaks} onChange={updateTweak} onClose={() => setTweaksOpen(false)}/>
+      )}
+
+      <div style={{ maxWidth: 1400, margin: '20px auto 0', fontSize: 11, color: '#4a8fa8', lineHeight: 1.7 }}>
+        ▸ Prototype runs on a synthetic event stream. All motion, particles, and rendering is canvas-based —
+        the real arena will use the same renderer shape with live <code>events[]</code> from your backend.
+        ▸ Open the <b>Tweaks</b> toggle in the toolbar to adjust stroke/glow/scale/breath live.
+      </div>
+    </div>
+  );
+}
+
+function btnStyle(active) {
+  return {
+    fontFamily: "'Orbitron', monospace",
+    fontSize: 10, fontWeight: 800, letterSpacing: 2,
+    padding: '6px 12px',
+    border: `1px solid ${active ? '#00f0ff' : '#0a2235'}`,
+    background: active ? 'rgba(0,240,255,0.1)' : '#01060c',
+    color: active ? '#00f0ff' : '#a9d4e3',
+    borderRadius: 4, cursor: 'pointer',
+    textTransform: 'uppercase',
+  };
+}
+
+function TweaksPanel({ tweaks, onChange, onClose }) {
+  const fields = [
+    { key: 'figureScale', label: 'Figure Scale', min: 1.4, max: 3.6, step: 0.1 },
+    { key: 'strokeWeight', label: 'Stroke Weight', min: 1.5, max: 4, step: 0.1 },
+    { key: 'glowIntensity', label: 'Glow Intensity', min: 0, max: 2, step: 0.1 },
+    { key: 'breathAmplitude', label: 'Breath Amplitude', min: 0, max: 8, step: 0.5 },
+    { key: 'backgroundDim', label: 'Floor Grid Brightness', min: 0, max: 1, step: 0.05 },
+    { key: 'matchDurationSec', label: 'Match Duration (s)', min: 10, max: 60, step: 5 },
+  ];
+  const bools = [
+    { key: 'showMomentum', label: 'Show Momentum Meter' },
+    { key: 'ringTicks',    label: 'Ring + Tick Marks' },
+  ];
+  const cameraOpts = ['focus', 'static'];
+
+  return (
+    <div style={{
+      position: 'fixed', right: 18, bottom: 18, width: 320,
+      padding: '14px 16px',
+      border: '1px solid #0a2235', background: '#040c18', borderRadius: 8,
+      boxShadow: '0 8px 40px rgba(0,240,255,0.06)',
+      fontFamily: "'JetBrains Mono', monospace",
+      zIndex: 20,
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <div style={{ fontFamily: "'Orbitron', monospace", fontSize: 11, fontWeight: 800, letterSpacing: 3, color: '#00f0ff', textTransform: 'uppercase' }}>
+          ◆ Tweaks
+        </div>
+        <button onClick={onClose} style={btnStyle(false)}>✕</button>
+      </div>
+
+      {fields.map(f => (
+        <div key={f.key} style={{ marginBottom: 10 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#a9d4e3', letterSpacing: 1, marginBottom: 4 }}>
+            <span>{f.label}</span>
+            <span style={{ color: '#00f0ff' }}>{tweaks[f.key]}</span>
+          </div>
+          <input type="range" min={f.min} max={f.max} step={f.step}
+            value={tweaks[f.key]}
+            onChange={(e) => onChange(f.key, Number(e.target.value))}
+            style={{ width: '100%', accentColor: '#00f0ff' }}/>
+        </div>
+      ))}
+
+      {bools.map(b => (
+        <label key={b.key} style={{ display: 'flex', gap: 8, fontSize: 11, color: '#a9d4e3', marginBottom: 6, cursor: 'pointer' }}>
+          <input type="checkbox" checked={!!tweaks[b.key]}
+            onChange={(e) => onChange(b.key, e.target.checked)}/>
+          {b.label}
+        </label>
+      ))}
+
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 10, color: '#a9d4e3', letterSpacing: 1, marginBottom: 4 }}>Camera Behavior</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {cameraOpts.map(o => (
+            <button key={o}
+              onClick={() => onChange('cameraBehavior', o)}
+              style={btnStyle(tweaks.cameraBehavior === o)}>{o}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+
+</script>
+</body>
+</html>

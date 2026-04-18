@@ -15,3 +15,9 @@ runs/
 
 # Database backups
 *.dump
+
+# Local debug artifacts
+.claude/
+.playwright-mcp/
+/arena-v2-*.png
+/homepage-*.png

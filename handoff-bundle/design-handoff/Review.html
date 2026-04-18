@@ -1,0 +1,524 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>Arena4Ai — Homepage Review</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    --bg:#000408; --card:#050f1e; --border:#0a2235; --border-mid:#0e3050;
+    --cyan:#00f0ff; --blue:#0080ff; --orange:#ff6600;
+    --text:#c8eef8; --muted:#4a8fa8; --dim:#1e4a5a;
+    --orbitron:'Orbitron','SF Mono',monospace;
+    --mono:'JetBrains Mono','SF Mono',monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--mono);font-size:15px;line-height:1.6}
+  body{
+    background-image:
+      linear-gradient(rgba(0,240,255,0.025) 1px,transparent 1px),
+      linear-gradient(90deg,rgba(0,240,255,0.025) 1px,transparent 1px);
+    background-size:48px 48px;
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:3.5rem 2rem 6rem;position:relative;z-index:2}
+
+  /* Kicker + H1 system */
+  .kicker{font-family:var(--orbitron);font-size:11px;font-weight:800;letter-spacing:5px;color:var(--cyan);text-transform:uppercase;margin-bottom:.6rem}
+  h1{
+    font-family:var(--orbitron);font-weight:900;font-size:2.6rem;line-height:1.05;margin:0 0 1rem;
+    background:linear-gradient(135deg,#c8eef8 0%,#00f0ff 50%,#0080ff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    letter-spacing:.5px;
+  }
+  h2{font-family:var(--orbitron);font-size:1.25rem;font-weight:800;letter-spacing:1px;color:var(--text);margin:3rem 0 1rem;display:flex;align-items:center;gap:.7rem}
+  h2 .num{
+    font-family:var(--orbitron);font-size:.72rem;font-weight:900;letter-spacing:2px;
+    color:var(--cyan);border:1px solid rgba(0,240,255,.35);background:rgba(0,240,255,.05);
+    padding:.25rem .55rem;border-radius:3px;min-width:46px;text-align:center;
+  }
+  p{color:#a9d4e3;max-width:78ch;margin:.5rem 0 1rem}
+  strong{color:var(--text);font-weight:700}
+  code{font-family:var(--mono);font-size:.85em;color:#ffd27a;background:rgba(255,102,0,.08);padding:.05em .35em;border-radius:3px;border:1px solid rgba(255,102,0,.15)}
+
+  /* Hero panel */
+  .hero{
+    border:1px solid var(--border);background:linear-gradient(135deg,rgba(0,240,255,.04) 0%, #050f1e 100%);
+    border-radius:10px;padding:2rem 2rem 1.75rem;margin-bottom:2.5rem;position:relative;overflow:hidden;
+  }
+  .hero::before{
+    content:"";position:absolute;inset:-1px -1px auto -1px;height:2px;
+    background:linear-gradient(90deg,transparent,var(--cyan) 30%,var(--blue) 70%,transparent);
+    opacity:.6;
+  }
+  .hero .meta{display:flex;gap:1.25rem;flex-wrap:wrap;font-family:var(--mono);font-size:.78rem;color:var(--muted);margin-top:.5rem}
+  .hero .meta span b{color:var(--text);font-weight:700}
+  .verdict{
+    margin-top:1.4rem;padding:1rem 1.2rem;border-left:2px solid var(--cyan);
+    background:rgba(0,240,255,.04);border-radius:0 6px 6px 0;
+  }
+  .verdict b{color:var(--cyan);font-family:var(--orbitron);letter-spacing:2px;font-size:.72rem;text-transform:uppercase;display:block;margin-bottom:.35rem}
+
+  /* Score row */
+  .scores{display:grid;grid-template-columns:repeat(6,1fr);gap:.65rem;margin:1.5rem 0 0}
+  .score{border:1px solid var(--border);background:#050f1e;border-radius:6px;padding:.75rem .85rem}
+  .score .label{font-family:var(--orbitron);font-size:.55rem;font-weight:800;letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+  .score .val{font-family:var(--orbitron);font-size:1.6rem;font-weight:900;color:var(--text);line-height:1;margin-top:.3rem}
+  .score .val .slash{color:var(--dim);font-weight:700;font-size:.9rem;margin-left:2px}
+  .score .bar{height:3px;background:#0a2235;border-radius:2px;margin-top:.55rem;overflow:hidden}
+  .score .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--cyan),var(--blue))}
+  .score.warn .bar i{background:linear-gradient(90deg,#ffb030,var(--orange))}
+
+  /* Finding cards */
+  .findings{display:flex;flex-direction:column;gap:1rem}
+  .f{
+    border:1px solid var(--border);background:var(--card);border-radius:8px;
+    padding:1.1rem 1.25rem 1.2rem;position:relative;
+  }
+  .f.crit{border-color:rgba(255,102,0,.35)}
+  .f.crit::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--orange);border-radius:8px 0 0 8px}
+  .f.maj{border-color:rgba(0,128,255,.35)}
+  .f.maj::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--blue);border-radius:8px 0 0 8px}
+  .f.min::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--dim);border-radius:8px 0 0 8px}
+  .f.win{border-color:rgba(0,240,255,.35)}
+  .f.win::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--cyan);border-radius:8px 0 0 8px}
+  .f h3{font-family:var(--orbitron);font-size:.95rem;font-weight:800;letter-spacing:.5px;margin:0 0 .35rem;color:var(--text);padding-left:.6rem}
+  .f .tags{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem;padding-left:.6rem}
+  .tag{font-family:var(--orbitron);font-size:.52rem;font-weight:800;letter-spacing:1.8px;text-transform:uppercase;padding:.18rem .5rem;border-radius:3px;border:1px solid transparent}
+  .tag.sev-crit{color:var(--orange);background:rgba(255,102,0,.1);border-color:rgba(255,102,0,.3)}
+  .tag.sev-maj{color:var(--blue);background:rgba(0,128,255,.1);border-color:rgba(0,128,255,.3)}
+  .tag.sev-min{color:var(--muted);background:rgba(74,143,168,.08);border-color:rgba(74,143,168,.25)}
+  .tag.sev-win{color:var(--cyan);background:rgba(0,240,255,.1);border-color:rgba(0,240,255,.3)}
+  .tag.area{color:#a9d4e3;background:#0a1a28;border-color:var(--border)}
+  .f .body{padding-left:.6rem}
+  .f .body p{margin:.3rem 0 .5rem;color:#a9d4e3;font-size:.92rem}
+  .f .fix{margin-top:.6rem;padding:.6rem .8rem;border-left:2px solid var(--cyan);background:rgba(0,240,255,.035);border-radius:0 4px 4px 0}
+  .f .fix b{color:var(--cyan);font-family:var(--orbitron);font-size:.6rem;letter-spacing:2px;text-transform:uppercase;display:block;margin-bottom:.2rem}
+  .f .fix code{font-size:.78em}
+  .loc{font-family:var(--mono);font-size:.72rem;color:var(--muted);margin-top:.35rem}
+  .loc .file{color:#ffd27a}
+
+  /* Fake page mockup to show examples */
+  .demo{
+    border:1px solid var(--border);border-radius:8px;padding:1.1rem 1.25rem;background:#040c18;
+    font-family:var(--mono);font-size:.78rem;color:var(--muted);margin:.7rem 0;
+  }
+  .demo .label{font-family:var(--orbitron);font-size:.55rem;letter-spacing:2.5px;color:var(--dim);text-transform:uppercase;margin-bottom:.45rem;font-weight:800}
+
+  /* Rhythm column */
+  .two{display:grid;grid-template-columns:1.25fr 1fr;gap:1.2rem;align-items:start}
+  .two .rail{border:1px solid var(--border);border-radius:8px;background:#040c18;padding:1rem 1.1rem}
+  .two .rail h4{font-family:var(--orbitron);font-size:.72rem;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);margin:0 0 .6rem;font-weight:800}
+  .two .rail ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:.35rem}
+  .two .rail li{font-size:.8rem;color:#a9d4e3;padding-left:1.1rem;position:relative}
+  .two .rail li::before{content:"◆";position:absolute;left:0;top:.05rem;color:var(--cyan);font-size:.55rem;top:.3rem}
+
+  /* Strip for priorities */
+  .prio{display:grid;grid-template-columns:repeat(3,1fr);gap:.75rem;margin-top:.75rem}
+  .prio .col{border:1px solid var(--border);border-radius:6px;padding:.8rem .9rem;background:#040c18}
+  .prio .col h5{font-family:var(--orbitron);font-size:.65rem;letter-spacing:2px;text-transform:uppercase;margin:0 0 .5rem;font-weight:800}
+  .prio .col.now h5{color:var(--orange)}
+  .prio .col.next h5{color:var(--blue)}
+  .prio .col.later h5{color:var(--muted)}
+  .prio .col ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:.35rem}
+  .prio .col li{font-size:.76rem;color:#a9d4e3;padding-left:1rem;position:relative;line-height:1.45}
+  .prio .col li::before{content:"▸";position:absolute;left:0;color:var(--muted)}
+
+  /* Corner brackets */
+  .corner{position:fixed;width:18px;height:18px;z-index:50;opacity:.25;pointer-events:none}
+  .c-tl{top:1rem;left:1rem;border-top:1px solid var(--cyan);border-left:1px solid var(--cyan)}
+  .c-tr{top:1rem;right:1rem;border-top:1px solid var(--cyan);border-right:1px solid var(--cyan)}
+  .c-bl{bottom:1rem;left:1rem;border-bottom:1px solid var(--cyan);border-left:1px solid var(--cyan)}
+  .c-br{bottom:1rem;right:1rem;border-bottom:1px solid var(--cyan);border-right:1px solid var(--cyan)}
+
+  /* Scanlines */
+  .scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.06) 2px,rgba(0,0,0,.06) 4px);pointer-events:none;z-index:1}
+
+  /* Intro */
+  .intro-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:1.2rem}
+  .pill{display:inline-flex;align-items:center;gap:.4rem;font-family:var(--orbitron);font-size:.6rem;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;padding:.2rem .55rem;border-radius:3px;border:1px solid var(--border);color:var(--muted);background:#0a1a28}
+
+  hr.div{border:0;height:1px;background:linear-gradient(to right,transparent,var(--border) 30%,var(--border) 70%,transparent);margin:3rem 0 0}
+</style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="corner c-tl"></div><div class="corner c-tr"></div><div class="corner c-bl"></div><div class="corner c-br"></div>
+
+<div class="wrap">
+
+  <div class="kicker">◆ Arena4Ai · Design review</div>
+  <h1>Homepage review<br/>/ (Competition Gallery)</h1>
+  <p>
+    Reviewing the page served at <code>localhost:3001/</code>
+    — the gallery that lists competitions + tournaments, with state/model/category
+    filters, search, and a live API-status dot. Overall: the TRON identity is
+    intact and the information is legible; the main costs are <b>visual hierarchy</b>
+    (nothing on the page reads large) and <b>rhythm</b> (dense rows stacked too tightly).
+    Detailed findings below.
+  </p>
+
+  <!-- Summary / verdict hero -->
+  <div class="hero">
+    <div class="kicker" style="color:var(--muted)">Summary verdict</div>
+    <div style="font-family:var(--orbitron);font-size:1.4rem;font-weight:800;color:var(--text);letter-spacing:.3px">
+      Solid foundation. Hierarchy and density need work before you ship.
+    </div>
+    <div class="meta">
+      <span><b>Surface:</b> <code>app/page.tsx</code> (768 lines)</span>
+      <span><b>Brand:</b> TRON / cyan+orange/monospace</span>
+      <span><b>Framework:</b> Next.js 15 + Orbitron</span>
+    </div>
+
+    <div class="scores">
+      <div class="score"><div class="label">Brand fit</div><div class="val">8<span class="slash">/10</span></div><div class="bar"><i style="width:80%"></i></div></div>
+      <div class="score warn"><div class="label">Hierarchy</div><div class="val">5<span class="slash">/10</span></div><div class="bar"><i style="width:50%"></i></div></div>
+      <div class="score warn"><div class="label">Rhythm</div><div class="val">5<span class="slash">/10</span></div><div class="bar"><i style="width:50%"></i></div></div>
+      <div class="score"><div class="label">Type scale</div><div class="val">6<span class="slash">/10</span></div><div class="bar"><i style="width:60%"></i></div></div>
+      <div class="score"><div class="label">Affordance</div><div class="val">7<span class="slash">/10</span></div><div class="bar"><i style="width:70%"></i></div></div>
+      <div class="score warn"><div class="label">Empty/Error</div><div class="val">6<span class="slash">/10</span></div><div class="bar"><i style="width:60%"></i></div></div>
+    </div>
+
+    <div class="verdict">
+      <b>Top 3 things to fix first</b>
+      The H1 is tiny (1.8rem) and buried under a kicker the same weight — the page has no clear "look here" moment.
+      Type sizes below <code>0.65rem</code> (used for filter labels, tags, state badges, timestamps) are fighting each other and hurting scannability.
+      Filter chips are stacked in three separate rows — consolidate into one horizontal toolbar with segmented controls.
+    </div>
+  </div>
+
+  <!-- What's working -->
+  <h2><span class="num">01</span> What's working</h2>
+  <div class="findings">
+
+    <div class="f win">
+      <div class="tags"><span class="tag sev-win">Keep</span><span class="tag area">Brand</span></div>
+      <h3>The TRON layer system is genuinely strong</h3>
+      <div class="body">
+        <p>
+          Fixed background grid (48px / 0.025 opacity), CRT scanlines, corner HUD brackets, and the cyan/blue radial glow
+          stack correctly in <code>layout.tsx</code>. The UX-audit document shows these were all broken a sprint ago — they're
+          now consistent across every route. This is the single biggest reason the product feels like a <em>product</em>
+          and not a dashboard.
+        </p>
+      </div>
+    </div>
+
+    <div class="f win">
+      <div class="tags"><span class="tag sev-win">Keep</span><span class="tag area">System</span></div>
+      <h3>Design tokens are doing real work</h3>
+      <div class="body">
+        <p>
+          <code>getModelColor()</code>, <code>getStateStyle()</code>, <code>FORMAT_BADGES</code>, and the
+          <code>MONOSPACE_FONT</code> / <code>BODY_FONT</code> split are used, not decorative. Model-specific
+          team chips (orange Claude, blue Codex, cyan Gemini) give the matchup row instant readability.
+        </p>
+      </div>
+    </div>
+
+    <div class="f win">
+      <div class="tags"><span class="tag sev-win">Keep</span><span class="tag area">Interaction</span></div>
+      <h3>Live states feel live</h3>
+      <div class="body">
+        <p>
+          Running competitions get a pulsing cyan border (<code>liveBorder 2s ease-in-out</code>), a pulsing dot + "LIVE"
+          chip, and a tinted card background. This is the single most on-brand detail on the page.
+          The 10-second auto-refresh tied to <code>visibilitychange</code> is the right call.
+        </p>
+      </div>
+    </div>
+
+    <div class="f win">
+      <div class="tags"><span class="tag sev-win">Keep</span><span class="tag area">UX</span></div>
+      <h3>API-status dot + retry-once fetch</h3>
+      <div class="body">
+        <p>
+          Small but important: the ● online/offline dot in the hero + the two-attempt fetch with a 2s backoff means users
+          actually get a useful error when the orchestrator isn't up, instead of a frozen empty state. Keep this pattern.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Critical issues -->
+  <h2><span class="num">02</span> Critical — fix before launch</h2>
+  <div class="findings">
+
+    <div class="f crit">
+      <div class="tags"><span class="tag sev-crit">Critical</span><span class="tag area">Hierarchy</span></div>
+      <h3>The H1 is too small to carry the page</h3>
+      <div class="body">
+        <p>
+          <code>fontSize: 1.8rem</code> (≈ 34px at 120% root) for "Competition Gallery" is a subheading, not a page title.
+          It sits between a kicker (same uppercase weight) and a stat line (same monospace), so your eye has nowhere to land.
+          On this landing-style view — which is what users see when they hit the app cold — the hero needs to declare itself.
+        </p>
+        <div class="demo">
+          <div class="label">Current hierarchy ladder</div>
+          kicker 11px &nbsp;/&nbsp; <b>h1 ~29px</b> &nbsp;/&nbsp; stats 14px &nbsp;/&nbsp; filters 11px
+        </div>
+        <div class="fix">
+          <b>Suggestion</b>
+          Push H1 to <code>3–3.5rem</code> (56–65px). Tighten its line-height to <code>0.95</code>.
+          Consider dropping the redundant "◆ ARENA4AI | COMPETITIONS" kicker — the TopBar already brands the app; the
+          kicker competes for the same real estate. A short subtitle in <code>BODY_FONT</code> is more useful.
+        </div>
+      </div>
+    </div>
+
+    <div class="f crit">
+      <div class="tags"><span class="tag sev-crit">Critical</span><span class="tag area">Rhythm</span></div>
+      <h3>Competition rows are too dense to scan</h3>
+      <div class="body">
+        <p>
+          Each card is <code>padding: 1rem 1.25rem</code> with a <code>0.65rem</code> gap between siblings. Inside, the
+          title row, matchup row, and score-bars row use <code>0.82 / 0.67 / 0.55rem</code> type — four sizes stacked
+          in 90 vertical pixels. At rest the page reads as a wall of cyan-on-near-black text.
+        </p>
+        <div class="demo">
+          <div class="label">Example row density (current)</div>
+          ⚔ &nbsp; <b style="color:var(--text)">fizzbuzz-cli</b> &nbsp; <span style="color:var(--cyan);font-size:.7em">SPRINT</span> &nbsp; <span style="color:#7cc6db;font-size:.7em">cli</span> &nbsp; <span style="color:var(--cyan);font-size:.65em">● LIVE</span>
+          <div style="margin-top:.2rem;font-size:.72rem;padding-left:1.5rem">claude:architect &nbsp; <span style="color:var(--dim)">VS</span> &nbsp; gemini:speedrunner · ⏱ 2m · 📊 3 runs</div>
+          <div style="margin-top:.35rem;padding-left:1.5rem;color:var(--muted);font-size:.6rem">🏆 claude:architect ━━━━━━━ 87% &nbsp;&nbsp; gemini:speedrunner ━━━━ 62%</div>
+        </div>
+        <div class="fix">
+          <b>Suggestion</b>
+          Bump row vertical rhythm: <code>padding: 1.35rem 1.5rem</code>, inter-row gap <code>0.9rem</code>.
+          Unify internal type to two sizes (title 15px, meta 12.5px). Move score bars out to their own line with more
+          breathing room, and drop the icon prefixes on matchup chips — the colored pill is already the identifier.
+        </div>
+      </div>
+    </div>
+
+    <div class="f crit">
+      <div class="tags"><span class="tag sev-crit">Critical</span><span class="tag area">Filters</span></div>
+      <h3>Three stacked filter rows read as three separate UIs</h3>
+      <div class="body">
+        <p>
+          "State / Model / Category" each get their own row with a tiny all-caps label (<code>0.55rem</code>) followed by
+          a row of buttons (<code>0.65rem</code>). The labels are almost unreadable, the buttons look like secondary nav,
+          and the search input above them sits in a fourth visual tier. Four tiers for "filter this list" is too many.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Collapse to a single horizontal toolbar: <code>[ search ]&nbsp;&nbsp;[ State ▾ ]&nbsp;&nbsp;[ Model ▾ ]&nbsp;&nbsp;[ Category ▾ ]</code>.
+          Use segmented controls for State (5 values) — show them inline; keep Model/Category as dropdowns because
+          the option count varies. Drop the mini-labels entirely; the selected value is the label.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Major issues -->
+  <h2><span class="num">03</span> Major — plan to fix this sprint</h2>
+  <div class="findings">
+
+    <div class="f maj">
+      <div class="tags"><span class="tag sev-maj">Major</span><span class="tag area">Type scale</span></div>
+      <h3>Type sizes below 0.65rem are a dead zone</h3>
+      <div class="body">
+        <p>
+          Counting quickly: state badges <code>0.52rem</code> (≈10px), filter labels <code>0.55rem</code>,
+          score-bar labels <code>0.55rem</code>, timestamps <code>0.58rem</code>, format badges <code>0.52rem</code>.
+          At 120% root, everything under 13px in monospace all-caps starts breaking apart — letter-spacing
+          can't save it.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Set a floor: nothing smaller than <code>0.7rem</code> (≈13.5px) in body copy, <code>0.65rem</code>
+          (≈12.5px) for badges — and only when paired with tighter letter-spacing (<code>1px</code>, not
+          <code>1.5–2px</code>). Consolidate the four "tiny label" sizes into one token (<code>BADGE_FONT_SIZE</code>).
+        </div>
+      </div>
+    </div>
+
+    <div class="f maj">
+      <div class="tags"><span class="tag sev-maj">Major</span><span class="tag area">Information</span></div>
+      <h3>Nothing above the fold tells a cold visitor what this is</h3>
+      <div class="body">
+        <p>
+          If I hit <code>/</code> not knowing the product, I see "Competition Gallery · 12 battles completed · 4 agents
+          competing · API online" and then a list. The <em>what</em> is missing. README calls this "the UFC + WWE of AI
+          battles" — none of that personality is on the homepage.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Add a one-line subtitle under the H1 in <code>BODY_FONT</code> — something like
+          <i>"Two agents enter. A cross-judge scores their work. Watch them think in real time."</i>
+          Either that or promote the "⚔ New Battle" CTA to a big button in the hero (it's currently only in the TopBar).
+        </div>
+      </div>
+    </div>
+
+    <div class="f maj">
+      <div class="tags"><span class="tag sev-maj">Major</span><span class="tag area">Empty state</span></div>
+      <h3>The zero-state is underused</h3>
+      <div class="body">
+        <p>
+          First-time users see: ⚔ icon, one line of text ("No battles recorded. Run the first match to claim the arena."),
+          and a single cyan button. This is the <em>most important screen in the product</em> — it's the only chance you have to
+          explain the concept before the user decides whether to bounce. Right now it's smaller than the filter bar.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Turn zero-state into an actual onboarding panel: 3 example briefs (fizzbuzz / roman-numerals / debate championship)
+          the user can one-click launch, a 20-second loop of an old run, or a 3-step "how this works" strip.
+          The filesystem already has a <code>briefs/</code> library — surface it here.
+        </div>
+      </div>
+    </div>
+
+    <div class="f maj">
+      <div class="tags"><span class="tag sev-maj">Major</span><span class="tag area">Structure</span></div>
+      <h3>Tournaments section is orphaned at the bottom</h3>
+      <div class="body">
+        <p>
+          Tournaments sit below a full list of competitions with a <code>3rem</code> top margin and another full header
+          (kicker + h2 + CTA). On a fresh install with 30 competitions, the Tournaments block is a scroll away and feels
+          like a footnote — even though it's arguably the <em>more</em> strategic view (round-robin is the whole point of
+          a benchmarking platform).
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Either (a) promote Tournaments into a tab at the top (<code>Competitions | Tournaments</code>) so it's a peer view,
+          or (b) show a compact <b>"Active Tournaments"</b> rail above the competitions list — only the running/pending ones —
+          and keep the full list on <code>/tournaments</code>.
+        </div>
+      </div>
+    </div>
+
+    <div class="f maj">
+      <div class="tags"><span class="tag sev-maj">Major</span><span class="tag area">Accessibility</span></div>
+      <h3>Color contrast on dim text is borderline</h3>
+      <div class="body">
+        <p>
+          <code>#1e4a5a</code> on <code>#050f1e</code> (used for filter labels, timestamps, "·" separators) lands at
+          roughly <b>2.4:1</b> — below WCAG AA for any text. It reads as "turned off" visually, which is sometimes the
+          intent, but it's also applied to information users need (timestamps, separators, run counts).
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Use <code>#1e4a5a</code> <em>only</em> for non-informational glyphs (· dots, inactive filter buttons). For any
+          text the user needs to read, step up to <code>#3d7d94</code> (TEXT_DIM — ~3.9:1) or <code>#4a8fa8</code>
+          (TEXT_MUTED — ~5.3:1).
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Minor -->
+  <h2><span class="num">04</span> Minor polish</h2>
+  <div class="findings">
+
+    <div class="f min">
+      <div class="tags"><span class="tag sev-min">Minor</span><span class="tag area">Copy</span></div>
+      <h3>Mixed emoji + icon + glyph vocabulary</h3>
+      <div class="body">
+        <p>
+          The card title row uses ⚔ / 🏆 / 💥 / 🚫 / 📋 for state. The matchup row uses ⏱. Score bars use 🏆 again.
+          Filter search uses 🔍. Zero-state uses ⚔. Every icon on the page is doing different work in different registers
+          (unicode shapes, cartoon emoji, HUD marks). Pick one.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Go all-in on HUD glyphs (◆ ● ▸ ⚔ — uniform cyan) and drop the emoji. Or if you want emoji, reserve them for
+          state-change moments only (finished card, victory banner) and use geometric marks for structure.
+        </div>
+      </div>
+    </div>
+
+    <div class="f min">
+      <div class="tags"><span class="tag sev-min">Minor</span><span class="tag area">Interaction</span></div>
+      <h3>Delete affordance is a ghost</h3>
+      <div class="body">
+        <p>
+          The <code>✕</code> delete button renders at <code>color: #0e3050</code> — nearly invisible on the card until
+          hover. Good for reducing accidental clicks, <em>bad</em> for users who want to tidy up after runs.
+          On first use people won't know it exists.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Keep it dim but at least match the state-badge color (<code>#1e4a5a</code> → <code>#3d7d94</code>). Or only
+          show it on card hover — same net behavior, but signals "there is an action here" clearly on desktop.
+        </div>
+      </div>
+    </div>
+
+    <div class="f min">
+      <div class="tags"><span class="tag sev-min">Minor</span><span class="tag area">Loading</span></div>
+      <h3>Loading state is a single glyph</h3>
+      <div class="body">
+        <p>
+          "⚔ Loading competitions…" centered in 4rem of air. Given how much visual vocabulary the rest of the page has,
+          this looks unfinished. A skeleton of 3–4 ghost card rows would match the brand and prevent the layout from
+          jumping when data arrives.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Render 3 <code>.arena-card</code> placeholders at <code>opacity: 0.4</code> with shimmer on the title and
+          matchup rows. Reuse the <code>scanline</code> keyframe you already have.
+        </div>
+      </div>
+    </div>
+
+    <div class="f min">
+      <div class="tags"><span class="tag sev-min">Minor</span><span class="tag area">Layout</span></div>
+      <h3>Container is 1400px but rows are list-shaped</h3>
+      <div class="body">
+        <p>
+          You've got 1400px of horizontal space and each competition uses it as a single dense row. On ultrawide
+          monitors the left-aligned title column sits ~600px from the right edge, empty.
+        </p>
+        <div class="fix">
+          <b>Suggestion</b>
+          Either shrink the container to <code>1100px</code> (more marketing-aligned, matches the <code>900px</code>
+          the audit flagged as the marketing standard), or switch to a 2-column grid above 1200px — score bars could
+          move into a right-side column instead of stacking below the matchup row.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="div"/>
+
+  <!-- Priorities -->
+  <h2><span class="num">05</span> Priority roadmap</h2>
+  <div class="prio">
+    <div class="col now">
+      <h5>Fix now (1 day)</h5>
+      <ul>
+        <li>Bump H1 to 3rem and drop redundant kicker</li>
+        <li>Set type floor at 0.65rem — audit every size below and round up</li>
+        <li>Consolidate three filter rows into one toolbar</li>
+        <li>Raise <code>#1e4a5a</code> informational text to <code>#3d7d94</code></li>
+      </ul>
+    </div>
+    <div class="col next">
+      <h5>This sprint</h5>
+      <ul>
+        <li>Redesign zero-state as onboarding w/ example briefs</li>
+        <li>Promote Tournaments to a tab or active-rail</li>
+        <li>Pick one icon vocabulary; remove emoji from state</li>
+        <li>Skeleton loading rows</li>
+      </ul>
+    </div>
+    <div class="col later">
+      <h5>Later / optional</h5>
+      <ul>
+        <li>Hero subtitle explaining the product to first-timers</li>
+        <li>2-column row layout at ≥1200px</li>
+        <li>Hover-only delete affordance</li>
+        <li>Tighten container to 1100–1200px</li>
+      </ul>
+    </div>
+  </div>
+
+  <p style="margin-top:2.5rem;color:var(--muted);font-size:.8rem">
+    Review covers the homepage only (<code>packages/web/app/page.tsx</code> + <code>layout.tsx</code> + <code>globals.css</code>).
+    Happy to dig into <code>/competitions/[id]</code>, <code>/briefs</code>, or the New Battle flow next — those have the
+    highest depth-of-design and are where most of the TRON vocabulary should live.
+  </p>
+</div>
+</body>
+</html>
