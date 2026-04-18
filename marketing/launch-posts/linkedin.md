@@ -6,7 +6,7 @@
 
 ## Post body (copy this verbatim)
 
-```
+```text
 I let three AI agents fight over how to launch my AI startup.
 
 Arena4Ai is a competition platform. You write a brief — code, strategy, research, anything — and Claude, GPT, and Gemini race to solve it live. A blind cross-model judge scores every deliverable against your rubric. One winner.
@@ -21,7 +21,7 @@ I walked out with a production-ready GTM plan, a security architecture with actu
 
 Picking a model used to mean A/B testing in a playground tab. Now it's a cage match against your real problem — with transparent scoring and the winner's output ready to ship.
 
-Still in private beta. If you want in early, drop your email at arena4.ai.
+Still in private beta. If you want in early, drop your email at arena4.ai/?utm_source=linkedin.
 
 #AI #AIAgents #BuildingInPublic #LLM
 ```
@@ -32,7 +32,7 @@ Still in private beta. If you want in early, drop your email at arena4.ai.
 
 **Native video upload** (NOT a YouTube link — native video ranks ~5–10× higher on LinkedIn):
 
-```
+```text
 /Users/kikostefanov/Projects/agentarena/packages/video/out/sizzle-16x9.mp4
 ```
 
@@ -44,7 +44,7 @@ Use the 16:9 (landscape) cut. It's 12 MB, well under LinkedIn's 5 GB / 10-min vi
 
 Algorithm trick: a comment on your own post makes LinkedIn think the post is generating discussion, which boosts distribution.
 
-```
+```text
 Teaching a platform to evaluate itself was the most meta debug session of my year.
 
 Happy to go deeper on the judging architecture, the pose library behind the gladiators, or why BYOM (bring-your-own-model) made the whole pricing model cleaner — ask away.
@@ -54,11 +54,9 @@ Happy to go deeper on the judging architecture, the pose library behind the glad
 
 ## Attribution
 
-If you want your admin dashboard to show LinkedIn separately in the "By source" breakdown:
+The post body already uses `arena4.ai/?utm_source=linkedin` so signups from this post show up tagged as `linkedin` in the admin "By source" breakdown.
 
-**Replace `arena4.ai` in the post with `arena4.ai/?utm_source=linkedin`**
-
-LinkedIn sometimes rewrites outbound links through its own tracker, which can strip UTM params. Our landing page has a `document.referrer` fallback that catches LinkedIn traffic either way, so both variants work — the UTM just makes attribution cleaner when it survives.
+LinkedIn sometimes rewrites outbound links through its own tracker, which can strip the UTM param. The landing page has a `document.referrer` fallback that catches LinkedIn traffic either way — so attribution works whether or not the UTM survives.
 
 ---
 
@@ -72,7 +70,7 @@ LinkedIn sometimes rewrites outbound links through its own tracker, which can st
 
 ## After posting
 
-1. Open https://arena4.ai/admin
+1. Open <https://arena4.ai/admin>
 2. Watch the "Last 24h" counter and "By source" breakdown fill in
 3. Refresh hourly for the first few hours — most engagement on LinkedIn happens in the first 2–4 hours
 4. Reply to every comment within the first 60 minutes (also boosts reach)
