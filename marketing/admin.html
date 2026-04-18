@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Arena4Ai — Admin</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #000408; color: #c8eef8;
+  font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+  min-height: 100vh; padding: 2rem 1.5rem 6rem;
+  background-image:
+    linear-gradient(rgba(0,240,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,240,255,0.025) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-attachment: fixed;
+}
+
+.scanlines {
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+  pointer-events: none; z-index: 1;
+}
+
+.corner { position: fixed; width: 14px; height: 14px; z-index: 50; opacity: 0.35; }
+.corner.tl { top: 1rem; left: 1rem; border-top: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.corner.tr { top: 1rem; right: 1rem; border-top: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+.corner.bl { bottom: 1rem; left: 1rem; border-bottom: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.corner.br { bottom: 1rem; right: 1rem; border-bottom: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+
+.wrap { max-width: 1000px; margin: 0 auto; position: relative; z-index: 2; }
+
+.hero {
+  margin-bottom: 2.25rem; padding: 1.25rem 0 1.5rem;
+  border-bottom: 1px solid #0a2235;
+}
+.kicker {
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 5px; color: #00f0ff;
+  text-transform: uppercase; margin-bottom: 0.5rem;
+}
+h1 {
+  font-size: 2.25rem; font-weight: 900; line-height: 0.95; letter-spacing: 0.5px;
+  background: linear-gradient(135deg, #c8eef8 0%, #00f0ff 50%, #0080ff 100%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sub { margin-top: 0.7rem; color: #7cc6db; font-size: 0.85rem; letter-spacing: 0.3px; }
+
+.gate {
+  max-width: 420px; margin: 5rem auto;
+  background: #050f1e; border: 1px solid #0a2235; border-radius: 8px;
+  padding: 2rem 1.75rem;
+}
+.gate h2 { font-size: 1rem; font-weight: 900; letter-spacing: 0.5px; color: #c8eef8; margin-bottom: 0.4rem; }
+.gate p { color: #7cc6db; font-size: 0.72rem; line-height: 1.55; margin-bottom: 1.2rem; }
+.gate input {
+  width: 100%; padding: 0.75rem 0.9rem; background: #010810;
+  border: 1px solid #0a2235; border-radius: 5px; outline: none;
+  color: #c8eef8; font-size: 0.8rem; font-family: inherit; margin-bottom: 0.8rem;
+}
+.gate input:focus { border-color: rgba(0,240,255,0.5); }
+.gate button {
+  width: 100%; padding: 0.75rem; background: #00f0ff; color: #000408;
+  border: none; border-radius: 5px; font-weight: 900; font-size: 0.7rem;
+  letter-spacing: 2px; text-transform: uppercase; cursor: pointer; font-family: inherit;
+}
+.gate button:hover { background: #33f5ff; }
+.gate .err { color: #ef4444; font-size: 0.7rem; margin-top: 0.6rem; display: none; }
+.gate .err.show { display: block; }
+
+.stats-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem; margin-bottom: 1.5rem;
+}
+.stat {
+  background: #050f1e; border: 1px solid #0a2235; border-radius: 8px;
+  padding: 1.1rem 1.2rem; position: relative; overflow: hidden;
+}
+.stat::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  background: linear-gradient(180deg, #00f0ff, #0080ff);
+}
+.stat-label {
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 2.5px; color: #3d7d94;
+  text-transform: uppercase; margin-bottom: 0.55rem;
+}
+.stat-value {
+  font-size: 2rem; font-weight: 900; color: #c8eef8; line-height: 1; letter-spacing: -0.5px;
+}
+
+.chart-card {
+  background: #050f1e; border: 1px solid #0a2235; border-radius: 8px;
+  padding: 1.25rem 1.4rem; margin-bottom: 1.5rem;
+}
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1rem; }
+.chart-title { font-size: 0.65rem; font-weight: 800; letter-spacing: 2px; color: #00f0ff; text-transform: uppercase; }
+.chart-meta { font-size: 0.68rem; color: #4a8fa8; }
+.bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; align-items: end; height: 100px; }
+.bar {
+  background: linear-gradient(180deg, #00f0ff, #0080ff);
+  min-height: 2px; border-radius: 2px 2px 0 0; position: relative;
+  transition: background 0.15s;
+}
+.bar.zero { background: #0a2235; }
+.bar:hover { background: linear-gradient(180deg, #33f5ff, #33a5ff); }
+.bar-label {
+  position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+  font-size: 0.55rem; color: #c8eef8; font-weight: 700;
+  white-space: nowrap; opacity: 0; transition: opacity 0.15s;
+}
+.bar:hover .bar-label { opacity: 1; }
+.x-labels { display: grid; grid-template-columns: repeat(14, 1fr); gap: 4px; margin-top: 0.6rem; }
+.x-labels div {
+  text-align: center; font-size: 0.55rem; color: #3d7d94; letter-spacing: 0.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.table-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem; }
+.table-title { font-size: 0.65rem; font-weight: 800; letter-spacing: 2px; color: #00f0ff; text-transform: uppercase; }
+.actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.btn {
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 1.5px;
+  padding: 0.4rem 0.85rem; background: #010810; border: 1px solid #0a2235;
+  color: #7cc6db; border-radius: 4px; cursor: pointer;
+  font-family: inherit; text-transform: uppercase; transition: all 0.15s;
+}
+.btn:hover { border-color: #0e3050; color: #c8eef8; }
+.btn-danger { color: #ef4444; border-color: rgba(239,68,68,0.3); }
+.btn-danger:hover { border-color: rgba(239,68,68,0.6); color: #ff6666; }
+
+.table-card { background: #050f1e; border: 1px solid #0a2235; border-radius: 8px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  font-size: 0.58rem; font-weight: 800; letter-spacing: 2px; text-transform: uppercase;
+  color: #3d7d94; padding: 0.75rem 1rem; text-align: left; border-bottom: 1px solid #0a2235;
+}
+tbody td {
+  padding: 0.7rem 1rem; border-bottom: 1px solid rgba(10,34,53,0.5);
+  font-size: 0.78rem; color: #c8eef8;
+}
+tbody tr:hover { background: rgba(0,240,255,0.025); }
+tbody tr:hover .copy-btn { opacity: 1; }
+.email-cell { display: flex; align-items: center; gap: 0.5rem; }
+.copy-btn {
+  background: none; border: none; color: #3d7d94; cursor: pointer;
+  font-family: inherit; font-size: 0.65rem; padding: 0.15rem 0.35rem;
+  border-radius: 3px; opacity: 0; transition: opacity 0.15s;
+}
+.copy-btn:hover { color: #00f0ff; background: rgba(0,240,255,0.08); }
+.ts { color: #4a8fa8; font-size: 0.72rem; white-space: nowrap; }
+.src {
+  font-size: 0.55rem; font-weight: 700; letter-spacing: 1px;
+  padding: 0.15rem 0.5rem; border-radius: 3px;
+  background: rgba(0,240,255,0.1); color: #00f0ff; text-transform: uppercase;
+}
+
+.empty { text-align: center; padding: 3rem 1.5rem; color: #4a8fa8; font-size: 0.78rem; }
+
+.toast {
+  position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%);
+  background: #050f1e; border: 1px solid rgba(0,240,255,0.4);
+  color: #00f0ff; padding: 0.7rem 1.3rem; border-radius: 5px;
+  font-size: 0.7rem; letter-spacing: 1px; z-index: 300;
+  opacity: 0; transition: opacity 0.25s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div class="scanlines"></div>
+<div class="corner tl"></div>
+<div class="corner tr"></div>
+<div class="corner bl"></div>
+<div class="corner br"></div>
+
+<div id="gate" class="gate hidden">
+  <h2>◆ Admin Access</h2>
+  <p>Enter the admin key to view registrants. Your key is cached in this browser only.</p>
+  <input type="password" id="key-input" placeholder="admin key" autocomplete="off" />
+  <button type="button" id="gate-btn">Unlock</button>
+  <div class="err" id="gate-err"></div>
+</div>
+
+<div id="dash" class="wrap hidden">
+  <div class="hero">
+    <div class="kicker">◆ Arena4Ai · Admin</div>
+    <h1>Registrants</h1>
+    <p class="sub" id="sub">Loading…</p>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat"><div class="stat-label">Total signups</div><div class="stat-value" id="stat-total">—</div></div>
+    <div class="stat"><div class="stat-label">Last 7 days</div><div class="stat-value" id="stat-week">—</div></div>
+    <div class="stat"><div class="stat-label">Last 24h</div><div class="stat-value" id="stat-day">—</div></div>
+    <div class="stat"><div class="stat-label">Latest signup</div><div class="stat-value" id="stat-latest" style="font-size:0.95rem; letter-spacing:0.3px;">—</div></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-head">
+      <div class="chart-title">◆ Signups · last 14 days</div>
+      <div class="chart-meta" id="chart-meta">—</div>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="x-labels" id="x-labels"></div>
+  </div>
+
+  <div class="table-head">
+    <div class="table-title">◆ All registrants</div>
+    <div class="actions">
+      <button class="btn" id="copy-btn">Copy emails</button>
+      <button class="btn" id="csv-btn">Download CSV</button>
+      <button class="btn" id="refresh-btn">Refresh</button>
+      <button class="btn btn-danger" id="forget-btn">Forget key</button>
+    </div>
+  </div>
+  <div class="table-card">
+    <table>
+      <thead>
+        <tr>
+          <th>Email</th>
+          <th>Source</th>
+          <th style="text-align:right">When</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="empty" class="empty hidden">No registrants yet.</div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_URL = 'https://arena4ai-worker.kikostefanov.workers.dev/api/registrants';
+const KEY_STORAGE = 'arena4ai_admin_key';
+let registrants = [];
+
+function toast(msg, err) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.borderColor = err ? 'rgba(239,68,68,0.5)' : 'rgba(0,240,255,0.4)';
+  t.style.color = err ? '#ef4444' : '#00f0ff';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+function clearChildren(el) {
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
+function getKey() { return localStorage.getItem(KEY_STORAGE); }
+function setKey(k) { localStorage.setItem(KEY_STORAGE, k); }
+function clearKey() { localStorage.removeItem(KEY_STORAGE); }
+
+async function fetchRegistrants() {
+  const key = getKey();
+  if (!key) return null;
+  const res = await fetch(API_URL + '?key=' + encodeURIComponent(key));
+  if (res.status === 401) { clearKey(); return null; }
+  const data = await res.json();
+  if (!data.ok) throw new Error(data.error || 'Failed');
+  return data;
+}
+
+async function submitKey() {
+  const input = document.getElementById('key-input');
+  const err = document.getElementById('gate-err');
+  err.classList.remove('show');
+  const k = input.value.trim();
+  if (!k) { err.textContent = 'Enter a key.'; err.classList.add('show'); return; }
+  setKey(k);
+  const data = await fetchRegistrants().catch(function() { return null; });
+  if (!data) {
+    clearKey();
+    err.textContent = 'Invalid key.';
+    err.classList.add('show');
+    return;
+  }
+  showDash(data);
+}
+
+function showGate() {
+  document.getElementById('gate').classList.remove('hidden');
+  document.getElementById('dash').classList.add('hidden');
+  setTimeout(function() { document.getElementById('key-input').focus(); }, 50);
+}
+
+function showDash(data) {
+  document.getElementById('gate').classList.add('hidden');
+  document.getElementById('dash').classList.remove('hidden');
+  registrants = data.registrants || [];
+  render(data);
+}
+
+function parseTs(iso) {
+  return new Date(iso.replace(' ', 'T') + 'Z').getTime();
+}
+
+function timeAgo(iso) {
+  const now = Date.now();
+  const then = parseTs(iso);
+  const secs = Math.max(0, Math.floor((now - then) / 1000));
+  if (secs < 60) return secs + 's ago';
+  const m = Math.floor(secs / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + 'd ago';
+  return new Date(then).toLocaleDateString();
+}
+
+function startOfUTCDay(ms) {
+  const d = new Date(ms);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function render(data) {
+  const total = data.count != null ? data.count : registrants.length;
+  const now = Date.now();
+  const dayAgo = now - 86400000;
+  const weekAgo = now - 7 * 86400000;
+
+  const last24 = registrants.filter(function(r) { return parseTs(r.created_at) >= dayAgo; }).length;
+  const last7 = registrants.filter(function(r) { return parseTs(r.created_at) >= weekAgo; }).length;
+
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-week').textContent = last7;
+  document.getElementById('stat-day').textContent = last24;
+  document.getElementById('stat-latest').textContent =
+    registrants[0] ? timeAgo(registrants[0].created_at) : '—';
+  document.getElementById('sub').textContent =
+    total + ' total · updated ' + new Date().toLocaleTimeString();
+
+  // 14-day chart
+  const buckets = [];
+  const today = startOfUTCDay(now);
+  for (let i = 13; i >= 0; i--) buckets.push({ start: today - i * 86400000, count: 0 });
+  const bucketByStart = new Map(buckets.map(function(b) { return [b.start, b]; }));
+  for (const r of registrants) {
+    const k = startOfUTCDay(parseTs(r.created_at));
+    const b = bucketByStart.get(k);
+    if (b) b.count++;
+  }
+  const maxCount = Math.max(1, ...buckets.map(function(b) { return b.count; }));
+  const bars = document.getElementById('bars');
+  const xlabels = document.getElementById('x-labels');
+  clearChildren(bars);
+  clearChildren(xlabels);
+  for (const b of buckets) {
+    const pct = (b.count / maxCount) * 100;
+    const el = document.createElement('div');
+    el.className = 'bar' + (b.count === 0 ? ' zero' : '');
+    el.style.height = Math.max(2, pct) + '%';
+    const lbl = document.createElement('span');
+    lbl.className = 'bar-label';
+    lbl.textContent = String(b.count);
+    el.appendChild(lbl);
+    bars.appendChild(el);
+
+    const xl = document.createElement('div');
+    const d = new Date(b.start);
+    xl.textContent = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+    xlabels.appendChild(xl);
+  }
+  document.getElementById('chart-meta').textContent =
+    'peak ' + maxCount + '/day · ' + buckets.reduce(function(s, b) { return s + b.count; }, 0) + ' total window';
+
+  // Table
+  const tb = document.getElementById('tbody');
+  const empty = document.getElementById('empty');
+  clearChildren(tb);
+  if (!registrants.length) {
+    empty.classList.remove('hidden');
+    return;
+  }
+  empty.classList.add('hidden');
+  for (const r of registrants) {
+    const tr = document.createElement('tr');
+
+    const emailTd = document.createElement('td');
+    const cell = document.createElement('div');
+    cell.className = 'email-cell';
+    const span = document.createElement('span');
+    span.textContent = r.email;
+    const btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.textContent = '◆ copy';
+    btn.addEventListener('click', function() {
+      navigator.clipboard.writeText(r.email).then(function() { toast('Email copied'); });
+    });
+    cell.appendChild(span);
+    cell.appendChild(btn);
+    emailTd.appendChild(cell);
+
+    const srcTd = document.createElement('td');
+    const src = document.createElement('span');
+    src.className = 'src';
+    src.textContent = r.source || 'landing';
+    srcTd.appendChild(src);
+
+    const tsTd = document.createElement('td');
+    tsTd.className = 'ts';
+    tsTd.style.textAlign = 'right';
+    tsTd.textContent = timeAgo(r.created_at) + ' · ' + r.created_at;
+
+    tr.appendChild(emailTd);
+    tr.appendChild(srcTd);
+    tr.appendChild(tsTd);
+    tb.appendChild(tr);
+  }
+}
+
+async function refresh() {
+  try {
+    const data = await fetchRegistrants();
+    if (!data) { showGate(); return; }
+    registrants = data.registrants || [];
+    render(data);
+    toast('Refreshed');
+  } catch (e) {
+    toast('Refresh failed', true);
+  }
+}
+
+function copyAll() {
+  const emails = registrants.map(function(r) { return r.email; }).join('\n');
+  navigator.clipboard.writeText(emails).then(function() {
+    toast(registrants.length + ' emails copied');
+  });
+}
+
+function downloadCSV() {
+  const rows = [['email', 'created_at', 'source']];
+  for (const r of registrants) rows.push([r.email, r.created_at, r.source || 'landing']);
+  const csv = rows.map(function(r) {
+    return r.map(function(v) {
+      return /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : v;
+    }).join(',');
+  }).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'arena4ai-registrants-' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('CSV downloaded');
+}
+
+function forgetKey() {
+  if (!confirm('Clear admin key from this browser?')) return;
+  clearKey();
+  showGate();
+}
+
+// Wire up buttons
+document.getElementById('gate-btn').addEventListener('click', submitKey);
+document.getElementById('copy-btn').addEventListener('click', copyAll);
+document.getElementById('csv-btn').addEventListener('click', downloadCSV);
+document.getElementById('refresh-btn').addEventListener('click', refresh);
+document.getElementById('forget-btn').addEventListener('click', forgetKey);
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !document.getElementById('gate').classList.contains('hidden')) {
+    submitKey();
+  }
+});
+
+// Boot
+(async function() {
+  const key = getKey();
+  if (!key) { showGate(); return; }
+  try {
+    const data = await fetchRegistrants();
+    if (!data) { showGate(); return; }
+    showDash(data);
+  } catch (e) {
+    showGate();
+  }
+})();
+</script>
+</body>
+</html>

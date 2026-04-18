@@ -39,11 +39,17 @@ npx wrangler d1 execute arena4ai-registrants --file=./schema.sql
 
 ### 3. Set the admin secret
 
+Generate a strong key and store it securely (1Password, etc.) — **never commit it to git**.
+
 ```bash
-npx wrangler secret put ADMIN_KEY
-# Enter a strong random string when prompted — save it somewhere safe
+# Generate a 48-char random key
+python3 -c "import secrets,string; print(''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(48)))"
+
+# Pipe the value in (or omit --stdin to enter interactively)
+echo "<paste-key-here>" | npx wrangler secret put ADMIN_KEY
 ```
-Yellowheart13!1974
+
+To rotate: run the command again with a new value. The old key stops working immediately.
 
 ### 4. Deploy the Worker
 
@@ -124,15 +130,22 @@ npx wrangler pages deploy marketing --project-name=arena4ai-landing
 
 ## Part 3 — Viewing Registrants
 
+Three options:
+
+**Admin dashboard (easiest):** browse to `https://arena4.ai/admin.html` — you'll be prompted for the admin key once and it's cached in `localStorage` for the session.
+
+**Curl the endpoint:**
+
 ```bash
-curl "https://arena4ai-worker.kikostefanov.workers.dev/api/registrants?key=Yellowheart13!1974"
+curl "https://arena4ai-worker.kikostefanov.workers.dev/api/registrants?key=<ADMIN_KEY>" | jq
 ```
 
-Or query D1 directly:
+**Query D1 directly via wrangler:**
 
 ```bash
 cd marketing/worker
-npx wrangler d1 execute arena4ai-registrants --command="SELECT * FROM registrants ORDER BY created_at DESC;"
+npx wrangler d1 execute arena4ai-registrants \
+  --command="SELECT * FROM registrants ORDER BY created_at DESC;"
 ```
 
 ---
