@@ -273,6 +273,8 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
       <input type="email" id="hero-email" aria-label="Email address" placeholder="your@email.com" autocomplete="email">
       <button type="button" id="hero-btn" onclick="submitEmail('hero-email','hero-btn')">Get Early Access</button>
     </div>
+    <!-- Honeypot — bots fill it, humans don't see it -->
+    <input type="text" id="hero-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;width:1px;height:1px;">
     <span class="form-note">No spam &nbsp;·&nbsp; First to know when we open</span>
   </div>
 
@@ -345,6 +347,8 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
     <input type="email" id="bottom-email" aria-label="Email address" placeholder="your@email.com" autocomplete="email">
     <button type="button" id="bottom-btn" onclick="submitEmail('bottom-email','bottom-btn')">Claim Your Spot</button>
   </div>
+  <!-- Honeypot — paired with bottom form -->
+  <input type="text" id="bottom-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;opacity:0;pointer-events:none;width:1px;height:1px;">
   <p class="founding-note">arena4.ai &nbsp;·&nbsp; arena4ai.com</p>
 </section>
 
@@ -370,6 +374,38 @@ function toggleSizzleSound() {
 // Replace YOUR_SUBDOMAIN after deploying the Worker (see marketing/README.md)
 const API_URL = 'https://aapi.arena4.ai/api/register';
 
+// Capture UTM source from URL (or document.referrer) for attribution.
+// Falls back to 'landing' if no UTM. Persisted in sessionStorage so a user
+// who navigates around the page still gets attributed correctly on submit.
+function resolveSource() {
+  try {
+    const cached = sessionStorage.getItem('arena4ai_source');
+    if (cached) return cached;
+    const params = new URLSearchParams(window.location.search);
+    const utm = (params.get('utm_source') || '').toLowerCase();
+    if (utm) {
+      sessionStorage.setItem('arena4ai_source', utm);
+      return utm;
+    }
+    const ref = (document.referrer || '').toLowerCase();
+    let inferred = '';
+    if (ref.includes('facebook.com') || ref.includes('fb.com') || ref.includes('l.facebook')) inferred = 'facebook';
+    else if (ref.includes('instagram.com')) inferred = 'instagram';
+    else if (ref.includes('twitter.com') || ref.includes('t.co') || ref.includes('x.com')) inferred = 'twitter';
+    else if (ref.includes('linkedin.com')) inferred = 'linkedin';
+    else if (ref.includes('tiktok.com')) inferred = 'tiktok';
+    else if (ref.includes('reddit.com')) inferred = 'reddit';
+    else if (ref.includes('youtube.com') || ref.includes('youtu.be')) inferred = 'youtube';
+    else if (ref.includes('news.ycombinator')) inferred = 'hackernews';
+    else if (ref.includes('producthunt')) inferred = 'producthunt';
+    if (inferred) {
+      sessionStorage.setItem('arena4ai_source', inferred);
+      return inferred;
+    }
+  } catch (_) { /* sessionStorage may be unavailable */ }
+  return 'landing';
+}
+
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -383,6 +419,9 @@ async function submitEmail(inputId, btnId) {
   const input = document.getElementById(inputId);
   const btn = document.getElementById(btnId);
   const email = input.value.trim();
+  // Find the paired honeypot — same prefix as the email input id
+  const hpId = inputId.replace(/-email$/, '-hp');
+  const honeypot = (document.getElementById(hpId) || {}).value || '';
 
   if (API_URL.includes('YOUR_SUBDOMAIN')) {
     showToast('Registration not yet configured.', true);
@@ -402,7 +441,7 @@ async function submitEmail(inputId, btnId) {
     const res = await fetch(API_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email, source: resolveSource(), website: honeypot })
     });
     const data = await res.json();
 

@@ -208,6 +208,14 @@ tbody tr:hover .copy-btn { opacity: 1; }
     <div class="x-labels" id="x-labels"></div>
   </div>
 
+  <div class="chart-card">
+    <div class="chart-head">
+      <div class="chart-title">◆ By source</div>
+      <div class="chart-meta" id="source-meta">—</div>
+    </div>
+    <div id="source-rows" style="display:flex; flex-direction:column; gap:0.55rem;"></div>
+  </div>
+
   <div class="table-head">
     <div class="table-title">◆ All registrants</div>
     <div class="actions">
@@ -370,6 +378,58 @@ function render(data) {
   }
   document.getElementById('chart-meta').textContent =
     'peak ' + maxCount + '/day · ' + buckets.reduce(function(s, b) { return s + b.count; }, 0) + ' total window';
+
+  // Source breakdown
+  const bySource = new Map();
+  for (const r of registrants) {
+    const k = r.source || 'landing';
+    bySource.set(k, (bySource.get(k) || 0) + 1);
+  }
+  const sortedSources = [...bySource.entries()].sort(function(a, b) { return b[1] - a[1]; });
+  const maxSource = sortedSources.length ? sortedSources[0][1] : 1;
+  const sourceRows = document.getElementById('source-rows');
+  clearChildren(sourceRows);
+  if (!sortedSources.length) {
+    const empty = document.createElement('div');
+    empty.style.color = '#4a8fa8';
+    empty.style.fontSize = '0.75rem';
+    empty.textContent = 'No data yet.';
+    sourceRows.appendChild(empty);
+  } else {
+    for (const [src, count] of sortedSources) {
+      const row = document.createElement('div');
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '0.7rem';
+
+      const label = document.createElement('div');
+      label.style.cssText = 'min-width:7em;font-size:0.7rem;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#7cc6db;';
+      label.textContent = src;
+
+      const track = document.createElement('div');
+      track.style.cssText = 'flex:1;height:8px;background:#0a2235;border-radius:4px;overflow:hidden;';
+      const fill = document.createElement('div');
+      fill.style.cssText = 'height:100%;background:linear-gradient(90deg,#00f0ff,#0080ff);border-radius:4px;';
+      fill.style.width = ((count / maxSource) * 100) + '%';
+      track.appendChild(fill);
+
+      const num = document.createElement('div');
+      num.style.cssText = 'min-width:3em;text-align:right;font-size:0.8rem;font-weight:900;color:#c8eef8;';
+      num.textContent = String(count);
+
+      const pct = document.createElement('div');
+      pct.style.cssText = 'min-width:3.5em;text-align:right;font-size:0.65rem;color:#4a8fa8;';
+      pct.textContent = ((count / registrants.length) * 100).toFixed(0) + '%';
+
+      row.appendChild(label);
+      row.appendChild(track);
+      row.appendChild(num);
+      row.appendChild(pct);
+      sourceRows.appendChild(row);
+    }
+  }
+  document.getElementById('source-meta').textContent =
+    sortedSources.length + ' source' + (sortedSources.length === 1 ? '' : 's');
 
   // Table
   const tb = document.getElementById('tbody');

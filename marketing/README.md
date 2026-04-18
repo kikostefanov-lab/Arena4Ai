@@ -128,7 +128,53 @@ npx wrangler pages deploy marketing --project-name=arena4ai-landing
 
 ---
 
-## Part 3 — Viewing Registrants
+## Part 3 — Attribution via UTM links
+
+The landing page reads `?utm_source=...` from the URL, caches it in
+`sessionStorage`, and sends it with every form submit. It also falls back to
+`document.referrer` for common sources (Facebook, Instagram, Twitter, etc.)
+when no UTM is set.
+
+Use these links when posting:
+
+| Channel | URL |
+|---|---|
+| Facebook | `https://arena4.ai/?utm_source=facebook` |
+| Instagram | `https://arena4.ai/?utm_source=instagram` |
+| Twitter / X | `https://arena4.ai/?utm_source=twitter` |
+| LinkedIn | `https://arena4.ai/?utm_source=linkedin` |
+| YouTube | `https://arena4.ai/?utm_source=youtube` |
+| TikTok | `https://arena4.ai/?utm_source=tiktok` |
+| Reddit | `https://arena4.ai/?utm_source=reddit` |
+| Newsletter | `https://arena4.ai/?utm_source=newsletter` |
+| Hacker News | `https://arena4.ai/?utm_source=hackernews` |
+| Product Hunt | `https://arena4.ai/?utm_source=producthunt` |
+| Email | `https://arena4.ai/?utm_source=email` |
+| Podcast | `https://arena4.ai/?utm_source=podcast` |
+
+The Worker validates `source` against a whitelist (`ALLOWED_SOURCES` in
+`worker/index.js`) — anything unknown silently becomes `landing`.
+
+The admin dashboard (`/admin`) shows a "By source" breakdown so you can see
+which channel is converting.
+
+## Part 4 — Bot defense
+
+Two layers, both invisible to legit users:
+
+1. **Honeypot field** — hidden `<input name="website">` in both forms. Bots
+   fill every field they see; real users don't. When the Worker sees a
+   non-empty `website`, it returns `{ ok: true }` (fake success) and
+   discards the payload — bots think they succeeded and don't retry.
+2. **IP rate limit** — Cloudflare Workers Rate Limiting binding, 5 req/60s
+   per IP, sliding window per data center. Over 100 sequential requests
+   from a single IP, ~50% get a 429. Gives meaningful protection against
+   single-IP spam without CAPTCHA friction.
+
+For higher-volume launches (Hacker News, Product Hunt), consider adding
+Cloudflare Turnstile (invisible CAPTCHA, free tier) before the CTA button.
+
+## Part 5 — Viewing Registrants
 
 Three options:
 

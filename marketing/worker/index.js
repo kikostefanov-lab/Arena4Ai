@@ -9,6 +9,14 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3001',
 ];
 
+// Accepted UTM sources — anything else becomes 'landing'. Keep this narrow;
+// it's a server-side guardrail against free-text shoved into the column.
+const ALLOWED_SOURCES = new Set([
+  'landing', 'facebook', 'instagram', 'twitter', 'x', 'linkedin',
+  'youtube', 'tiktok', 'reddit', 'hackernews', 'producthunt',
+  'email', 'direct', 'newsletter', 'podcast', 'blog', 'other',
+]);
+
 function corsHeaders(origin) {
   const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
@@ -22,6 +30,12 @@ function isValidEmail(email) {
   return typeof email === 'string' &&
     email.length <= 254 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function normalizeSource(raw) {
+  if (typeof raw !== 'string') return 'landing';
+  const lower = raw.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32);
+  return ALLOWED_SOURCES.has(lower) ? lower : 'landing';
 }
 
 function json(data, status, origin) {
@@ -44,8 +58,21 @@ export default {
       return new Response(null, { status: 204, headers: corsHeaders(origin) });
     }
 
-    // POST /api/register
+    // POST /api/register — public email capture
     if (request.method === 'POST' && url.pathname === '/api/register') {
+      // Rate limit by client IP (CF-provided header on Cloudflare).
+      // Sliding window enforced per-colo, so aggregate limits ≈ 5-10/min per IP
+      // depending on edge routing. Meaningfully reduces single-IP spam.
+      const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+      if (env.RATE_LIMITER) {
+        try {
+          const { success } = await env.RATE_LIMITER.limit({ key: ip });
+          if (!success) {
+            return json({ ok: false, error: 'Too many attempts — try again shortly.' }, 429, origin);
+          }
+        } catch (_) { /* fail open — don't block legit users on binding errors */ }
+      }
+
       let body;
       try {
         body = await request.json();
@@ -53,15 +80,23 @@ export default {
         return json({ ok: false, error: 'Invalid JSON' }, 400, origin);
       }
 
+      // Honeypot — legit users never fill this field (hidden via CSS)
+      // We return a fake success so bots don't probe for the real flow.
+      if (typeof body.website === 'string' && body.website.trim() !== '') {
+        return json({ ok: true }, 200, origin);
+      }
+
       const { email } = body;
       if (!isValidEmail(email)) {
         return json({ ok: false, error: 'Invalid email' }, 400, origin);
       }
 
+      const source = normalizeSource(body.source);
+
       try {
         await env.DB.prepare(
-          'INSERT INTO registrants (email) VALUES (?)'
-        ).bind(email.toLowerCase()).run();
+          'INSERT INTO registrants (email, source) VALUES (?, ?)'
+        ).bind(email.toLowerCase(), source).run();
         return json({ ok: true }, 200, origin);
       } catch (err) {
         // SQLite UNIQUE constraint error code 2067

@@ -6,3 +6,10 @@ compatibility_date = "2024-01-01"
 binding = "DB"
 database_name = "arena4ai-registrants"
 database_id = "fdcb9eec-5005-4382-b547-00abbcdbead4"
+
+# IP-based rate limiting — 5 registration attempts per 60s per IP.
+# namespace_id is an arbitrary integer per worker (not created in dashboard).
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+simple = { limit = 5, period = 60 }
