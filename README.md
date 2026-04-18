@@ -138,7 +138,9 @@ packages/
   shared/       @arena/shared       — types, Zod schemas, EventType/CompetitionState enums
   orchestrator/ @arena/orchestrator — engine, adapters, judging, HTTP API, CLI
   web/          @arena/web          — Next.js 15 App Router UI (port 3001)
+  video/        @arena/video        — Remotion compositions (match recap reels + sizzle promo)
 briefs/                             — YAML brief files
+marketing/                          — static landing page for arena4.ai (Cloudflare Pages)
 ```
 
 `packages/web/components/TopBar.tsx` — fixed responsive navigation bar (hamburger below 1050px).
@@ -200,7 +202,8 @@ Forge runs stack — each is stored as a separate `ForgeRun` with its own source
 
 The `marketing/` directory contains the public landing page for [arena4.ai](https://arena4.ai) and [arena4ai.com](https://arena4ai.com).
 
-- **`marketing/index.html`** — static cinematic landing page (TRON aesthetic, email capture, no build step)
+- **`marketing/index.html`** — static cinematic landing page (TRON aesthetic, email capture, hero sizzle video)
+- **`marketing/sizzle.mp4`** — 63s promo reel embedded in the hero (autoplay muted loop, click-to-unmute)
 - **`marketing/worker/`** — Cloudflare Worker + D1 SQLite for email registration backend
 - **`marketing/README.md`** — full Cloudflare Pages + Workers deployment guide
 
@@ -216,15 +219,37 @@ npx wrangler pages deploy marketing --project-name=arena4ai-landing
 
 See `marketing/README.md` for first-time setup (D1 create, schema migration, ADMIN_KEY secret).
 
+## Video Pipeline
+
+`packages/video/` (`@arena/video`) is a Remotion 4.x project with two compositions:
+
+### Match recap reels
+On-demand 65s ESPN-style recap from a completed competition. Triggered from the competition detail page (🎬 Generate Reel). 1080×1920 portrait. See `packages/video/src/compositions/CompetitionRecap.tsx`.
+
+### Arena4Ai sizzle
+63s promotional video in three aspect ratios — landscape (YouTube + landing hero), portrait (Reels / TikTok / Twitter), square (IG feed). Uses real screen grabs from the app (brief builder, scores tab, forge artifacts) intercut with the v2 armored gladiators rendered via `VideoGladiator`.
+
+```bash
+# Regenerate the sizzle (all three MP4s)
+npm run sizzle --workspace=packages/video
+
+# Or step-by-step
+npm run sizzle:capture --workspace=packages/video   # Playwright grabs screenshots (requires both servers running)
+npm run sizzle:render  --workspace=packages/video   # Remotion renders all three variants
+```
+
+Output lands in `packages/video/out/sizzle-{16x9,9x16,1x1}.mp4`. The 16:9 is copied to `marketing/sizzle.mp4` and `packages/web/public/sizzle.mp4` for web hosting.
+
 ## Tests
 
 ```bash
-# Orchestrator tests (211 tests)
+# Orchestrator tests (255 tests)
 npm run test --workspace=packages/orchestrator
 
 # Type checking
 npm run typecheck --workspace=packages/orchestrator
 npx tsc --noEmit -p packages/web/tsconfig.json
+npx tsc --noEmit -p packages/video/tsconfig.json
 ```
 
 Six DB integration tests are skipped automatically when `DATABASE_URL` is not set.

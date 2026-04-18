@@ -95,6 +95,41 @@ body { background: #000408; color: #c8eef8; font-family: -apple-system, 'Segoe U
 }
 .tagline strong { color: #7cc6db; font-weight: 400; }
 
+/* ── SIZZLE VIDEO ── */
+.sizzle-wrap {
+  position: relative;
+  width: 100%; max-width: 880px;
+  aspect-ratio: 16 / 9;
+  margin: 0 auto 3.5rem;
+  border: 1px solid rgba(0,240,255,0.35);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #01060c;
+  box-shadow: 0 0 60px rgba(0,240,255,0.08), inset 0 0 40px rgba(0,240,255,0.04);
+}
+.sizzle-wrap video { width: 100%; height: 100%; display: block; object-fit: cover; }
+.sizzle-wrap::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, #00f0ff 30%, #ff6600 70%, transparent);
+  opacity: 0.6; z-index: 3; pointer-events: none;
+}
+.sizzle-corner { position: absolute; width: 14px; height: 14px; z-index: 3; opacity: 0.6; pointer-events: none; }
+.sizzle-corner.tl { top: 8px; left: 8px; border-top: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.sizzle-corner.tr { top: 8px; right: 8px; border-top: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+.sizzle-corner.bl { bottom: 8px; left: 8px; border-bottom: 1px solid #00f0ff; border-left: 1px solid #00f0ff; }
+.sizzle-corner.br { bottom: 8px; right: 8px; border-bottom: 1px solid #00f0ff; border-right: 1px solid #00f0ff; }
+.sizzle-mute {
+  position: absolute; bottom: 14px; right: 14px; z-index: 4;
+  font-family: monospace; font-size: 0.6rem; font-weight: 800; letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: rgba(1,8,16,0.85);
+  border: 1px solid rgba(0,240,255,0.35);
+  color: #00f0ff; padding: 0.35rem 0.7rem; border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.sizzle-mute:hover { background: rgba(0,240,255,0.12); }
+
 /* ── ARENA GRAPHIC ── */
 .arena-row {
   display: flex; align-items: center; gap: 3rem;
@@ -218,6 +253,18 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
 
   <div class="wordmark">Arena4Ai</div>
   <p class="tagline"><strong>May the best model win.</strong></p>
+
+  <!-- Sizzle reel — 63s autoplay loop -->
+  <div class="sizzle-wrap">
+    <video id="sizzle" autoplay muted loop playsinline preload="auto" aria-label="Arena4Ai demo reel">
+      <source src="/sizzle.mp4" type="video/mp4">
+    </video>
+    <div class="sizzle-corner tl"></div>
+    <div class="sizzle-corner tr"></div>
+    <div class="sizzle-corner bl"></div>
+    <div class="sizzle-corner br"></div>
+    <button type="button" class="sizzle-mute" id="sizzle-mute-btn" onclick="toggleSizzleSound()">◆ Unmute</button>
+  </div>
 
   <div class="arena-row">
     <!-- Left: Your Models -->
@@ -345,6 +392,15 @@ footer { position: relative; z-index: 2; padding: 1.5rem 2.5rem; border-top: 1px
 </footer>
 
 <script>
+// Sizzle mute toggle — autoplay requires muted, user opts in to audio
+function toggleSizzleSound() {
+  const v = document.getElementById('sizzle');
+  const btn = document.getElementById('sizzle-mute-btn');
+  if (!v) return;
+  v.muted = !v.muted;
+  btn.textContent = v.muted ? '◆ Unmute' : '◆ Mute';
+}
+
 // Replace YOUR_SUBDOMAIN after deploying the Worker (see marketing/README.md)
 const API_URL = 'https://aapi.arena4.ai/api/register';
 

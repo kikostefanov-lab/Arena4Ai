@@ -412,6 +412,30 @@ On-demand ESPN-style recap video generation from completed competition pages.
 
 **Bundle pre-warm:** `packages/web/instrumentation.ts` calls `getBundle()` on server startup (Next.js `register()` hook, Node.js runtime only). First reel render is no longer cold.
 
+### Arena4Ai sizzle (promo video)
+63s marketing sizzle reel in three aspect ratios, rendered from the same `@arena/video` package.
+
+- `packages/video/src/sizzle/Sizzle.tsx` — top-level composition, 9-scene `<Series>` with theme audio
+- `packages/video/src/sizzle/scenes/` — `IntroBumper`, `TheQuestion`, `GladiatorReveal`, `TheBrief`, `BattleHighlights`, `TheVerdict`, `TheForge`, `ThreePillars`, `SizzleOutro`
+- Three `<Composition>` variants registered in `Root.tsx`: `SizzleLandscape` (1920×1080), `SizzlePortrait` (1080×1920), `SizzleSquare` (1080×1080). Same scene graph — each scene uses `useVideoConfig()` to adapt layout.
+- Uses the real `arena4ai-launch-strategy-001` competition (`78c7452f-...`) as source material: scene 4 (brief builder) + scene 6 (scores tab) + scene 7 (forge artifacts) overlay actual product screengrabs dimmed behind animated text.
+- Scenes 3 + 5 render gladiators via `VideoGladiator` in a canvas. **Critical:** canvas must be `position: absolute, inset: 0` — inside an `<AbsoluteFill>` (which is `display: flex`), a flex-child canvas collapses to 0 height and the gladiators render off-screen. Use `useLayoutEffect` for the canvas draw to keep Remotion's snapshot timing deterministic.
+
+**Asset capture (Playwright):**
+```bash
+# Requires web (3001) + orchestrator (3000) running, and launch-strategy comp in FORGE_COMPLETE
+npm run sizzle:capture --workspace=packages/video
+```
+Captures ~10 PNGs to `packages/video/public/sizzle-assets/` via `packages/video/scripts/capture-sizzle-assets.ts`.
+
+**Rendering:**
+```bash
+npm run sizzle:render --workspace=packages/video   # all three aspect ratios
+npm run sizzle        --workspace=packages/video   # capture + render
+npx tsx packages/video/scripts/inspect-sizzle.ts   # single-frame still per scene for fast QA
+```
+Output lands in `packages/video/out/` (gitignored). The landscape cut is copied to `marketing/sizzle.mp4` and `packages/web/public/sizzle.mp4` for web hosting; `marketing/index.html` embeds it in the hero via `<video autoplay muted loop playsinline>` with a click-to-unmute button.
+
 ### Brief pre-select from library
 `/briefs` Launch button links to `/competitions/new?briefSlug={brief.id}`. On mount, `competitions/new/page.tsx` reads `?briefSlug`, fetches `/api/briefs`, finds the matching brief, and pre-populates all form fields. Jumps to step 3 (teams).
 
