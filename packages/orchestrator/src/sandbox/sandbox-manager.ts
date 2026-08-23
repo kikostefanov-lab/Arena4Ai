@@ -1,7 +1,25 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { resolveSandboxProvider, sandboxEnv } from '../utils/claude-env.js';
 
 const AGENT_IMAGE = process.env.ARENA_AGENT_IMAGE ?? 'arena-agent:latest';
+
+/**
+ * Docker network mode for agent containers.
+ *
+ * Default is `bridge`: outbound NAT to the internet — which is all the
+ * provider CLIs need — with no route to services listening on the host's
+ * loopback. `host` used to be the default, and it is the reason a deliverable
+ * could reach the orchestrator on :3000 and Postgres on :5432 as if it were
+ * the operator.
+ *
+ * Set ARENA_SANDBOX_NETWORK to override. `host` is the escape hatch for the
+ * one setup bridge genuinely breaks: pointing a provider at a model served on
+ * the operator's own loopback (ANTHROPIC_BASE_URL=http://localhost:...).
+ * On Docker Desktop, `host.docker.internal` reaches the host from bridge and
+ * is the better answer where it is available.
+ */
+const SANDBOX_NETWORK = process.env.ARENA_SANDBOX_NETWORK ?? 'bridge';
 
 /**
  * SandboxManager provides Docker-based isolation for agent processes.
@@ -44,16 +62,21 @@ export class SandboxManager {
     const containerName = `arena-${teamId}-${Date.now()}`;
     this.containerNames.set(teamId, containerName);
 
+    // The process on the other side of this boundary runs model-written code.
+    // Forward only what the chosen CLI needs to run and authenticate — never
+    // the whole of the orchestrator's environment.
+    const safeEnv = sandboxEnv(resolveSandboxProvider(command), env);
+
     const dockerArgs = [
       'run',
       '--rm',
       '--name', containerName,
       '-v', `${workdir}:/workspace`,
       '-w', '/workspace',
-      '--network', 'host',
+      '--network', SANDBOX_NETWORK,
       '--memory', '2g',
       '--cpus', '1',
-      ...Object.entries(env).flatMap(([k, v]) => v !== undefined ? ['-e', `${k}=${v}`] : []),
+      ...Object.entries(safeEnv).flatMap(([k, v]) => v !== undefined ? ['-e', `${k}=${v}`] : []),
       AGENT_IMAGE,
       command,
       ...args,
