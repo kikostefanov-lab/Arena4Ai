@@ -4,7 +4,7 @@ import { claudeEnv } from '../utils/claude-env.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, truncateFiles, JUDGE_CONTEXT } from '../utils/brief-context.js';
-import { resolveJudgeModel } from '../adapters/model-registry.js';
+import { resolveJudgeModel, getProviderConfig } from '../adapters/model-registry.js';
 
 export const JUDGE_IDS = {
   automated: 'automated',
@@ -12,10 +12,26 @@ export const JUDGE_IDS = {
   aiAdversarial: 'ai-adversarial',
 } as const;
 
+/** Providers that can host a judge. Same set the competitors run under. */
+export type JudgeProvider = 'claude' | 'codex' | 'gemini';
+
+/**
+ * Canonical, self-describing judge id.
+ *
+ * A scorecard that just says "ai-claude" cannot answer "which model produced
+ * this number?", which is exactly the gap that let one vendor's model quietly
+ * mark its own homework. Provider AND model, always.
+ */
+export function judgeIdFor(provider: JudgeProvider, model: string, adversarial = false): string {
+  return `ai-${provider}/${model}${adversarial ? '+adversarial' : ''}`;
+}
+
 export interface AiJudgeOptions {
   /** Model identifier to label this judge, e.g. 'ai-claude'. */
   judgeId: string;
-  /** Path to the claude CLI binary. Defaults to 'claude'. */
+  /** Which CLI hosts the judge. Defaults to 'claude' — existing callers unchanged. */
+  provider?: JudgeProvider;
+  /** Path to the judge CLI binary. Defaults to the provider's registry `bin`. */
   claudeBin?: string;
   /**
    * Model to pin the judge to. Defaults to the registry judge model.
@@ -23,6 +39,12 @@ export interface AiJudgeOptions {
    * changes model whenever the CLI's default moves.
    */
   model?: string;
+  /**
+   * Hard kill after this many ms. Default 120s, which is tuned for a normal
+   * competition. A re-judge over a large stored deliverable set legitimately
+   * needs longer, and a timeout there means paying for the run twice.
+   */
+  timeoutMs?: number;
 }
 
 /** Why the AI judge could not score. Distinguishes "broken setup" from "bad output". */
@@ -55,9 +77,62 @@ export interface AiJudgeResult extends JudgeResult {
   failure?: AiJudgeFailure;
   /** Model the judge was pinned to for this run. */
   model?: string;
+  /** Provider whose CLI produced this score. */
+  provider?: JudgeProvider;
 }
 
 const CLI_HINT = 'npm i -g @anthropic-ai/claude-code, then run `claude` once to sign in';
+
+/**
+ * How one provider's CLI is driven in judge mode.
+ *
+ * Three things genuinely differ between the CLIs and all three have bitten us:
+ *  - how the prompt is delivered (claude reads stdin; codex and gemini take argv);
+ *  - which stream carries the final answer (verified against codex-cli 0.144.1 —
+ *    its *progress log* goes to stderr but the final message goes to stdout);
+ *  - whether stdin must be closed (codex `exec` otherwise blocks forever on
+ *    "Reading additional input from stdin...", which looks exactly like a hang).
+ *
+ * Judges are read-only by construction: a judge that can write to the workspace
+ * is a judge that can edit the thing it is grading.
+ */
+interface JudgeInvocation {
+  args: string[];
+  promptVia: 'stdin' | 'argv';
+  answerStream: 'stdout' | 'stderr';
+}
+
+export function buildJudgeInvocation(
+  provider: JudgeProvider,
+  model: string,
+  prompt: string,
+): JudgeInvocation {
+  const modelFlag = getProviderConfig(provider)?.modelFlag ?? '--model';
+  switch (provider) {
+    case 'codex':
+      // -s read-only: the judge may not modify the workspace it is scoring.
+      return {
+        args: ['exec', '--skip-git-repo-check', '-s', 'read-only', modelFlag, model, prompt],
+        promptVia: 'argv',
+        answerStream: 'stdout',
+      };
+    case 'gemini':
+      // --approval-mode plan is gemini's read-only mode; --yolo would grant a
+      // judge tool access it has no need for.
+      return {
+        args: ['-p', prompt, modelFlag, model, '--approval-mode', 'plan'],
+        promptVia: 'argv',
+        answerStream: 'stdout',
+      };
+    case 'claude':
+    default:
+      return {
+        args: ['--print', '-', '--output-format', 'text', modelFlag, model, '--dangerously-skip-permissions'],
+        promptVia: 'stdin',
+        answerStream: 'stdout',
+      };
+  }
+}
 
 /**
  * Turn a spawn/exit failure into an actionable message.
@@ -69,15 +144,17 @@ export function classifyJudgeFailure(
   stderr: string,
   claudeBin: string,
   model: string,
+  provider: JudgeProvider = 'claude',
 ): AiJudgeFailure {
   const detail = (stderr || '').trim() || (err instanceof Error ? err.message : String(err));
+  const hint = getProviderConfig(provider)?.installHint ?? CLI_HINT;
   const code = (err as NodeJS.ErrnoException | undefined)?.code;
   const haystack = `${detail}`.toLowerCase();
 
   if (code === 'ENOENT' || code === 'EACCES' || /command not found|no such file or directory/.test(haystack)) {
     return {
       kind: 'cli-missing',
-      message: `AI judge unavailable: the "${claudeBin}" CLI was not found on PATH. ${CLI_HINT}.`,
+      message: `AI judge unavailable: the "${claudeBin}" CLI was not found on PATH. ${hint}.`,
       detail,
     };
   }
@@ -91,7 +168,7 @@ export function classifyJudgeFailure(
   if (/rate limit|429|quota|overloaded|too many requests/.test(haystack)) {
     return {
       kind: 'rate-limit',
-      message: 'AI judge unavailable: rate limited by the Claude API. Re-judge this competition once the limit resets.',
+      message: `AI judge unavailable: rate limited by the ${provider} API. Re-judge this competition once the limit resets.`,
       detail,
     };
   }
@@ -175,10 +252,13 @@ export async function aiJudge(
   rubric: Rubric,
   options: AiJudgeOptions,
 ): Promise<AiJudgeResult> {
-  const { judgeId, claudeBin = 'claude' } = options;
-  const model = options.model ?? resolveJudgeModel(judgeId);
+  const { judgeId } = options;
+  const provider: JudgeProvider = options.provider ?? 'claude';
+  const claudeBin = options.claudeBin ?? getProviderConfig(provider)?.bin ?? provider;
+  const model = options.model ?? resolveJudgeModel(judgeId, provider);
 
   const prompt = buildJudgePrompt(brief, deliverable, rubric, judgeId);
+  const invocation = buildJudgeInvocation(provider, model, prompt);
 
   let failure: AiJudgeFailure | undefined;
   let scores: CriterionScore[] = rubric.criteria.map((c) => ({
@@ -190,28 +270,39 @@ export async function aiJudge(
   let stderr = '';
   try {
     const stdout = await new Promise<string>((resolve, reject) => {
+      // stdin is 'ignore' unless the prompt travels that way. codex `exec`
+      // blocks forever on an open, silent stdin — indistinguishable from a hang.
       const child = spawn(
         claudeBin,
-        ['--print', '-', '--output-format', 'text', '--model', model, '--dangerously-skip-permissions'],
-        { env: claudeEnv(), stdio: ['pipe', 'pipe', 'pipe'] },
+        invocation.args,
+        {
+          env: claudeEnv(),
+          stdio: [invocation.promptVia === 'stdin' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
+        },
       );
 
-      // Kill after 120s to avoid hanging the judging phase
+      // Kill on a deadline to avoid hanging the judging phase.
+      const timeoutMs = options.timeoutMs ?? 120_000;
       const timer = setTimeout(() => {
         child.kill();
-        reject(new Error('AI judge timed out'));
-      }, 120_000);
+        reject(new Error(`AI judge timed out after ${Math.round(timeoutMs / 1000)}s`));
+      }, timeoutMs);
       const settle = (fn: () => void) => { clearTimeout(timer); fn(); };
 
-      child.stdin.on('error', () => {/* EPIPE when the CLI is missing — surfaced by 'error' */});
-      child.stdin.write(prompt);
-      child.stdin.end();
+      if (invocation.promptVia === 'stdin' && child.stdin) {
+        child.stdin.on('error', () => {/* EPIPE when the CLI is missing — surfaced by 'error' */});
+        child.stdin.write(prompt);
+        child.stdin.end();
+      }
 
+      // Capture both streams, then hand the caller whichever one this provider
+      // puts its final answer on.
       let out = '';
-      child.stdout.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+      child.stdout?.on('data', (chunk: Buffer) => { out += chunk.toString(); });
       child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
       child.on('close', (code) => settle(() => {
-        if (code === 0) resolve(out);
+        const answer = invocation.answerStream === 'stderr' ? stderr : out;
+        if (code === 0) resolve(answer);
         else reject(new Error(`AI judge exited with code ${code}`));
       }));
       child.on('error', (err) => settle(() => reject(err)));
@@ -221,16 +312,16 @@ export async function aiJudge(
     if (Array.isArray(parsed.scores) && parsed.scores.length > 0) {
       scores = parsed.scores;
     } else {
-      failure = classifyJudgeFailure(new Error('judge returned no scores'), '', claudeBin, model);
+      failure = classifyJudgeFailure(new Error('judge returned no scores'), '', claudeBin, model, provider);
     }
   } catch (err) {
-    failure = classifyJudgeFailure(err, stderr, claudeBin, model);
+    failure = classifyJudgeFailure(err, stderr, claudeBin, model, provider);
   }
 
   if (failure) {
     // Loud on purpose: this used to be a bare `catch {}`, which is why four
     // months of model-id drift never announced itself.
-    console.error(`[arena] ${judgeId} (${model}) failed for ${deliverable.teamId}: ${failure.message}`);
+    console.error(`[arena] ${judgeId} (${provider}/${model}) failed for ${deliverable.teamId}: ${failure.message}`);
     if (failure.detail) console.error(`[arena]   detail: ${failure.detail.slice(0, 500)}`);
     scores = scores.map((s) => ({ ...s, commentary: failure!.message }));
   }
@@ -248,6 +339,7 @@ export async function aiJudge(
     scores,
     overallScore: computeOverallScore(scores, rubric),
     model,
+    provider,
     ...(failure ? { failure } : {}),
   };
 }
