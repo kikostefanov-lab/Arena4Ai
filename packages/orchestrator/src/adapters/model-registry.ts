@@ -116,6 +116,27 @@ export function requireDefaultModel(provider: string): string {
   return id;
 }
 
+/**
+ * Model the non-scoring helper stages are pinned to: synthesis, presentations,
+ * commentary, the Forge and brief generation.
+ *
+ * Deliberately its own constant rather than a reuse of either neighbour:
+ *   - DEFAULT_JUDGE_MODEL exists so *scores* stay comparable across time, and
+ *     must not drift because someone retuned the Forge;
+ *   - a provider's preset `default` is what a *competitor* agent runs, and is
+ *     expected to follow whatever the CLI ships as its everyday model.
+ *
+ * Unpinned, these stages inherit whatever the `claude` CLI defaults to that
+ * week, so re-running the same competition can produce different artifacts for
+ * no recorded reason. Override with ARENA_STAGE_MODEL.
+ */
+export const DEFAULT_STAGE_MODEL = 'claude-opus-5';
+
+/** Resolve the model a helper (non-judging) stage should be pinned to. */
+export function resolveStageModel(): string {
+  return process.env['ARENA_STAGE_MODEL'] || DEFAULT_STAGE_MODEL;
+}
+
 /** Resolve the model a judge run should be pinned to. */
 export function resolveJudgeModel(judgeId: string): string {
   if (judgeId.includes('adversarial')) {
