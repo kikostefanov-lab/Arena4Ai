@@ -22,3 +22,27 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
 
   next();
 }
+
+/** Verbs that can change state, spend tokens, or start work on the host. */
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+/**
+ * App-wide guard: every mutating request needs the key, read-only requests
+ * do not.
+ *
+ * This exists because per-router `requireApiKey` calls are a list you have to
+ * remember to add to. It was applied to the competitions router only, which
+ * left POST /tournaments (it launches competitions), the brief and persona
+ * writes, and the /generate-* routes (they spawn the `claude` CLI under the
+ * operator's own login) reachable by anyone who could reach the port.
+ *
+ * OPTIONS is answered earlier, by the CORS preflight handler, so a browser
+ * preflight never hits this.
+ */
+export function requireApiKeyForMutations(req: Request, res: Response, next: NextFunction): void {
+  if (!MUTATING_METHODS.has(req.method)) {
+    next();
+    return;
+  }
+  requireApiKey(req, res, next);
+}

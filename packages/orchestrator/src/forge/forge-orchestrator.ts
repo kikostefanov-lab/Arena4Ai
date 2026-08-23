@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeOutputFormat, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+import { resolveStageModel } from '../adapters/model-registry.js';
 
 function stripMarkdownFences(content: string, format: ForgeOutputFormat): string {
   if (format === 'markdown') return content;
@@ -884,12 +885,21 @@ function buildForgeUserPrompt(input: ForgeInput, primaryDeliverables: Array<{ te
 
 // ─── Claude runner ────────────────────────────────────────────────────────────
 
-const FORGE_MODEL_LABEL = 'claude-cli';
+/**
+ * Recorded on every ForgeRun. Now that the Forge is model-pinned, record the id
+ * it actually ran on rather than the opaque 'claude-cli' — a stored artifact
+ * you cannot attribute to a model is not reproducible.
+ */
+const forgeModelLabel = (): string => resolveStageModel();
 
 function runClaude(prompt: string, systemPrompt: string, timeoutMs = 120_000): Promise<string> {
   return new Promise((resolve, reject) => {
     const fullPrompt = `${systemPrompt}\n\n---\n\n${prompt}`;
-    const proc = spawn('claude', ['-p', '-'], {
+    // Read fresh on every call, like the other stages: a hardcoded 'claude'
+    // means a self-hoster whose CLI lives elsewhere gets a working app with a
+    // silently broken Forge. Pin the model so re-forging is reproducible.
+    const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
+    const proc = spawn(claudeBin, ['-p', '-', '--model', resolveStageModel()], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: claudeEnv(),
     });
@@ -1064,7 +1074,7 @@ export async function runForge(input: ForgeInput, competitionId: string): Promis
       id: randomUUID(),
       source: input.source,
       sourceTeamId: input.sourceTeamId,
-      forgeModel: FORGE_MODEL_LABEL,
+      forgeModel: forgeModelLabel(),
       artifacts,
       generatedAt: new Date().toISOString(),
       domain,

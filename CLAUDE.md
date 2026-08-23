@@ -44,14 +44,14 @@ npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
 
 # With specific model variants
 DATABASE_URL=postgresql://localhost/arena npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
-  --team-a claude:architect --model-a claude-opus-4-6 \
-  --team-b codex:speedrunner --model-b o3 \
+  --team-a claude:architect --model-a claude-opus-5 \
+  --team-b codex:speedrunner --model-b gpt-5.1-codex-max \
   --skip-sandbox --time-limit 120000
 
 # Round-robin tournament (all pairs compete)
 npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml \
   --teams claude:architect,claude:speedrunner,codex:standard \
-  --models claude-opus-4-6,claude-sonnet-4-6,o4-mini \
+  --models claude-opus-5,claude-sonnet-5,gpt-5.3-codex \
   --skip-sandbox
 
 # Re-evaluate completed competitions with new judge context
@@ -306,10 +306,20 @@ Enable dual judging (standard + adversarial) for higher-quality scoring.
 - AgentBuilder UI: combobox with preset dropdown + freeform text input for custom model IDs
 - CLI: `--model-a`/`--model-b`/`--model-c`/`--model-d` for `run`, `--models` comma-list for `tournament`
 
-Presets per provider (add new models by editing `model-registry.ts`):
-- **Claude**: `claude-sonnet-4-6` (default), `claude-opus-4-6`, `claude-haiku-4-5-20251001`
-- **Codex**: `o4-mini` (default), `o3`, `codex-mini`
-- **Gemini**: `gemini-2.5-flash` (default), `gemini-2.5-pro`
+Presets per provider (add new models by editing `model-registry.ts` — it is the single
+source of truth; `seed-personas-agents.ts` derives its ids from it via `requireDefaultModel()`,
+so never hardcode a model id anywhere else):
+- **Claude**: `claude-opus-5` (default), `claude-sonnet-5`, `claude-opus-4-8`, `claude-haiku-4-5` — never date-suffix an Anthropic id
+- **Codex**: `gpt-5.3-codex` (default), `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`
+- **Gemini**: `gemini-3-flash` (default), `gemini-3-pro`, `gemini-3.1-pro`
+
+Each provider entry also carries `bin` + `installHint`, used by the preflight check below.
+
+**Judge pinning** — `DEFAULT_JUDGE_MODEL` (`claude-opus-5`) and `DEFAULT_ADVERSARIAL_JUDGE_MODEL`
+(`claude-sonnet-5`) pin the judge so scores stay comparable across time, and so
+`--adversarial-judge` is a genuinely different model rather than the same model with a
+different prompt. Override per-run with `ARENA_JUDGE_MODEL` / `ARENA_ADVERSARIAL_JUDGE_MODEL`
+(useful when reproducing an old score).
 
 ### Live battle visualization — Arena v2 (TRON Broadcast)
 Competition detail page default view. Canvas 2D arena with armored TRON gladiators (v2 renderer ported from design handoff).
@@ -439,6 +449,29 @@ Output lands in `packages/video/out/` (gitignored). The landscape cut is copied 
 ### Brief pre-select from library
 `/briefs` Launch button links to `/competitions/new?briefSlug={brief.id}`. On mount, `competitions/new/page.tsx` reads `?briefSlug`, fetches `/api/briefs`, finds the matching brief, and pre-populates all form fields. Jumps to step 3 (teams).
 
+### Provider CLI preflight & judge failure reporting
+Arena drives the agent CLIs the operator already has installed, so "binary not on PATH"
+is the most likely first-run failure — and it must never look like a bad score.
+- `packages/orchestrator/src/utils/cli-preflight.ts` — `findMissingClis()` probes each
+  provider's binary once (via `<bin> --version`) before `LAUNCHING`. Anything missing
+  aborts the run with a message naming the binary and its install hint, and emits an
+  `ERROR` event with `payload.stage === 'preflight'`.
+- `aiJudge()` returns `AiJudgeResult` = `JudgeResult` + an explicit `failure?: AiJudgeFailure`
+  (`cli-missing` | `auth` | `rate-limit` | `model-unavailable` | `timeout` | `cli-error` |
+  `bad-output`) and the `model` it ran on. It logs to stderr and rewrites the zero-score
+  commentary with the reason. **Never infer judge failure from score values or commentary
+  text** — branch on `failure`.
+- `competition-runner.ts` uses that field to decide per-team whether to fall back to the
+  automated scorer, and emits an `ERROR` event with `payload.stage === 'judging'` for every
+  failed judge so a broken setup is visible in the UI and persisted in the event log.
+
 ## Known Issues
-1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers)
+1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers).
+   Fixable now: gemini-cli 0.38.x supports `-o stream-json`, which would give the Gemini
+   normalizer the structured markers it currently lacks (codex-cli 0.144.x likewise has
+   `codex exec --json`). Not yet wired up.
 2. WebSocket seq counter is approximate (local, not DB serial)
+3. Only the judge is model-pinned. Synthesis (`merge-engine.ts`), presentations
+   (`presentation-generator.ts`), commentary (`commentary-agent.ts`), forge
+   (`forge-orchestrator.ts`) and brief generation (`generate-brief.ts` / `intake.ts`) still
+   spawn `claude` without `--model` and inherit whatever the CLI defaults to.

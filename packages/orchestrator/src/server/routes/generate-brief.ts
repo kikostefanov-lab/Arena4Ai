@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'node:child_process';
 import { claudeEnv } from '../../utils/claude-env.js';
+import { resolveStageModel } from '../../adapters/model-registry.js';
 import { extractJson } from '../../utils/extract-json.js';
 import { runIntake } from '../../brief/intake.js';
 import {
@@ -18,7 +19,7 @@ export const generateBriefRouter = Router();
 async function spawnClaude(prompt: string, timeoutMs = 90_000): Promise<string> {
   const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
   return new Promise<string>((resolve, reject) => {
-    const child = spawn(claudeBin, ['-p', '-'], {
+    const child = spawn(claudeBin, ['-p', '-', '--model', resolveStageModel()], {
       stdio: ['pipe', 'pipe', 'pipe'],
       env: claudeEnv(),
     });

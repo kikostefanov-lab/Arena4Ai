@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { orchestratorHeaders } from '../../../../lib/orchestrator';
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -6,7 +7,7 @@ export async function POST(req: Request) {
   try {
     const res = await fetch(`${apiBase}/generate-brief/quality`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: orchestratorHeaders(true),
       body: JSON.stringify(body),
     });
     if (!res.ok) {

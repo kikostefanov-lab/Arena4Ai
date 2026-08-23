@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
+import { orchestratorUrl, orchestratorHeaders } from '../../../../../../lib/orchestrator';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const upstream = await fetch(`${API_BASE}/competitions/${id}/forge/download`);
+  const upstream = await fetch(orchestratorUrl(`/competitions/${id}/forge/download`), {
+    headers: orchestratorHeaders(),
+  });
   if (!upstream.ok) {
     return NextResponse.json({ error: 'Download failed' }, { status: upstream.status });
   }

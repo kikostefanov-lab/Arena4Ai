@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { CompetitionRunner } from '../engine/competition-runner.js';
 import { EventType, type ArenaEvent } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+import { resolveStageModel } from '../adapters/model-registry.js';
 
 export interface CommentaryOptions {
   claudeBin?: string;
@@ -61,7 +62,7 @@ export class CommentaryAgent {
       const text = await new Promise<string>((resolve, reject) => {
         const child = spawn(
           this.claudeBin,
-          ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
+          ['--print', '-', '--output-format', 'text', '--model', resolveStageModel(), '--dangerously-skip-permissions'],
           { stdio: ['pipe', 'pipe', 'ignore'], env: claudeEnv() },
         );
         child.stdin!.write(prompt);

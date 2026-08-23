@@ -5,10 +5,14 @@
   "workspaces": [
     "packages/*"
   ],
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.9.0"
+  },
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run test",
+    "test": "turbo run typecheck test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint"
   },

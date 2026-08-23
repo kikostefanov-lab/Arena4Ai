@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { orchestratorHeaders } from '../../../../../lib/orchestrator';
 
 const ORCHESTRATOR = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 
@@ -11,7 +12,7 @@ export async function POST(
   const body = await req.json();
   const res = await fetch(`${ORCHESTRATOR}/agent-profiles/${id}/fork`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: orchestratorHeaders(true),
     body: JSON.stringify(body),
   });
   const data = await res.json();

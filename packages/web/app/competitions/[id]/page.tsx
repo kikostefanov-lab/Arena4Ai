@@ -2436,7 +2436,8 @@ export default function CompetitionPage() {
         body: JSON.stringify({
           brief,
           teams,
-          options: { skipSandbox: true },
+          // Sandbox behaviour is a server-side setting (ARENA_SKIP_SANDBOX), not
+          // something a browser request gets to choose.
         }),
       });
       if (!res.ok) return;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { orchestratorUrl, orchestratorHeaders } from '../../../../../../../lib/orchestrator';
 
 // Next.js 15: params is a Promise — must be awaited
 export async function GET(
@@ -6,10 +7,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string; teamId: string }> }
 ) {
   const { id, teamId } = await params;
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-  const upstream = `${apiBase}/competitions/${id}/deliverables/${teamId}/download`;
+  const upstream = orchestratorUrl(`/competitions/${id}/deliverables/${encodeURIComponent(teamId)}/download`);
 
-  const res = await fetch(upstream);
+  const res = await fetch(upstream, { headers: orchestratorHeaders() });
   if (!res.ok) {
     return NextResponse.json({ error: 'Download failed' }, { status: res.status });
   }

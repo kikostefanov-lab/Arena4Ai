@@ -8,6 +8,7 @@ import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
 import { requireApiKey } from '../middleware/auth.js';
+import { resolveRunOptions, isSafeTeamId } from '../run-options.js';
 import { applyPreset } from '../../brief/presets.js';
 import { runForge, getForgeProgress } from '../../forge/forge-orchestrator.js';
 import type { ForgeInput } from '../../forge/forge-orchestrator.js';
@@ -28,7 +29,10 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     brief?: unknown;
     teams?: unknown;
     adversarialJudge?: boolean;
-    options?: { skipSandbox?: boolean; claudeBin?: string; logDir?: string; commentary?: boolean };
+    // Only `commentary` is honoured from the request. Anything that decides which
+    // binary runs, where it writes, or whether the sandbox is on is resolved
+    // server-side in resolveRunOptions() — see run-options.ts.
+    options?: { commentary?: boolean };
   };
 
   const briefResult = briefSchema.safeParse(body.brief);
@@ -42,10 +46,35 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     return;
   }
 
-  const rawTeams = body.teams as Array<{ id?: unknown; model?: unknown; persona?: unknown }>;
+  const rawTeams = body.teams as Array<{
+    id?: unknown;
+    model?: unknown;
+    persona?: unknown;
+    // Competition CONTENT, not execution options: these name *which agent*
+    // competes, never which binary is spawned or whether the sandbox runs.
+    agentId?: unknown;
+    modelVariant?: unknown;
+  }>;
   for (const team of rawTeams) {
     if (!team.id || !team.model) {
       res.status(400).json({ error: 'Each team must have id and model fields' });
+      return;
+    }
+    // Reject a malformed agentId rather than dropping it — a silently ignored
+    // agentId is how two different Armory picks become the same agent twice.
+    for (const field of ['agentId', 'modelVariant'] as const) {
+      const value = team[field];
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        res.status(400).json({ error: `Team ${field} must be a string when provided` });
+        return;
+      }
+    }
+    // Team ids become temp directory and container name fragments — keep them to
+    // a single safe path segment so they cannot traverse or reach a shell.
+    if (!isSafeTeamId(String(team.id))) {
+      res.status(400).json({
+        error: 'Invalid team id — use letters, digits, dot, dash or underscore (max 64 chars)',
+      });
       return;
     }
   }
@@ -54,13 +83,18 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     id: String(t.id),
     model: String(t.model),
     persona: t.persona ? String(t.persona) : 'pragmatist',
+    // The Armory picks a specific agent row; the engine needs its id to load
+    // that agent's persona (and its pinned model variant). Dropping these here
+    // silently degrades the run to a persona-NAME lookup, which cannot tell two
+    // agents that share a persona name apart.
+    ...(t.agentId ? { agentId: String(t.agentId) } : {}),
+    ...(t.modelVariant ? { modelVariant: String(t.modelVariant) } : {}),
   }));
 
   const options: RunOptions = {
-    // Default to skipping Docker sandbox — callers can opt in via options.skipSandbox: false
-    skipSandbox: body.options?.skipSandbox ?? true,
-    claudeBin: body.options?.claudeBin,
-    logDir: body.options?.logDir,
+    // Sandbox state, binaries and log directory come from the environment only.
+    // A request cannot name the executable to spawn or turn the sandbox off.
+    ...resolveRunOptions(),
     commentary: body.options?.commentary ?? false,
     adversarialJudge: body.adversarialJudge === true,
     agentRepo,

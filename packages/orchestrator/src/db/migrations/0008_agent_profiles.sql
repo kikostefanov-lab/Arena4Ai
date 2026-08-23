@@ -1,4 +1,4 @@
-CREATE TABLE "agent_profiles" (
+CREATE TABLE IF NOT EXISTS "agent_profiles" (
   "id"                 TEXT PRIMARY KEY,
   "name"               TEXT NOT NULL,
   "description"        TEXT,
@@ -19,7 +19,7 @@ CREATE TABLE "agent_profiles" (
   "updated_at"         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_agent_profiles_provider ON agent_profiles(provider);
-CREATE INDEX idx_agent_profiles_retired  ON agent_profiles(retired);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_provider ON agent_profiles(provider);
+CREATE INDEX IF NOT EXISTS idx_agent_profiles_retired  ON agent_profiles(retired);
 -- Enforce unique (provider, name) among active profiles for stats lookup
-CREATE UNIQUE INDEX idx_agent_profiles_provider_name_active ON agent_profiles(provider, name) WHERE retired = FALSE;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_profiles_provider_name_active ON agent_profiles(provider, name) WHERE retired = FALSE;

@@ -6,9 +6,11 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "prepare": "tsc -p tsconfig.json",
     "build:watch": "tsc -p tsconfig.json --watch",
     "studio": "npx remotion studio src/index.ts",
     "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "sizzle:capture": "tsx scripts/capture-sizzle-assets.ts",
     "sizzle:render": "tsx scripts/render-sizzle.ts",
     "sizzle": "npm run sizzle:capture && npm run sizzle:render"

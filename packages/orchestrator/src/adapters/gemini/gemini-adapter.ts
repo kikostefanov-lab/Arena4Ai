@@ -1,12 +1,10 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { writeFileSync, unlinkSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
+import { safeModelVariant } from '../model-variant.js';
 import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
 import { getDefaultModel } from '../model-registry.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
@@ -56,32 +54,29 @@ export class GeminiAdapter extends BaseAdapter {
 
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
 
-    // Write prompt to a temp .md file and pass the path to gemini -p
-    // This avoids CLI arg length limits with the richer Sprint 5 briefs
-    const promptFile = join(tmpdir(), `arena-gemini-${this.teamId}-${Date.now()}.md`);
-    writeFileSync(promptFile, this.promptText, 'utf-8');
-
     this.executionDone = new Promise<void>((resolve, reject) => {
       // gemini -p <prompt> --yolo  — non-interactive, auto-approve all tools
-      // Read prompt from temp file via shell command substitution to avoid arg length issues
-      const sandboxGeminiArgs = ['-p', this.promptText, '--yolo'];
-      if (this.modelVariant) {
-        sandboxGeminiArgs.push('--model', this.modelVariant);
+      //
+      // SECURITY: spawn with an argv array, never through `/bin/sh -c`. The model
+      // variant and the prompt are user-supplied; as argv entries they can only
+      // ever be one argument each, whatever characters they contain.
+      const args = ['-p', this.promptText!, '--yolo'];
+      const modelVariant = safeModelVariant(this.modelVariant);
+      if (modelVariant) {
+        args.push('--model', modelVariant);
       }
-
-      const modelFlag = this.modelVariant ? ` --model ${this.modelVariant}` : '';
 
       const child = this.sandbox
         ? this.sandbox.spawnInContainer(
             this.teamId,
             this.workdir,
             this.geminiBin,
-            sandboxGeminiArgs,
+            args,
             claudeEnv(),
           )
         : spawn(
-            '/bin/sh',
-            ['-c', `"${this.geminiBin}" -p "$(cat "${promptFile}")" --yolo${modelFlag}`],
+            this.geminiBin,
+            args,
             {
               cwd: this.workdir,
               stdio: ['ignore', 'pipe', 'pipe'],
@@ -111,7 +106,6 @@ export class GeminiAdapter extends BaseAdapter {
         rl.close();
         errRl.close();
         this.process = null;
-        try { unlinkSync(promptFile); } catch { /* ignore */ }
         if (code === 0 || code === null) resolve();
         else reject(new Error(`Gemini process exited with code ${code}`));
       });
@@ -120,7 +114,6 @@ export class GeminiAdapter extends BaseAdapter {
         rl.close();
         errRl.close();
         this.process = null;
-        try { unlinkSync(promptFile); } catch { /* ignore */ }
         this.emitErrorEvent(`Failed to start Gemini: ${err.message}`);
         reject(err);
       });

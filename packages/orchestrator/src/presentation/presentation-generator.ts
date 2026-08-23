@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { Brief, Deliverable, TeamPresentation } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+import { resolveStageModel } from '../adapters/model-registry.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, truncateFiles, PRESENTER_CONTEXT } from '../utils/brief-context.js';
 
@@ -81,7 +82,7 @@ You MUST include one entry per criterionId, in the same order.`;
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         claudeBin,
-        ['--print', '-', '--output-format', 'text', '--dangerously-skip-permissions'],
+        ['--print', '-', '--output-format', 'text', '--model', resolveStageModel(), '--dangerously-skip-permissions'],
         { stdio: ['pipe', 'pipe', 'pipe'], env: claudeEnv() },
       );
 

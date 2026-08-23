@@ -26,7 +26,8 @@ import { resolvePersona } from '../adapters/claude/claude-personas.js';
 import { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { EventLogger } from '../events/event-logger.js';
 import { scoreDeliverable } from '../judging/rubric-scorer.js';
-import { aiJudge, JUDGE_IDS } from '../judging/ai-judge.js';
+import { aiJudge, JUDGE_IDS, type AiJudgeResult } from '../judging/ai-judge.js';
+import { findMissingClis, formatMissingCliError } from '../utils/cli-preflight.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { printResults } from '../judging/results-reporter.js';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
@@ -121,6 +122,7 @@ export class CompetitionRunner extends EventEmitter {
       skipSandbox: options.skipSandbox ?? false,
       aiJudgeCount: options.aiJudgeCount ?? 1,
       commentary: options.commentary ?? false,
+      adversarialJudge: options.adversarialJudge ?? false,
     };
   }
 
@@ -184,6 +186,32 @@ export class CompetitionRunner extends EventEmitter {
       // ── CONFIGURED ──────────────────────────────────────────────────────
       this.advance(CompetitionState.CONFIGURED);
 
+      // Preflight: a self-hoster will rarely have all three agent CLIs. Find out
+      // BEFORE launching, and say which binary is missing and how to get it —
+      // rather than failing halfway through with a spawn ENOENT.
+      const missingClis = await findMissingClis(
+        teams.map(t => t.model.split(':')[0] || 'claude'),
+        {
+          claude: this.options.claudeBin,
+          codex: this.options.codexBin,
+          gemini: this.options.geminiBin,
+        },
+      );
+      if (missingClis.length > 0) {
+        const message = formatMissingCliError(missingClis);
+        for (const m of missingClis) {
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: teams.find(t => t.model.startsWith(`${m.provider}:`))?.id ?? m.provider,
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: { stage: 'preflight', provider: m.provider, bin: m.bin, hint: m.hint, message },
+            metadata: {},
+          });
+        }
+        throw new Error(message);
+      }
 
       // ── LAUNCHING ────────────────────────────────────────────────────────
       this.advance(CompetitionState.LAUNCHING);
@@ -352,7 +380,7 @@ export class CompetitionRunner extends EventEmitter {
 
       // Run AI cross-judge (primary) + automated scorer (fallback) in parallel
       console.log('[arena] judging with AI cross-judge (automated scorer as fallback)...');
-      const aiJudgePromises = deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
+      const aiJudgePromises: Promise<AiJudgeResult>[] = deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
         judgeId: JUDGE_IDS.aiClaude,
         claudeBin: this.options.claudeBin,
       }));
@@ -367,14 +395,16 @@ export class CompetitionRunner extends EventEmitter {
       }
 
       // Run both in parallel — automated results are only used if AI judge fails
-      const [automatedResults, ...aiResults] = await Promise.all([
-        Promise.all(deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief))),
-        ...aiJudgePromises,
-      ]);
+      const automatedResults = await Promise.all(
+        deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief)),
+      );
+      const aiResults = await Promise.all(aiJudgePromises);
 
-      // Use AI judge results; fall back to automated per-team if AI returned zero scores
-      const judgeResults: typeof aiResults = [];
-      const aiByTeam = new Map<string, typeof aiResults>();
+      // Use AI judge results; fall back to the automated scorer per-team.
+      // Failure is read off the judge's explicit `failure` field — never inferred
+      // from score values or commentary text.
+      const judgeResults: (AiJudgeResult | typeof automatedResults[number])[] = [];
+      const aiByTeam = new Map<string, AiJudgeResult[]>();
       for (const r of aiResults) {
         const existing = aiByTeam.get(r.teamId) ?? [];
         existing.push(r);
@@ -383,14 +413,33 @@ export class CompetitionRunner extends EventEmitter {
 
       for (const automated of automatedResults) {
         const aiForTeam = aiByTeam.get(automated.teamId) ?? [];
-        // AI judge failed if all its scores are 0 (the fallback default)
-        const aiWorked = aiForTeam.some((r) =>
-          r.scores.some((s) => s.score > 0 || !s.commentary.includes('fallback')),
-        );
-        if (aiWorked) {
-          judgeResults.push(...aiForTeam);
+        const usable = aiForTeam.filter((r) => !r.failure);
+
+        for (const failed of aiForTeam.filter((r) => r.failure)) {
+          // Persisted + streamed to the UI so a broken setup is visible, not silent.
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: failed.teamId,
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: {
+              stage: 'judging',
+              judgeId: failed.judgeId,
+              model: failed.model,
+              kind: failed.failure!.kind,
+              message: failed.failure!.message,
+              detail: failed.failure!.detail?.slice(0, 2000),
+            },
+            metadata: {},
+          });
+        }
+
+        if (usable.length > 0) {
+          judgeResults.push(...usable);
         } else {
-          console.log(`[arena] AI judge failed for ${automated.teamId} — using automated scorer`);
+          const reason = aiForTeam[0]?.failure?.message ?? 'AI judge produced no usable scores';
+          console.error(`[arena] AI judge failed for ${automated.teamId} — using automated scorer. ${reason}`);
           judgeResults.push(automated);
         }
       }

@@ -13,6 +13,7 @@
     "dev": "tsx watch src/cli.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
     "cli": "tsx src/cli.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
