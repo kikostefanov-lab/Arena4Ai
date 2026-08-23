@@ -1,4 +1,4 @@
-import { pgTable, text, jsonb, timestamp, serial, index, uniqueIndex, boolean, integer, numeric } from 'drizzle-orm/pg-core';
+import { pgTable, text, jsonb, timestamp, serial, index, uniqueIndex, boolean, integer, numeric, uuid, check, unique } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
 import type { TeamPresentation, ForgeRun } from '@arena/shared';
@@ -93,11 +93,14 @@ export const agents = pgTable('agents', {
   uniqueIndex('agents_provider_name_active_unique').on(table.provider, table.name).where(sql`retired = false`),
   index('agents_provider_idx').on(table.provider),
   index('agents_persona_id_idx').on(table.personaId),
+  // Built by migration 0009. Declared here so it is visible to a human reading
+  // the schema — adding a provider means widening this list AND the DB check.
+  check('agents_provider_check', sql`provider IN ('claude', 'codex', 'gemini')`),
 ]);
 
 
 export const resultsHistory = pgTable('results_history', {
-  id:              text('id').primaryKey().default(sql`gen_random_uuid()`),
+  id:              uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   competitionId:   text('competition_id').notNull().references(() => competitions.id),
   archivedAt:      timestamp('archived_at', { withTimezone: true }).notNull().defaultNow(),
   stage:           text('stage').notNull(),
@@ -107,7 +110,7 @@ export const resultsHistory = pgTable('results_history', {
 ]);
 
 export const briefQualitySignals = pgTable('brief_quality_signals', {
-  id:                          text('id').primaryKey().default(sql`gen_random_uuid()`),
+  id:                          uuid('id').primaryKey().default(sql`gen_random_uuid()`),
   competitionId:               text('competition_id').notNull().references(() => competitions.id, { onDelete: 'cascade' }),
   computedAt:                  timestamp('computed_at', { withTimezone: true }).notNull().defaultNow(),
   scoreSpread:                 numeric('score_spread'),
@@ -128,7 +131,11 @@ export const briefQualitySignals = pgTable('brief_quality_signals', {
   synthesisTriggered:          boolean('synthesis_triggered'),
   synthesisMeaningful:         boolean('synthesis_meaningful'),
 }, (t) => [
-  uniqueIndex('brief_quality_signals_competition_unique').on(t.competitionId),
+  // Migration 0010 built a UNIQUE *constraint* (Postgres auto-named it
+  // brief_quality_signals_competition_id_key) plus a separate plain index.
+  // Mirrored verbatim — reality, not preference.
+  unique('brief_quality_signals_competition_id_key').on(t.competitionId),
+  index('idx_quality_signals_competition').on(t.competitionId),
 ]);
 
 export const briefs = pgTable('briefs', {
