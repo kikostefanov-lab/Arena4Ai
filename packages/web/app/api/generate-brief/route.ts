@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { orchestratorHeaders } from '../../../lib/orchestrator';
 
 export async function POST(req: Request) {
   const { idea, format } = await req.json();
@@ -9,7 +10,7 @@ export async function POST(req: Request) {
   const orchestratorUrl = process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000';
   const res = await fetch(`${orchestratorUrl}/generate-brief`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: orchestratorHeaders(true),
     body: JSON.stringify({ idea: idea.trim(), format }),
   });
 

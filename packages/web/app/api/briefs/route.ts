@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { orchestratorHeaders } from '../../../lib/orchestrator';
 
 export async function GET() {
   const apiBase = process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000';
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
   try {
     const res = await fetch(`${apiBase}/briefs`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: orchestratorHeaders(true),
       body: JSON.stringify(body),
     });
     if (!res.ok) {

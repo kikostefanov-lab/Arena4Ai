@@ -22,6 +22,7 @@ import { createAgentsRouter } from './routes/agents.js';
 import { generatePersonaRouter } from './routes/generate-persona.js';
 import { seedPersonasAgents } from '../db/seed-personas-agents.js';
 import { getModelRegistry } from '../adapters/model-registry.js';
+import { requireApiKeyForMutations } from './middleware/auth.js';
 
 const CORS = {
   origin: '*',
@@ -47,6 +48,11 @@ export function createApp(): Application {
     res.setHeader('Access-Control-Allow-Headers', CORS.headers);
     res.status(204).end();
   });
+
+  // Auth. Applied here, once, rather than per-router: a mutating route that
+  // forgets its own `requireApiKey` is an open door to the operator's machine.
+  // Read-only routes stay open — that is the documented contract.
+  app.use(requireApiKeyForMutations);
 
   // Rate limiting: max 10 new competitions per minute per IP
   const createLimiter = rateLimit({
@@ -94,10 +100,13 @@ export function createApp(): Application {
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
   app.get('/models', (_req, res) => res.json(getModelRegistry()));
-  app.use('/competitions', createLimiter, createCompetitionsRouter(agentRepo));
-  // Apply tighter limits to expensive post-completion routes
+  // Tighter limits for the two most expensive routes in the product. These MUST
+  // be registered before the /competitions router: Express matches layers in
+  // registration order, so a router mounted first answers the path and any
+  // limiter registered after it is dead code.
   app.post('/competitions/:id/forge', forgeSynthesisLimiter);
   app.post('/competitions/:id/synthesis', forgeSynthesisLimiter);
+  app.use('/competitions', createLimiter, createCompetitionsRouter(agentRepo));
   app.use('/analytics/criteria', criteriaRouter);
   app.use('/analytics', analyticsRouter);
   app.use('/compare', compareRouter);
