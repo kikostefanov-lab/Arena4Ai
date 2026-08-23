@@ -48,3 +48,37 @@ export interface FileEventPayload {
   /** Human-readable line. Retained for backwards compatibility — existing UI reads it. */
   text: string;
 }
+
+/** What one provider's CLI can actually tell us about a file write. */
+export interface ProviderFileCapability {
+  /** A structured path is available. */
+  path: boolean;
+  /** A create-vs-modify operation can be determined. */
+  op: boolean;
+  /** How that operation is derived — see FileOpSource. */
+  opSource: FileOpSource;
+  /** The provider names the tool that performed the write. */
+  tool: boolean;
+  /** The provider emits the raw tool input. */
+  input: boolean;
+}
+
+/**
+ * Per-provider file-telemetry capabilities.
+ *
+ * Lives in @arena/shared rather than beside the normalizers on purpose: the
+ * consumer that most needs it is the arena renderer in `packages/web`, which
+ * cannot import orchestrator internals. A renderer binding a visual channel to
+ * edit counts must branch on this, or it will silently draw a shorter, poorer
+ * city for whichever CLI simply reports less — the same class of unfairness as
+ * a judge favouring its own vendor, except baked into the picture.
+ *
+ * `false` means the CLI does not emit the information AT ALL — not that we have
+ * yet to parse it. `opSource` says how far the operation can be trusted:
+ * gemini's 'verb' is parsed from prose and is not sound for edit counting.
+ */
+export const PROVIDER_FILE_CAPABILITIES: Record<'claude' | 'codex' | 'gemini', ProviderFileCapability> = {
+  claude: { path: true, op: true, opSource: 'tool',   tool: true,  input: true  },
+  codex:  { path: true, op: true, opSource: 'marker', tool: false, input: false },
+  gemini: { path: true, op: true, opSource: 'verb',   tool: false, input: false },
+};

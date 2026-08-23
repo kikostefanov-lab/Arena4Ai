@@ -99,17 +99,11 @@ export function makeFileEvent(
 }
 
 /**
- * What each provider's CLI can actually tell us about a file write.
- *
- * Exported so a renderer can degrade honestly per provider instead of drawing a
- * shorter city for a provider that simply reports less. `false` here means the
- * CLI does not emit the information at all — not that we have not parsed it yet.
+ * Re-exported from @arena/shared, where it now lives so `packages/web` (which
+ * cannot import orchestrator internals) can branch on it. Kept exported here so
+ * existing orchestrator imports are unaffected.
  */
-export const PROVIDER_FILE_CAPABILITIES = {
-  claude: { path: true, op: true, opSource: 'tool'   as FileOpSource, tool: true,  input: true  },
-  codex:  { path: true, op: true, opSource: 'marker' as FileOpSource, tool: false, input: false },
-  gemini: { path: true, op: true, opSource: 'verb'   as FileOpSource, tool: false, input: false },
-} as const;
+export { PROVIDER_FILE_CAPABILITIES } from '@arena/shared';
 
 /** Detects error lines in CLI output. */
 export const ERROR_LINE_RE = /^(?:error|fatal|exception)[:\s]/i;
