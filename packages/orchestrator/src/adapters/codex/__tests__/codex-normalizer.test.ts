@@ -153,3 +153,42 @@ describe('CodexNormalizer', () => {
     expect((ev?.payload as { text: string }).text).toBe('Green text output');
   });
 });
+
+// ── AA-064: the A/M marker was parsed and then discarded ─────────────────────
+describe('CodexNormalizer file operations', () => {
+  it('maps "M path" to FILE_MODIFY via the marker', () => {
+    const n = new CodexNormalizer(BASE);
+    skipHeader(n);
+    n.addLine('codex'); n.addLine('x');
+    n.addLine('file update');
+    const ev = n.addLine('M /tmp/arena-team-b-x/solution.py');
+    expect(ev!.type).toBe(EventType.FILE_MODIFY);
+    const p = ev!.payload as Record<string, unknown>;
+    expect(p.op).toBe('modify');
+    expect(p.opSource).toBe('marker');   // straight from the CLI, not a guess
+    expect(p.path).toBe('solution.py');
+    expect(p.text).toBe('solution.py');  // backwards compatibility
+  });
+
+  it('maps "A path" to FILE_CREATE via the marker', () => {
+    const n = new CodexNormalizer(BASE);
+    skipHeader(n);
+    n.addLine('codex'); n.addLine('x');
+    n.addLine('file update');
+    const ev = n.addLine('A /tmp/arena-team-b-x/new.py');
+    expect(ev!.type).toBe(EventType.FILE_CREATE);
+    expect((ev!.payload as Record<string, unknown>).op).toBe('create');
+  });
+
+  it('omits `tool` entirely rather than reporting "unknown"', () => {
+    const n = new CodexNormalizer(BASE);
+    skipHeader(n);
+    n.addLine('codex'); n.addLine('x');
+    n.addLine('file update');
+    const p = n.addLine('M /tmp/arena-team-b-x/a.py')!.payload as Record<string, unknown>;
+    // Absent, not "unknown" and not "": a consumer must be able to tell
+    // "codex does not report tools" from "no tool was used".
+    expect('tool' in p).toBe(false);
+    expect('input' in p).toBe(false);
+  });
+});

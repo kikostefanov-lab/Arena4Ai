@@ -1,5 +1,5 @@
 import { EventType, type ArenaEvent } from '@arena/shared';
-import { stripAnsi, makeEvent, type NormalizeContext } from '../normalizer-utils.js';
+import { stripAnsi, makeEvent, makeFileEvent, toRelativePath, type NormalizeContext } from '../normalizer-utils.js';
 
 /**
  * Stateful normaliser for the Codex CLI output stream.
@@ -102,12 +102,29 @@ export class CodexNormalizer {
 
       case 'file_update': {
         // "A /path/to/file.py" or "M /path/to/file.py"
-        const fileMatch = line.match(/^[AM]\s+(.+)$/);
-        const path = fileMatch ? fileMatch[1] : line;
-        // Strip absolute temp dir prefix for display
-        const displayPath = path.replace(/^.*\/arena-team-[ab]-[^/]+\//, '');
+        // Codex tags each line: "A path" = added, "M path" = modified. That marker
+        // was previously parsed and then discarded, which is why every codex file
+        // event looked like a create. It is a reliable signal, straight from the CLI.
+        const fileMatch = line.match(/^([AM])\s+(.+)$/);
+        const marker = fileMatch?.[1];
+        const path = fileMatch ? fileMatch[2] : line;
+        // Strip absolute temp dir prefix for display (shared helper: the old
+        // pattern here only matched teams a and b).
+        const displayPath = toRelativePath(path);
         this.mode = 'skip'; // skip the diff lines
-        return makeEvent(EventType.FILE_CREATE, { text: displayPath }, this.ctx);
+        // No marker at all means we could not parse the line; fall back to create
+        // rather than assert a change we cannot see.
+        return makeFileEvent(
+          {
+            op: marker === 'M' ? 'modify' : 'create',
+            opSource: 'marker',
+            text: displayPath,
+            path: displayPath || undefined,
+            // `tool` deliberately omitted: codex applies edits via apply_patch and
+            // never names a per-file tool. Absent, not "unknown".
+          },
+          this.ctx,
+        );
       }
 
       case 'skip':

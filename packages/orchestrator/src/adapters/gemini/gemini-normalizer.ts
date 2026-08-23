@@ -3,6 +3,8 @@ import {
   stripAnsi,
   makeEvent,
   FILE_PATH_RE,
+  makeFileEvent,
+  operationFromVerb,
   ERROR_LINE_RE,
   type NormalizeContext,
 } from '../normalizer-utils.js';
@@ -37,11 +39,9 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
     }
 
     const text = String(msg.text ?? msg.content ?? msg.message ?? clean);
-    return makeEvent(
-      FILE_PATH_RE.test(text) ? EventType.FILE_CREATE : EventType.REASONING,
-      { text },
-      ctx,
-    );
+    const m = FILE_PATH_RE.exec(text);
+    if (!m) return makeEvent(EventType.REASONING, { text }, ctx);
+    return makeFileEvent({ op: operationFromVerb(m[1]), opSource: 'verb', text, path: m[2] }, ctx);
   } catch {
     // Not JSON — treat as plain text
   }
@@ -50,8 +50,15 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
     return makeEvent(EventType.ERROR, { error: clean }, ctx);
   }
 
-  if (FILE_PATH_RE.test(clean)) {
-    return makeEvent(EventType.FILE_CREATE, { text: clean }, ctx);
+  // Gemini emits prose, so the verb in its own sentence is the only create-vs-modify
+  // signal that exists. Heuristic by construction — tagged opSource 'verb' so a
+  // consumer can weight it accordingly rather than trusting it like a tool name.
+  const fileMatch = FILE_PATH_RE.exec(clean);
+  if (fileMatch) {
+    return makeFileEvent(
+      { op: operationFromVerb(fileMatch[1]), opSource: 'verb', text: clean, path: fileMatch[2] },
+      ctx,
+    );
   }
 
   return makeEvent(EventType.REASONING, { text: clean }, ctx);

@@ -10,9 +10,22 @@ describe('gemini normalizeLine()', () => {
     expect(event.type).toBe(EventType.FILE_CREATE);
   });
 
-  it('maps a "modified" file line to FILE_CREATE', () => {
+  // AA-064: "Modified" is the only create-vs-modify signal gemini gives us, so it
+  // must produce FILE_MODIFY. This previously asserted FILE_CREATE.
+  it('maps a "modified" file line to FILE_MODIFY, with a verb-derived operation', () => {
     const event = normalizeLine('Modified main.py with the fix', BASE);
+    expect(event.type).toBe(EventType.FILE_MODIFY);
+    const p = event.payload as Record<string, unknown>;
+    expect(p.op).toBe('modify');
+    expect(p.opSource).toBe('verb');      // heuristic, and labelled as such
+    expect(p.path).toBe('main.py');       // structured path, not just prose
+    expect(p.tool).toBeUndefined();       // absent, never "unknown"
+  });
+
+  it('maps a "created" file line to FILE_CREATE', () => {
+    const event = normalizeLine('Created solution.py for the task', BASE);
     expect(event.type).toBe(EventType.FILE_CREATE);
+    expect((event.payload as Record<string, unknown>).op).toBe('create');
   });
 
   it('maps a plain reasoning line to REASONING', () => {
