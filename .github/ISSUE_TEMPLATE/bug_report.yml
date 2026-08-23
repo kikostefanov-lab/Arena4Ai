@@ -1,0 +1,119 @@
+name: Bug report
+description: Something in Arena4Ai does not work
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Not for security issues.** If this is a vulnerability, do not file it here —
+        follow `SECURITY.md` in the repo root and report it privately through the
+        repository's Security tab.
+
+        Arena4Ai drives the agent CLIs *you* have installed, so most reports that cannot be
+        reproduced are missing the CLI versions. Please fill in the environment section even
+        if the bug looks unrelated to the agents.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: >
+        The exact command or UI action. If it was a competition, include the brief (or the
+        brief file name) and the team arguments you used.
+      placeholder: |
+        1. npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
+             --team-a claude:architect --team-b codex:standard --skip-sandbox
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: agent-clis
+    attributes:
+      label: Which agent CLIs do you have installed, and at what versions?
+      description: >
+        Run the commands below and paste the output. Include every CLI you have, not only the
+        ones in the failing run — `claude` is used by the judge, presenter, synthesizer, Forge,
+        commentary and brief generator even in a Codex-vs-Gemini match. Write "not installed"
+        for the ones you do not have.
+      value: |
+        claude --version:
+        codex --version:
+        gemini --version:
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15.3 (arm64) / Ubuntu 24.04 / Windows 11 + WSL2"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      description: Output of `node --version`. Arena4Ai requires >= 22.
+      placeholder: "v22.14.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: sandbox
+    attributes:
+      label: Did you run with the Docker sandbox on or off?
+      options:
+        - "Sandbox ON (default — arena-agent:latest image built)"
+        - "Sandbox OFF — CLI run with --skip-sandbox"
+        - "Sandbox OFF — server started with ARENA_SKIP_SANDBOX=true"
+        - "Not applicable / no competition was launched"
+    validations:
+      required: true
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: Output of `git rev-parse --short HEAD`.
+      placeholder: "a1b2c3d"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how-launched
+    attributes:
+      label: How was it launched?
+      options:
+        - "CLI (cli.ts run)"
+        - "CLI (cli.ts tournament run)"
+        - "Web UI (New Battle)"
+        - "HTTP API directly"
+        - "Other / not a competition"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Orchestrator stderr, and the relevant part of the JSONL event log if you have one
+        (`--log-dir`). `ERROR` events carry a `payload.stage` — `preflight` means a CLI was
+        not found on PATH, `judging` means the AI judge failed. Please redact anything secret.
+      render: shell
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Postgres version, whether the DB was fresh, screenshots, anything unusual.
