@@ -1,3 +1,5 @@
+> **Historical design document, March 2026.** Written while the project was still called *Agent Arena*. Model ids, APIs, file paths and the project name below are as of that date and are **not current**. Kept as a record of what was decided then, not as guidance. See `README.md` for how Arena4Ai works today.
+
 # Phase 1 Completion — Design
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:writing-plans after this design is approved.
