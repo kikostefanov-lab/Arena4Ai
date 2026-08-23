@@ -26,7 +26,7 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1741521600000,
+      "when": 1773060000000,
       "tag": "0003_add_synthesis",
       "breakpoints": true
     },
@@ -35,6 +35,20 @@
       "version": "7",
       "when": 1773089000000,
       "tag": "0004_add_deliverables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773100000000,
+      "tag": "0005_tournaments",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773150000000,
+      "tag": "0006_presentations_and_forge",
       "breakpoints": true
     },
     {
@@ -47,15 +61,29 @@
     {
       "idx": 8,
       "version": "7",
-      "when": 1741910400000,
+      "when": 1773210000000,
       "tag": "0008_agent_profiles",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "7",
-      "when": 1741996800000,
+      "when": 1773220000000,
       "tag": "0009_personas_agents",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1773230000000,
+      "tag": "0010_brief_pipeline",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1773240000000,
+      "tag": "0011_drop_agent_profiles",
       "breakpoints": true
     }
   ]
