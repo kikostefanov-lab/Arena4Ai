@@ -66,7 +66,7 @@ A faithful mock of the match-viewing surface: two stylized "gladiator" figures o
 **Run it:** open `Arena Prototype.html`. Fonts load from Google, React/Babel from unpkg (integrity-pinned). No build step.
 
 **Design system it speaks:**
-- Colors come from the Arena4Ai model palette. Claude = `#ff6600`, Codex = `#6b9cd4`, GPT-5 = `#8b7ae8`, Gemini = `#00f0ff`. See `MODEL_COLORS` in `app.jsx:9`. Port target: `packages/web/lib/design/colors.ts` — `getModelColor()` already exists there; use it verbatim.
+- Colors come from the Arena4Ai model palette. Claude = `#ff6600`, Codex = `#0066ff`, Gemini = `#00f0ff`. The live map is `MODEL_COLORS` in `packages/video/src/tokens.ts`, with `getModelColor()` beside it — use it verbatim. There are three providers, not four; there is no separate GPT-5 entry.
 - Type: Orbitron for HUD / state labels / titles; JetBrains Mono for values, log lines, code. Matches the existing `MONOSPACE_FONT` / `BODY_FONT` split.
 - Background: same 48px grid @ 0.025 as the rest of the app; should inherit from `layout.tsx` on port.
 

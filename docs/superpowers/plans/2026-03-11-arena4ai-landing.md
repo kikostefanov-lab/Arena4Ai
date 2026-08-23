@@ -1,3 +1,5 @@
+> **Historical design document, March 2026.** Model ids, APIs and file paths referenced below are as of that date and are **not current**. It is kept as a record of what was decided then, not as guidance. See `README.md` for current models and `CLAUDE.md` for current usage.
+
 # Arena4Ai Marketing Landing Page Implementation Plan
 
 > **Status: COMPLETE**

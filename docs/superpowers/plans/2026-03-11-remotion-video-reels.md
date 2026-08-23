@@ -1,3 +1,5 @@
+> **Historical design document, March 2026.** Model ids, APIs and file paths referenced below are as of that date and are **not current**. It is kept as a record of what was decided then, not as guidance. See `README.md` for current models and `CLAUDE.md` for current usage.
+
 # Remotion Video Reels Implementation Plan
 
 > **Status: COMPLETE** — All 21 tasks implemented and working end-to-end. Post-plan improvements: N-team scene support, Ken Burns ScoreReveal, Winner ceremony, criterion label fallback, Arena4Ai theme audio, data layer fixes (finalScore, judgeResults scores, team.persona).
