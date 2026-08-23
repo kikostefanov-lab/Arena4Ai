@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
 import type { AgentProfile, Agent } from '@arena/shared';
@@ -128,8 +128,7 @@ function ExampleChips({
   value: string;
   onChange: (v: string) => void;
 }) {
-  const valueStr = typeof value === 'string' ? value : Array.isArray(value) ? value.join('\n') : '';
-  const existing = new Set(valueStr.split('\n').map((s) => s.trim()).filter(Boolean));
+  const existing = new Set(value.split('\n').map((s) => s.trim()).filter(Boolean));
   const available = examples.filter((e) => !existing.has(e));
   if (available.length === 0) return null;
 
@@ -359,7 +358,7 @@ function parseSimpleBriefYaml(text: string): ParsedBriefYaml {
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function NewCompetitionPage() {
+function NewCompetitionForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [submitting, setSubmitting] = useState(false);
@@ -2213,5 +2212,15 @@ export default function NewCompetitionPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+// useSearchParams() forces a client-side bailout, so the page must sit behind a
+// Suspense boundary or `next build` fails while prerendering this route.
+export default function NewCompetitionPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewCompetitionForm />
+    </Suspense>
   );
 }

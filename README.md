@@ -43,10 +43,15 @@ createdb arena
 cp .env.example packages/web/.env.local
 # Set NEXT_PUBLIC_WS_URL=ws://localhost:3000 in packages/web/.env.local
 
-# 3. Install dependencies
+# 3. Install dependencies (this also builds the internal workspace
+#    packages @arena/shared and @arena/video via their `prepare` scripts)
 npm install
 
-# 4. Run database migrations
+# 4. Build everything (optional after step 3 — required only if you skipped
+#    lifecycle scripts, e.g. `npm install --ignore-scripts`)
+npm run build
+
+# 5. Run database migrations
 DATABASE_URL=postgresql://localhost/arena npm run db:migrate --workspace=packages/orchestrator
 ```
 

@@ -121,6 +121,7 @@ export class CompetitionRunner extends EventEmitter {
       skipSandbox: options.skipSandbox ?? false,
       aiJudgeCount: options.aiJudgeCount ?? 1,
       commentary: options.commentary ?? false,
+      adversarialJudge: options.adversarialJudge ?? false,
     };
   }
 

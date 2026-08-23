@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import type { Brief, BriefInput, Deliverable, TeamPresentation } from '@arena/shared';
+import type { Brief, Deliverable, TeamPresentation } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, SYNTHESIS_CONTEXT } from '../utils/brief-context.js';
@@ -29,7 +29,7 @@ export interface SynthesisResult {
  * or null if there are no deliverables (e.g. all teams produced empty output).
  */
 export async function synthesizeDeliverables(
-  brief: BriefInput,
+  brief: Brief,
   deliverables: Deliverable[],
   options: SynthesisOptions,
   presentations?: TeamPresentation[],
@@ -39,7 +39,7 @@ export async function synthesizeDeliverables(
   const nonEmpty = deliverables.filter((d) => d.files.length > 0);
   if (nonEmpty.length === 0) return null;
 
-  const briefContext = buildBriefContext(brief as Brief, SYNTHESIS_CONTEXT);
+  const briefContext = buildBriefContext(brief, SYNTHESIS_CONTEXT);
 
   const criteriaIds = brief.rubric.criteria.map((c) => c.id);
   const teamIds = nonEmpty.map((d) => d.teamId);

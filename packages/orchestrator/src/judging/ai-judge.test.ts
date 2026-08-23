@@ -14,7 +14,7 @@ describe('buildJudgePrompt', () => {
     constraints: ['Must be fast', 'No external deps'],
     deliverables: ['solution.py'],
     rubric,
-    format: CompetitionFormat.CLI_APP,
+    format: CompetitionFormat.SPRINT,
     timeLimitMs: 60000,
   };
   const deliverable = {
