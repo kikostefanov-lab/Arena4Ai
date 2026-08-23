@@ -3,6 +3,7 @@ import path from 'path';
 import JSZip from 'jszip';
 import type { ForgeArtifact, ForgeOutputFormat } from '@arena/shared';
 import { expandMultiFileArtifact } from '../../../../../../../../../lib/forge-zip-utils';
+import { orchestratorUrl, orchestratorHeaders } from '../../../../../../../../../lib/orchestrator';
 
 const CONTENT_TYPES: Record<ForgeOutputFormat, string> = {
   markdown:   'text/markdown',
@@ -20,8 +21,9 @@ export async function GET(
 ) {
   const { id, runId, type: artifactType } = await params;
 
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-  const forgeRes = await fetch(`${apiBase}/competitions/${id}/forge`);
+  const forgeRes = await fetch(orchestratorUrl(`/competitions/${id}/forge`), {
+    headers: orchestratorHeaders(),
+  });
   if (!forgeRes.ok) {
     return NextResponse.json({ error: 'Competition not found' }, { status: 404 });
   }
@@ -53,7 +55,9 @@ export async function GET(
 
   // Single-file: return raw content with correct Content-Type
   const contentType = CONTENT_TYPES[artifact.outputFormat] ?? 'text/plain';
-  const basename = path.basename(artifact.filename);
+  // artifact.filename is model-authored — strip anything that could break out of
+  // the Content-Disposition header (quotes, CR/LF) before echoing it back.
+  const basename = path.basename(artifact.filename).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 100) || 'artifact.txt';
   return new NextResponse(artifact.content, {
     headers: {
       'Content-Type': contentType,

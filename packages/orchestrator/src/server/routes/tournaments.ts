@@ -9,6 +9,7 @@ import { TournamentRepository } from '../../db/repository.js';
 import { db } from '../../db/client.js';
 import { repo as compRepo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
+import { resolveRunOptions } from '../run-options.js';
 
 export const tournamentsRouter = Router();
 
@@ -35,10 +36,11 @@ const CreateTournamentSchema = z.object({
     }),
     expectedOutput: z.string().optional(),
   }),
-  teams: z.array(z.string()).min(2).max(8),
-  options: z.object({
-    skipSandbox: z.boolean().optional(),
-  }).optional(),
+  // Team specs are "provider:persona" strings that become temp dir / container
+  // name fragments downstream — keep them to one safe path segment.
+  teams: z.array(z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/, 'invalid team spec')).min(2).max(8),
+  // NOTE: no `options` here on purpose. Sandbox state and agent binaries are
+  // resolved server-side (run-options.ts) — a request must never pick them.
 });
 
 // Runtime-only fields not persisted to DB
@@ -58,7 +60,7 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const { brief, teams, options = {}, name, type, swissRounds } = parsed.data;
+  const { brief, teams, name, type, swissRounds } = parsed.data;
   const tournamentId = randomUUID();
   const tournamentName = name ?? `${type === 'SWISS' ? 'Swiss' : 'Round-Robin'} Tournament ${tournamentId.slice(0, 8)}`;
 
@@ -84,8 +86,8 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
   // Run asynchronously in the background
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const runner = new TournamentRunner(brief as any, teams, {
-    ...options,
-    skipSandbox: options.skipSandbox ?? true,
+    // Sandbox + binaries from the environment only — never from the request body.
+    ...resolveRunOptions(),
     printResults: false,
     name: tournamentName,
     type,

@@ -8,6 +8,7 @@ import type { RunOptions } from '../../engine/competition-runner.js';
 import { repo } from '../repo.js';
 import { runnerRegistry } from '../runner-registry.js';
 import { requireApiKey } from '../middleware/auth.js';
+import { resolveRunOptions, isSafeTeamId } from '../run-options.js';
 import { applyPreset } from '../../brief/presets.js';
 import { runForge, getForgeProgress } from '../../forge/forge-orchestrator.js';
 import type { ForgeInput } from '../../forge/forge-orchestrator.js';
@@ -28,7 +29,10 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     brief?: unknown;
     teams?: unknown;
     adversarialJudge?: boolean;
-    options?: { skipSandbox?: boolean; claudeBin?: string; logDir?: string; commentary?: boolean };
+    // Only `commentary` is honoured from the request. Anything that decides which
+    // binary runs, where it writes, or whether the sandbox is on is resolved
+    // server-side in resolveRunOptions() — see run-options.ts.
+    options?: { commentary?: boolean };
   };
 
   const briefResult = briefSchema.safeParse(body.brief);
@@ -48,6 +52,14 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
       res.status(400).json({ error: 'Each team must have id and model fields' });
       return;
     }
+    // Team ids become temp directory and container name fragments — keep them to
+    // a single safe path segment so they cannot traverse or reach a shell.
+    if (!isSafeTeamId(String(team.id))) {
+      res.status(400).json({
+        error: 'Invalid team id — use letters, digits, dot, dash or underscore (max 64 chars)',
+      });
+      return;
+    }
   }
 
   const teams: Team[] = rawTeams.map((t) => ({
@@ -57,10 +69,9 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   }));
 
   const options: RunOptions = {
-    // Default to skipping Docker sandbox — callers can opt in via options.skipSandbox: false
-    skipSandbox: body.options?.skipSandbox ?? true,
-    claudeBin: body.options?.claudeBin,
-    logDir: body.options?.logDir,
+    // Sandbox state, binaries and log directory come from the environment only.
+    // A request cannot name the executable to spawn or turn the sandbox off.
+    ...resolveRunOptions(),
     commentary: body.options?.commentary ?? false,
     adversarialJudge: body.adversarialJudge === true,
     agentRepo,

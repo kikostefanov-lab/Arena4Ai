@@ -836,7 +836,9 @@ function NewCompetitionForm() {
         },
         teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona, ...(t.agentId ? { agentId: t.agentId } : {}) })),
         adversarialJudge,
-        options: { claudeBin: 'claude', logDir: '/tmp/arena-logs' },
+        // No `options` here: the agent binaries, the log directory and the Docker
+        // sandbox are resolved server-side from the environment (see
+        // orchestrator run-options.ts). Anything sent here is ignored.
       };
       const res = await fetch('/api/competitions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),

@@ -29,7 +29,7 @@ program
   .option('--time-limit <ms>', 'Override brief time limit in milliseconds')
   .option('--commentary', 'Enable live AI commentary during the competition')
   .option('--adversarial-judge', 'Enable dual judging with adversarial cross-check')
-  .option('--model-a <model>', 'Model variant for team A (e.g. claude-opus-4-6)')
+  .option('--model-a <model>', 'Model variant for team A (e.g. claude-opus-5)')
   .option('--model-b <model>', 'Model variant for team B')
   .option('--model-c <model>', 'Model variant for team C')
   .option('--model-d <model>', 'Model variant for team D')

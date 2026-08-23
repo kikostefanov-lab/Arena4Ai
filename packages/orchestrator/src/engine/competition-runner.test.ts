@@ -42,14 +42,23 @@ vi.mock('../judging/rubric-scorer.js', () => ({
 }));
 
 // Mock ai-judge
+const OK_JUDGE_RESULT = {
+  judgeId: 'ai-claude',
+  teamId: 'team-a',
+  model: 'claude-opus-5',
+  scores: [{ criterionId: 'correctness', score: 9, commentary: 'good' }],
+};
 vi.mock('../judging/ai-judge.js', () => ({
-  aiJudge: vi.fn().mockResolvedValue({
-    judgeId: 'ai-claude',
-    teamId: 'team-a',
-    scores: [{ criterionId: 'correctness', score: 9 }],
-  }),
-  JUDGE_IDS: { automated: 'automated', aiClaude: 'ai-claude' },
+  aiJudge: vi.fn(),
+  JUDGE_IDS: { automated: 'automated', aiClaude: 'ai-claude', aiAdversarial: 'ai-adversarial' },
 }));
+
+// Mock cli-preflight — real spawns would make the suite depend on which agent
+// CLIs happen to be installed on the machine running the tests.
+vi.mock('../utils/cli-preflight.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/cli-preflight.js')>();
+  return { ...actual, findMissingClis: vi.fn().mockResolvedValue([]) };
+});
 
 // Mock score-aggregator
 vi.mock('../judging/score-aggregator.js', () => ({
@@ -123,6 +132,8 @@ vi.mock('../adapters/gemini/gemini-adapter.js', () => ({
 // ── Import the real runner (after mocks) ─────────────────────────────────────
 
 import { CompetitionRunner } from './competition-runner.js';
+import { aiJudge } from '../judging/ai-judge.js';
+import { findMissingClis } from '../utils/cli-preflight.js';
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -158,6 +169,11 @@ function makeTestRunner(opts: { agentRepo?: AgentRepository } = {}): Competition
 
 describe('CompetitionRunner', () => {
   let runner: CompetitionRunner;
+
+  beforeEach(() => {
+    vi.mocked(aiJudge).mockResolvedValue(OK_JUDGE_RESULT as never);
+    vi.mocked(findMissingClis).mockResolvedValue([]);
+  });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -226,5 +242,77 @@ describe('CompetitionRunner', () => {
 
     // After SCORED, incrementStats should have been called for each team with agentId
     expect(mockIncrementStats).toHaveBeenCalled();
+  });
+});
+
+
+// ── AA-016 / preflight: failures must be explicit ────────────────────────────
+
+describe('CompetitionRunner failure visibility', () => {
+  beforeEach(() => {
+    vi.mocked(findMissingClis).mockResolvedValue([]);
+    vi.mocked(aiJudge).mockResolvedValue(OK_JUDGE_RESULT as never);
+  });
+
+  it('falls back to the automated scorer using the judge failure FIELD, not commentary text', async () => {
+    // A failed judge that nonetheless produced a plausible non-zero score:
+    // the old string-match heuristic ("does any commentary contain 'fallback'?")
+    // would have accepted this as a real AI score.
+    vi.mocked(aiJudge).mockResolvedValue({
+      judgeId: 'ai-claude',
+      teamId: 'team-a',
+      model: 'claude-opus-5',
+      scores: [{ criterionId: 'correctness', score: 6, commentary: 'looks fine to me' }],
+      failure: { kind: 'model-unavailable', message: 'model "o4-mini" was rejected by the CLI' },
+    } as never);
+
+    const runner = makeTestRunner();
+    const result = await runner.run();
+
+    expect(result.scorecards.length).toBeGreaterThan(0);
+    const { aggregate } = await import('../judging/score-aggregator.js');
+    const judged = vi.mocked(aggregate).mock.calls.at(-1)![0];
+    expect(judged.every((r: { judgeId: string }) => r.judgeId === 'automated')).toBe(true);
+  });
+
+  it('emits an ERROR event naming the judging failure so it is not silent', async () => {
+    vi.mocked(aiJudge).mockResolvedValue({
+      judgeId: 'ai-claude',
+      teamId: 'team-a',
+      model: 'claude-opus-5',
+      scores: [{ criterionId: 'correctness', score: 0, commentary: 'x' }],
+      failure: { kind: 'cli-missing', message: 'the "claude" CLI was not found on PATH' },
+    } as never);
+
+    const runner = makeTestRunner();
+    const events: { type: string; payload: Record<string, unknown> }[] = [];
+    runner.on('arenaEvent', (e) => events.push(e));
+    await runner.run();
+
+    const errors = events.filter(e => e.type === 'ERROR' && e.payload['stage'] === 'judging');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]!.payload['kind']).toBe('cli-missing');
+    expect(String(errors[0]!.payload['message'])).toContain('claude');
+  });
+
+  it('uses the AI judge when it reports no failure', async () => {
+    const runner = makeTestRunner();
+    await runner.run();
+    const { aggregate } = await import('../judging/score-aggregator.js');
+    const judged = vi.mocked(aggregate).mock.calls.at(-1)![0];
+    expect(judged.some((r: { judgeId: string }) => r.judgeId === 'ai-claude')).toBe(true);
+  });
+
+  it('refuses to launch with a clear message when a provider CLI is missing', async () => {
+    vi.mocked(findMissingClis).mockResolvedValue([
+      { provider: 'gemini', bin: 'gemini', hint: 'npm i -g @google/gemini-cli' },
+    ]);
+
+    const runner = makeTestRunner();
+    const events: { type: string; payload: Record<string, unknown> }[] = [];
+    runner.on('arenaEvent', (e) => events.push(e));
+
+    await expect(runner.run()).rejects.toThrow(/"gemini" not found on PATH/);
+    expect(events.some(e => e.type === 'ERROR' && e.payload['stage'] === 'preflight')).toBe(true);
   });
 });

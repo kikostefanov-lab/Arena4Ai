@@ -1,3 +1,4 @@
+import { requireDefaultModel } from '../adapters/model-registry.js';
 import type { CreatePersonaInput } from './persona-repository.js';
 import type { CreateAgentInput } from './agent-repository.js';
 import type { PersonaRepository } from './persona-repository.js';
@@ -15,17 +16,27 @@ const SYSTEM_PERSONAS: CreatePersonaInput[] = [
   { id: 'persona-standard-gemini', name: 'standard-gemini', avatar: '✨', tags: ['versatile'],               description: 'General-purpose Gemini agent',                                 systemPrompt: 'You are a Gemini agent. Approach the problem creatively and deliver a comprehensive solution.', createdBy: 'system' },
 ];
 
+// Model ids are derived from the registry, never hardcoded here — a literal in
+// this file is how `codex-standard` and `gemini-2-flash` (neither of which is a
+// real model id) survived four months of provider releases.
+const CLAUDE_MODEL = requireDefaultModel('claude');
+const CODEX_MODEL = requireDefaultModel('codex');
+const GEMINI_MODEL = requireDefaultModel('gemini');
+
 const SYSTEM_AGENTS: CreateAgentInput[] = [
-  { id: 'agent-claude-architect',   name: 'architect',   provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-architect', createdBy: 'system' },
-  { id: 'agent-claude-speedrunner', name: 'speedrunner', provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-speedrunner', createdBy: 'system' },
-  { id: 'agent-claude-pragmatist',  name: 'pragmatist',  provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-pragmatist', createdBy: 'system' },
-  { id: 'agent-claude-researcher',  name: 'researcher',  provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-researcher', createdBy: 'system' },
-  { id: 'agent-claude-adversarial', name: 'adversarial', provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-adversarial', createdBy: 'system' },
-  { id: 'agent-claude-defender',    name: 'defender',    provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-defender', createdBy: 'system' },
-  { id: 'agent-claude-pioneer',     name: 'pioneer',     provider: 'claude', modelVariant: 'claude-sonnet-4-6', personaId: 'persona-pioneer', createdBy: 'system' },
-  { id: 'agent-codex-standard',     name: 'standard',    provider: 'codex',  modelVariant: 'codex-standard',    personaId: 'persona-standard', createdBy: 'system' },
-  { id: 'agent-gemini-standard',    name: 'standard',    provider: 'gemini', modelVariant: 'gemini-2-flash',    personaId: 'persona-standard-gemini', createdBy: 'system' },
+  { id: 'agent-claude-architect',   name: 'architect',   provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-architect', createdBy: 'system' },
+  { id: 'agent-claude-speedrunner', name: 'speedrunner', provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-speedrunner', createdBy: 'system' },
+  { id: 'agent-claude-pragmatist',  name: 'pragmatist',  provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-pragmatist', createdBy: 'system' },
+  { id: 'agent-claude-researcher',  name: 'researcher',  provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-researcher', createdBy: 'system' },
+  { id: 'agent-claude-adversarial', name: 'adversarial', provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-adversarial', createdBy: 'system' },
+  { id: 'agent-claude-defender',    name: 'defender',    provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-defender', createdBy: 'system' },
+  { id: 'agent-claude-pioneer',     name: 'pioneer',     provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-pioneer', createdBy: 'system' },
+  { id: 'agent-codex-standard',     name: 'standard',    provider: 'codex',  modelVariant: CODEX_MODEL,  personaId: 'persona-standard', createdBy: 'system' },
+  { id: 'agent-gemini-standard',    name: 'standard',    provider: 'gemini', modelVariant: GEMINI_MODEL, personaId: 'persona-standard-gemini', createdBy: 'system' },
 ];
+
+/** Exported for tests: every seeded agent must carry a real, registry-known model id. */
+export const SEEDED_AGENTS = SYSTEM_AGENTS;
 
 export async function seedPersonasAgents(
   personaRepo: PersonaRepository,

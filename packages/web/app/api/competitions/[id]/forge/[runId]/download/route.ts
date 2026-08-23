@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ForgeArtifact } from '@arena/shared';
 import { resolveZipPath, expandMultiFileArtifact } from '../../../../../../../lib/forge-zip-utils';
+import { orchestratorUrl, orchestratorHeaders } from '../../../../../../../lib/orchestrator';
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string; runId: string }> }
 ) {
   const { id, runId } = await params;
-  const apiBase = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
-
   // Fetch forge data and competition brief in parallel
+  const headers = orchestratorHeaders();
   const [forgeRes, compRes] = await Promise.all([
-    fetch(`${apiBase}/competitions/${id}/forge`),
-    fetch(`${apiBase}/competitions/${id}`),
+    fetch(orchestratorUrl(`/competitions/${id}/forge`), { headers }),
+    fetch(orchestratorUrl(`/competitions/${id}`), { headers }),
   ]);
 
   if (!forgeRes.ok || !compRes.ok) {

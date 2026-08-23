@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
+import { orchestratorUrl, orchestratorHeaders } from '../../../../../lib/orchestrator';
 
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const apiBase = process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000';
   try {
     const body = await req.json();
-    const res = await fetch(`${apiBase}/competitions/${id}/re-judge`, {
+    const res = await fetch(orchestratorUrl(`/competitions/${id}/re-judge`), {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: orchestratorHeaders(true),
       body: JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({ error: 'Re-judge failed' }));
