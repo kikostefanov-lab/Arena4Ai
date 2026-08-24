@@ -62,7 +62,7 @@ function fileList(rnd, count) {
  * @param {number} o.filesPerTeam
  * @param {number} o.seed
  */
-export function generateStream({ mode = 'modern', filesPerTeam = 9, seed = 7, teams }) {
+export function generateStream({ mode = 'modern', filesPerTeam = 9, seed = 7, teams, live = false }) {
   const rnd = mulberry32(seed);
   const events = [];
   let n = 0;

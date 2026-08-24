@@ -1,12 +1,27 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useState } from 'react';
-import { GladiatorV2 } from '../lib/arena/gladiator-v2';
-import { ArenaRingV2, ShockwavesV2 } from '../lib/arena/ring-v2';
-import { classifyEventV2, stateToPhase } from '../lib/arena/classify-v2';
-import { resolveModelBuild } from '../lib/arena/poses';
+import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
+import { IsoArenaRenderer, toFrameEvent, phaseFor } from '@arena/shared';
+import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
 import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
+
+/**
+ * AA-066 — the arena is now drawn by `IsoArenaRenderer` from @arena/shared.
+ *
+ * What used to live here was a hand-rolled Canvas 2D scene: two gladiators on a
+ * flat ring, animated from event TYPES alone. It showed that something was
+ * happening; it could not show WHAT. The shared renderer binds four channels to
+ * real event fields — every block is a file, height is the edit count, a beam is
+ * a tool call, a crack is an error — and, critically, it branches on
+ * PROVIDER_FILE_CAPABILITIES so a provider that cannot report edits is drawn as
+ * an honest absence rather than as a short city that reads as "did less work".
+ *
+ * This file is now a HOST: it owns the DOM, the HUD, the clock and the controls.
+ * It does not own the picture, and it must not — the legend that carries the
+ * honesty caveat is drawn onto the canvas by the renderer precisely so that no
+ * wrapper can ship the image without it.
+ */
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -32,33 +47,6 @@ interface ArenaViewerV2Props {
   timeLimitMs: number;
   scores?: Array<{ teamId: string; finalScore: number }>;
   winnerId?: string;
-}
-
-// ── Canvas constants ────────────────────────────────────────────
-
-const CW = 1200;
-const CH = 640;
-const GROUND_Y = CH * 0.68;
-const FIGURE_SCALE = 1.8;
-
-function computePositions(teams: Team[]): Array<{ x: number; y: number; facing: 1 | -1 }> {
-  if (teams.length === 2) {
-    return [
-      { x: CW * 0.3, y: GROUND_Y, facing: 1 },
-      { x: CW * 0.7, y: GROUND_Y, facing: -1 },
-    ];
-  }
-  // N-team ring layout
-  const cx = CW / 2;
-  const cy = CH * 0.55;
-  const radius = Math.min(CW, CH) * 0.25;
-  return teams.map((_, i) => {
-    const angle = (i / teams.length) * Math.PI * 2 - Math.PI / 2;
-    const x = cx + Math.cos(angle) * radius;
-    const y = cy + Math.sin(angle) * radius + GROUND_Y - cy;
-    const facing: 1 | -1 = x < cx ? 1 : -1;
-    return { x, y, facing };
-  });
 }
 
 // ── HUD subcomponents ───────────────────────────────────────────
@@ -248,327 +236,316 @@ function WinnerBanner({ visible, winner, color, scores, teams }: {
 
 // ── Main component ──────────────────────────────────────────────
 
+
+// ── Layout ──────────────────────────────────────────────────────
+
+const CW = 1200;
+const CH = 640;
+
+/**
+ * Space the HUD occupies, in canvas units, reported to the renderer so it
+ * composes the world into what is LEFT rather than underneath the panels.
+ * The two defects in the AA-059 spike — the right lane sitting over its own
+ * block city, and the event log clipped — were both this: a world drawn into
+ * the full viewport with chrome laid on top. Numbers here are the measured
+ * heights of the surrounding chrome, not margins tuned until it looked right.
+ */
+const HUD_INSETS = { top: 18, right: 24, bottom: 34, left: 24 };
+
+/** Playback speeds offered when reviewing a finished competition. */
+const SPEEDS = [1, 3, 8] as const;
+
 export default function ArenaViewerV2({
-  teams, events, state, winnerId, scores,
+  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId,
 }: ArenaViewerV2Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const rendererRef = useRef<IsoArenaRenderer | null>(null);
 
-  const gladsRef = useRef<Map<string, GladiatorV2>>(new Map());
-  const ringRef = useRef<ArenaRingV2 | null>(null);
-  const shockRef = useRef<ShockwavesV2 | null>(null);
-  const lastEventIdxRef = useRef(0);
-  const lastFrameTsRef = useRef(0);
-  const cameraRef = useRef({ x: 0, zoom: 1, tx: 0, tzoom: 1 });
-  const camTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const confettiFiredRef = useRef(false);
-  const latestActionRef = useRef<Record<string, string>>({});
+  /**
+   * How many of the `events` prop we have already handed to the renderer, plus
+   * the id of the last one we took.
+   *
+   * The parent rebuilds `allEventsSorted` with a fresh array identity and a
+   * fresh sort on every websocket message, so identity tells us nothing about
+   * what is new. The id check is what distinguishes the normal case — the
+   * prefix is unchanged and events were appended — from a genuine reorder,
+   * which only a rebuild can handle correctly.
+   */
+  const consumedRef = useRef(0);
+  const lastIdRef = useRef<string | null>(null);
+  const originRef = useRef<number | null>(null);
 
   const [momentum, setMomentum] = useState(0);
-  const [, setTick] = useState(0); // forces re-render for latest-action HUD text
+  const [latest, setLatest] = useState<Record<string, string>>({});
+  const [orbit, setOrbit] = useState(true);
+  const [playing, setPlaying] = useState(true);
+  const [speed, setSpeed] = useState<number>(3);
 
-  const phase: ArenaPhase = stateToPhase(state);
+  const phase: ArenaPhase = phaseFor(state) as ArenaPhase;
 
-  // Stable signature so re-renders with a new `teams` array reference don't
-  // reset the gladiators. Only team id + model + persona participate in init.
+  /**
+   * A finished competition has its whole history in hand, so scrubbing it is
+   * meaningful. A RUNNING one does not: you cannot fast-forward past events
+   * that have not happened, and a pause button that quietly desynced the arena
+   * from the competition would misrepresent what you are looking at. So the
+   * transport appears only once the competition is over, and while it is live
+   * the arena follows the real clock. Camera orbit is offered in both.
+   */
+  const isLive = phase === 'active' || phase === 'freeze' || phase === 'judging';
+
   const teamsKey = useMemo(
     () => teams.map((t) => `${t.id}|${t.model}|${t.persona ?? ''}`).join('::'),
     [teams],
   );
   const teamColors = useMemo(
     () => Object.fromEntries(teams.map((t) => [t.id, getModelColor(t.model)])),
-    // Stable on teamsKey — prevents re-init on every parent render
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [teamsKey],
   );
 
-  // Init renderers when team list meaningfully changes
+  // ── Build the renderer once per meaningful team change ────────
   useEffect(() => {
-    const positions = computePositions(teams);
-    const glads = new Map<string, GladiatorV2>();
-    teams.forEach((team, i) => {
-      const pos = positions[i];
-      glads.set(team.id, new GladiatorV2({
-        teamId: team.id,
-        build: resolveModelBuild(team.model),
-        color: teamColors[team.id],
-        x: pos.x,
-        y: pos.y,
-        scale: FIGURE_SCALE,
-        facing: pos.facing,
-      }));
-      latestActionRef.current[team.id] = '';
+    const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
+    const r = new IsoArenaRenderer({
+      teams: specs,
+      events: [],
+      timeLimitMs,
+      reducedMotion:
+        typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     });
-    gladsRef.current = glads;
-    ringRef.current = new ArenaRingV2(CW / 2, CH * 0.76, CW * 0.38, CH * 0.10);
-    shockRef.current = new ShockwavesV2();
-    lastEventIdxRef.current = 0;
-    confettiFiredRef.current = false;
+    rendererRef.current = r;
+    consumedRef.current = 0;
+    lastIdRef.current = null;
+    originRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamsKey]);
+  }, [teamsKey, timeLimitMs]);
 
-  // Process newly-arrived events — classify, flash, pulse, camera nudge
-  useEffect(() => {
-    const glads = gladsRef.current;
-    const ring = ringRef.current;
-    const shock = shockRef.current;
-    if (!ring || !shock || glads.size === 0) return;
+  // ── Feed the stream ───────────────────────────────────────────
+  const ingest = useCallback(() => {
+    const r = rendererRef.current;
+    if (!r) return;
 
-    while (lastEventIdxRef.current < events.length) {
-      const ev = events[lastEventIdxRef.current++];
-      if (!ev.teamId) continue;
-      const g = glads.get(ev.teamId);
-      if (!g) continue;
-
-      const choreo = classifyEventV2(ev.type);
-      if (!choreo) continue;
-
-      if (choreo.basePose === 'thinking') {
-        g.setBase('thinking');
-        latestActionRef.current[ev.teamId] = '> reasoning…';
-        setTimeout(() => { g.setBase('idle'); }, 400 + Math.random() * 300);
-      } else if (choreo.flash === 'strike' || choreo.flash === 'power') {
-        g.flash(choreo.flash);
-        // Nearest opponent for shockwave target
-        const opp = [...glads.values()].find((o) => o.teamId !== ev.teamId);
-        if (opp) {
-          shock.spawnShockwave(opp.x, opp.y - 20, g.color);
-          opp.flash('hit');
-          // Camera nudge toward striker
-          cameraRef.current.tx = (g.x - CW / 2) * 0.08;
-          cameraRef.current.tzoom = 1.05;
-          if (camTimerRef.current) clearTimeout(camTimerRef.current);
-          camTimerRef.current = setTimeout(() => {
-            cameraRef.current.tx = 0;
-            cameraRef.current.tzoom = 1;
-          }, 350);
-        }
-        ring.pulse(g.color);
-        latestActionRef.current[ev.teamId] = choreo.flash === 'strike' ? '> write file' : '> exec tool';
-      } else if (choreo.flash === 'hit') {
-        g.flash('hit');
-      }
+    // Competition start, fixed on the first event we ever see, so the renderer
+    // works in elapsed time regardless of when the events were recorded. This
+    // is also what makes a historical competition replay correctly.
+    if (originRef.current === null && events.length > 0) {
+      originRef.current = Date.parse(events[0].timestamp);
     }
-  }, [events]);
+    const origin = originRef.current;
+    if (origin === null) return;
 
-  // Apply reveal-phase terminals + confetti
-  useEffect(() => {
-    const glads = gladsRef.current;
-    const ring = ringRef.current;
-    const shock = shockRef.current;
-    if (!ring || !shock || glads.size === 0) return;
+    const consumed = consumedRef.current;
+    const prefixIntact =
+      consumed === 0 ||
+      (events.length >= consumed && events[consumed - 1]?.eventId === lastIdRef.current);
 
-    if (phase === 'reveal' && winnerId) {
-      const winner = glads.get(winnerId);
-      const winColor = winner?.color ?? '#00f0ff';
-      for (const [id, g] of glads) {
-        g.setTerminal(id === winnerId ? 'triumph' : 'kneel');
-      }
-      if (winner) {
-        cameraRef.current.tx = (winner.x - CW / 2) * 0.25;
-        cameraRef.current.tzoom = 1.18;
-        if (!confettiFiredRef.current) {
-          shock.spawnConfetti(winner.x, winner.y - 60, winColor);
-          confettiFiredRef.current = true;
-        }
-      }
-      ring.setPhase('reveal', winColor);
-    } else {
-      for (const g of glads.values()) g.setTerminal(null);
-      confettiFiredRef.current = false;
-      ring.setPhase(phase);
+    if (!prefixIntact) {
+      // A reorder: the only coherent response is to rebuild from scratch.
+      // Rare, and cheaper to do correctly than to patch up incrementally.
+      const all = events.map((e) => toFrameEvent(e as never, origin));
+      r.appendEvents([]);
+      r.seek(0);
+      rendererRef.current = null;
+      const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
+      const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
+      rendererRef.current = rebuilt;
+      consumedRef.current = events.length;
+      lastIdRef.current = events[events.length - 1]?.eventId ?? null;
+      return;
     }
+
+    if (events.length === consumed) return;
+    const fresh: FrameEvent[] = [];
+    for (let i = consumed; i < events.length; i++) {
+      fresh.push(toFrameEvent(events[i] as never, origin));
+    }
+    r.appendEvents(fresh);
+    consumedRef.current = events.length;
+    lastIdRef.current = events[events.length - 1]?.eventId ?? null;
+  }, [events, teams, timeLimitMs]);
+
+  // ── Winner / terminal poses ───────────────────────────────────
+  useEffect(() => {
+    rendererRef.current?.setWinner(phase === 'reveal' ? (winnerId ?? null) : null);
   }, [phase, winnerId]);
 
-  // Main RAF loop
+  // ── The single animation loop ─────────────────────────────────
+  //
+  // Everything time-driven happens here and nothing per event. The component
+  // this replaced re-derived energy and momentum by walking the ENTIRE event
+  // array inside an effect keyed on `events`, which is O(n) work per arriving
+  // event and therefore O(n squared) over a competition — worst exactly on the
+  // long, busy runs most worth watching. The renderer keeps its own capped
+  // recent-activity window, so that loop is gone rather than memoised around.
   useEffect(() => {
     let raf = 0;
-    const step = (ts: number): void => {
-      const last = lastFrameTsRef.current || ts;
-      let dt = ts - last;
-      lastFrameTsRef.current = ts;
-      if (dt > 100) dt = 16;
+    let hudAcc = 0;
 
-      drawFrame(dt);
+    const step = (): void => {
+      const r = rendererRef.current;
+      const canvas = canvasRef.current;
+      if (r && canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ingest();
+
+          if (isLive) {
+            // The host owns the clock: the competition's real elapsed time.
+            r.setTime(elapsedMs);
+          } else if (playing) {
+            r.tick(16.7 * speed);
+          }
+
+          if (orbit && phase !== 'reveal') {
+            r.camera.tyaw = -0.62 + Math.sin(performance.now() / 9000) * 0.14;
+          }
+
+          r.attach(ctx as unknown as Ctx2D);
+          r.setViewport({ width: CW, height: CH, dpr: 1, insets: HUD_INSETS });
+          r.draw();
+
+          // HUD text is throttled to ~4Hz. It is prose for a human to read;
+          // re-rendering React at 60Hz to update it would spend the frame
+          // budget on text nobody can follow that fast.
+          if (++hudAcc % 15 === 0) {
+            const next: Record<string, string> = {};
+            for (const team of r.world.teams.values()) next[team.id] = team.latest;
+            setLatest(next);
+            if (teams.length === 2) {
+              const now = r.world.t;
+              let a = 0;
+              let b = 0;
+              for (const rec of r.world.recent) {
+                if (now - rec.t >= 10_000) continue;
+                if (rec.teamId === teams[0].id) a++;
+                else if (rec.teamId === teams[1].id) b++;
+              }
+              setMomentum(a + b === 0 ? 0 : (b - a) / (a + b));
+            }
+          }
+        }
+      }
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams]);
 
-  // Energy + momentum from recent events
-  useEffect(() => {
-    const glads = gladsRef.current;
-    if (glads.size === 0) return;
-    // Approximate recent-window by taking last N events (no real timestamps)
-    const now = Date.now();
-    const win3s = now - 3000;
-    const win10s = now - 10000;
-    const countsEnergy: Record<string, number> = {};
-    const countsMom: Record<string, number> = {};
-    for (const ev of events) {
-      if (!ev.teamId) continue;
-      const evTime = new Date(ev.timestamp).getTime();
-      if (evTime >= win3s) countsEnergy[ev.teamId] = (countsEnergy[ev.teamId] || 0) + 1;
-      if (evTime >= win10s) countsMom[ev.teamId] = (countsMom[ev.teamId] || 0) + 1;
-    }
-    for (const [id, g] of glads) {
-      g.setEnergy(Math.min(1, (countsEnergy[id] ?? 0) / 5));
-    }
-    if (teams.length === 2) {
-      const a = countsMom[teams[0].id] ?? 0;
-      const b = countsMom[teams[1].id] ?? 0;
-      const total = a + b;
-      setMomentum(total === 0 ? 0 : (b - a) / total);
-    }
-    setTick((n) => n + 1);
-  }, [events, teams]);
-
-  function drawFrame(dt: number): void {
-    const ctx = canvasRef.current?.getContext('2d');
-    if (!ctx) return;
-    const glads = gladsRef.current;
-    const ring = ringRef.current;
-    const shock = shockRef.current;
-    if (!ring || !shock) return;
-
-    // Update
-    for (const g of glads.values()) g.update(dt, performance.now());
-    ring.update(dt);
-    shock.update(dt);
-
-    // Ease camera
-    const cam = cameraRef.current;
-    cam.x += (cam.tx - cam.x) * 0.08;
-    cam.zoom += (cam.tzoom - cam.zoom) * 0.08;
-
-    // Render
-    ctx.clearRect(0, 0, CW, CH);
-    ctx.fillStyle = '#01060c';
-    ctx.fillRect(0, 0, CW, CH);
-
-    // Subtle scanlines
-    ctx.fillStyle = 'rgba(0,240,255,0.02)';
-    for (let y = 0; y < CH; y += 3) ctx.fillRect(0, y, CW, 1);
-
-    // Camera transform
-    ctx.save();
-    ctx.translate(CW / 2, CH / 2);
-    ctx.scale(cam.zoom, cam.zoom);
-    ctx.translate(-CW / 2 - cam.x, -CH / 2);
-
-    const dim = phase === 'reveal' ? 0.3 : 0.6;
-    ring.drawGrid(ctx, dim);
-    ring.drawRing(ctx);
-
-    // Gladiators — loser first, winner on top during reveal
-    if (phase === 'reveal' && winnerId) {
-      for (const [id, g] of glads) if (id !== winnerId) g.draw(ctx);
-      const w = glads.get(winnerId);
-      if (w) w.draw(ctx);
-    } else {
-      for (const g of glads.values()) g.draw(ctx);
-    }
-
-    shock.draw(ctx);
-    ctx.restore();
-  }
-
-  // ── Render ─────────────────────────────────────────────
-
-  const winner = winnerId ? teams.find((t) => t.id === winnerId) : undefined;
-  const winnerColor = winner ? getModelColor(winner.model) : '#00f0ff';
-  const teamA = teams[0];
-  const teamB = teams[1];
+  const notes = rendererRef.current?.honestyNotes ?? [];
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: 12,
-      padding: '14px 16px',
-      height: '100%', overflow: 'hidden',
-    }}>
-      {/* Lane headers (2-team only) */}
-      {teamA && teamB && (
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: 16,
-          alignItems: 'center',
-        }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {teams.length === 2 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'start', gap: 12 }}>
           <LaneHeader
-            team={teamA}
-            color={teamColors[teamA.id]}
-            align="left"
-            latest={latestActionRef.current[teamA.id] ?? ''}
+            team={teams[0]} color={teamColors[teams[0].id]} align="left"
+            latest={latest[teams[0].id] ?? ''}
           />
-          <div style={{
-            fontFamily: MONOSPACE_FONT, fontSize: 18, fontWeight: 900,
-            color: '#1e4a5a', letterSpacing: 4,
-          }}>VS</div>
+          <PhaseChip phase={phase} />
           <LaneHeader
-            team={teamB}
-            color={teamColors[teamB.id]}
-            align="right"
-            latest={latestActionRef.current[teamB.id] ?? ''}
+            team={teams[1]} color={teamColors[teams[1].id]} align="right"
+            latest={latest[teams[1].id] ?? ''}
           />
         </div>
       )}
 
-      {/* Canvas stage — flex-center keeps aspect ratio intact */}
-      <div style={{
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <div
-          ref={containerRef}
-          style={{
-            position: 'relative',
-            border: '1px solid #0a2235',
-            background: '#01060c',
-            borderRadius: 8,
-            overflow: 'hidden',
-            aspectRatio: `${CW} / ${CH}`,
-            maxWidth: '100%',
-            maxHeight: '100%',
-            width: 'auto',
-            height: 'auto',
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            width={CW}
-            height={CH}
-            style={{ width: '100%', height: '100%', display: 'block' }}
+      <div style={{ position: 'relative', width: '100%' }}>
+        <canvas
+          ref={canvasRef}
+          width={CW}
+          height={CH}
+          style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 6, background: '#03060b' }}
+        />
+        <WinnerBanner
+          visible={phase === 'reveal' && !!winnerId}
+          winner={teams.find((t) => t.id === winnerId)}
+          color={winnerId ? teamColors[winnerId] : '#00f0ff'}
+          scores={scores}
+          teams={teams}
+        />
+        {[['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']].map(([v, h]) => (
+          <div
+            key={`${v}${h}`}
+            style={{
+              position: 'absolute', [v]: 8, [h]: 8, width: 12, height: 12,
+              [`border${v === 'top' ? 'Top' : 'Bottom'}`]: '1px solid #00f0ff',
+              [`border${h === 'left' ? 'Left' : 'Right'}`]: '1px solid #00f0ff',
+              opacity: 0.5, pointerEvents: 'none',
+            } as React.CSSProperties}
           />
-          <PhaseChip phase={phase} />
-          <WinnerBanner
-            visible={phase === 'reveal'}
-            winner={winner}
-            color={winnerColor}
-            scores={scores}
-            teams={teams}
-          />
-
-          {/* Corner accents */}
-          <div style={{ position: 'absolute', top: 8, left: 8, width: 12, height: 12, borderTop: '1px solid #00f0ff', borderLeft: '1px solid #00f0ff', opacity: 0.5 }} />
-          <div style={{ position: 'absolute', top: 8, right: 8, width: 12, height: 12, borderTop: '1px solid #00f0ff', borderRight: '1px solid #00f0ff', opacity: 0.5 }} />
-          <div style={{ position: 'absolute', bottom: 8, left: 8, width: 12, height: 12, borderBottom: '1px solid #00f0ff', borderLeft: '1px solid #00f0ff', opacity: 0.5 }} />
-          <div style={{ position: 'absolute', bottom: 8, right: 8, width: 12, height: 12, borderBottom: '1px solid #00f0ff', borderRight: '1px solid #00f0ff', opacity: 0.5 }} />
-        </div>
+        ))}
       </div>
 
-      {/* Momentum meter (2-team only) */}
-      {teamA && teamB && (
+      {teams.length === 2 && (
         <MomentumMeter
           momentum={momentum}
-          teamA={teamA}
-          teamB={teamB}
-          colorA={teamColors[teamA.id]}
-          colorB={teamColors[teamB.id]}
+          teamA={teams[0]} teamB={teams[1]}
+          colorA={teamColors[teams[0].id]} colorB={teamColors[teams[1].id]}
         />
+      )}
+
+      {/* Controls. Transport only once the history exists to scrub. */}
+      <div style={{
+        display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end',
+        fontFamily: MONOSPACE_FONT, fontSize: '0.62rem',
+      }}>
+        {!isLive && (
+          <>
+            <button type="button" onClick={() => setPlaying((p) => !p)} style={ctrlStyle(playing)}>
+              {playing ? 'Pause' : 'Play'}
+            </button>
+            {SPEEDS.map((s) => (
+              <button key={s} type="button" onClick={() => setSpeed(s)} style={ctrlStyle(speed === s)}>
+                {s}×
+              </button>
+            ))}
+          </>
+        )}
+        {isLive && (
+          <span style={{ color: '#4a8fa8', letterSpacing: '1.5px', textTransform: 'uppercase' }}>
+            following live
+          </span>
+        )}
+        <button type="button" onClick={() => setOrbit((o) => !o)} style={ctrlStyle(orbit)}>
+          Cam
+        </button>
+      </div>
+
+      {/*
+        The renderer already draws these notes onto the canvas — that is
+        deliberate, so the picture cannot travel without its caveat. They are
+        repeated here as selectable text because a screenshot is not accessible
+        and a caveat nobody can copy is a caveat nobody quotes.
+      */}
+      {notes.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {notes.map((n) => (
+            <div key={n} style={{
+              fontFamily: BODY_FONT, fontSize: '0.62rem', color: '#ffd700',
+              border: '1px solid rgba(255,215,0,0.3)', background: 'rgba(255,215,0,0.05)',
+              borderRadius: 3, padding: '4px 8px',
+            }}>
+              ⚠ {n}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
+}
+
+function ctrlStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: '4px 9px',
+    border: `1px solid ${active ? '#00f0ff' : '#0a2235'}`,
+    borderRadius: 3,
+    background: 'rgba(7,16,24,0.85)',
+    color: active ? '#00f0ff' : '#4a8fa8',
+    fontFamily: MONOSPACE_FONT,
+    fontSize: '0.6rem',
+    letterSpacing: '1px',
+    textTransform: 'uppercase',
+    cursor: 'pointer',
+  };
 }

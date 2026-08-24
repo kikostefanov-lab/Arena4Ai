@@ -1,5 +1,5 @@
 import type { FrameEvent, TeamTelemetry, EditDepthMode } from './event-model.js';
-import { resolveTelemetry } from './event-model.js';
+import { resolveTelemetry, providerOf, capabilityFor } from './event-model.js';
 import { getModelColor } from '../design/tokens.js';
 import type { Cell, GridExtent, BlockBudget } from './layout.js';
 import { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
@@ -54,6 +54,17 @@ export interface TeamState extends TeamSpec {
   budget: BlockBudget;
   /** Paths seen, for first-sighting inference on legacy streams. */
   seen: Set<string>;
+  /**
+   * Running tallies over this team's file events.
+   *
+   * LIVE MODE needs these. `resolveTelemetry()` folds a whole event list at
+   * once, which is right for a replay whose events all exist up front, but a
+   * live competition starts with an empty stream and learns what its provider
+   * reports only as events arrive. Re-folding the entire list on every arriving
+   * event would be O(n) per event — O(n squared) over a competition — so the
+   * facts telemetry depends on are accumulated as events are applied instead.
+   */
+  fileStats: { total: number; withContract: number; withPath: number; legacy: number };
 }
 
 export type Phase = 'active' | 'freeze' | 'judging' | 'reveal';
@@ -163,6 +174,7 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
       telemetry,
       budget,
       seen: new Set(),
+      fileStats: { total: 0, withContract: 0, withPath: 0, legacy: 0 },
     });
     if (telemetry.note) world.notes.push(telemetry.note);
     if (budget.note) world.notes.push(budget.note);
@@ -187,6 +199,7 @@ export function resetWorld(world: World): void {
     team.counts = { files: 0, edits: 0, tools: 0, errors: 0, reasoning: 0 };
     team.latest = '';
     team.seen.clear();
+    team.fileStats = { total: 0, withContract: 0, withPath: 0, legacy: 0 };
   }
 }
 
@@ -292,6 +305,10 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
     }
 
     case 'file': {
+      team.fileStats.total++;
+      if (ev.opSource && ev.op) team.fileStats.withContract++;
+      if (ev.path) team.fileStats.withPath++;
+      if (ev.legacy) team.fileStats.legacy++;
       if (!ev.path) {
         // A file event with no recoverable path cannot become a block. Counting
         // it as a file anyway would inflate the stat panel above what the floor
@@ -345,4 +362,94 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
       break;
     }
   }
+}
+
+// ─── live mode ───────────────────────────────────────────────────────────────
+
+/**
+ * Recompute a team's telemetry from its running tallies.
+ *
+ * Deliberately mirrors `resolveTelemetry()` branch for branch — the two must not
+ * be allowed to disagree, because one drives a replay's legend and the other
+ * drives a live competition's, and a viewer comparing the same competition live
+ * and afterwards must be told the same thing about it.
+ */
+export function telemetryFromStats(model: string, stats: TeamState['fileStats']): TeamTelemetry {
+  const provider = providerOf(model);
+  const capability = capabilityFor(model);
+  const legacy = stats.legacy > 0;
+
+  if (!capability.op) {
+    return {
+      provider, capability, editDepth: 'unavailable', legacy,
+      note: `${provider}: this provider does not report file operations — block heights are drawn flat, not low`,
+    };
+  }
+  if (stats.withContract > 0) return { provider, capability, editDepth: 'measured', legacy };
+  if (stats.total === 0) return { provider, capability, editDepth: 'measured', legacy: false };
+  if (stats.withPath > 0) {
+    return {
+      provider, capability, editDepth: 'inferred', legacy,
+      note: `${provider}: edit depth inferred from repeated paths — this competition predates file-operation telemetry`,
+    };
+  }
+  return {
+    provider, capability, editDepth: 'unavailable', legacy,
+    note: `${provider}: no file paths in these events — block heights are not measurable and are drawn flat`,
+  };
+}
+
+/** Rebuild `world.notes` from the current per-team telemetry and budgets. */
+export function refreshNotes(world: World): void {
+  world.notes.length = 0;
+  for (const team of world.teams.values()) {
+    if (team.telemetry.note) world.notes.push(team.telemetry.note);
+    if (team.budget.note) world.notes.push(team.budget.note);
+  }
+}
+
+/**
+ * Grow the floor so `needed` blocks fit for one team, WITHOUT disturbing which
+ * block sits where relative to its neighbours.
+ *
+ * A live competition cannot size its grid up front — it does not yet know how
+ * many files the agents will write. Left alone, the placement cursor would run
+ * past the end of `cells` and silently stack every later file onto the last
+ * cell, which is exactly the failure removed from the prototype in AA-065.
+ *
+ * Regrowing moves blocks, and that is a genuine cost: a viewer watching the
+ * floor sees it rescale. It is the lesser evil. The alternative — sizing every
+ * live arena for hundreds of files up front — would render a nine-file fizzbuzz
+ * as nine specks in an empty stadium, every time, to avoid a rescale that most
+ * competitions never trigger. Placement order is preserved exactly, so a block
+ * keeps its neighbours and its distance from the base; only the scale changes.
+ *
+ * Returns true when the grid actually changed.
+ */
+export function ensureGridCapacity(world: World, needed: number): boolean {
+  if (needed <= world.grid.capacity) return false;
+
+  const grid = planGrid(needed);
+  world.grid = grid;
+
+  for (const team of world.teams.values()) {
+    team.cells = cellOrder(team.side, grid, world.baseX);
+  }
+  // Re-place every existing structure in its original insertion order.
+  const cursors = new Map<string, number>();
+  for (const id of world.order) {
+    const st = world.structures.get(id);
+    if (!st) continue;
+    const team = world.teams.get(st.teamId);
+    if (!team) continue;
+    const i = cursors.get(team.id) ?? 0;
+    cursors.set(team.id, i + 1);
+    const cell = team.cells[Math.min(i, team.cells.length - 1)];
+    st.x = cell.x;
+    st.z = cell.z;
+  }
+  for (const team of world.teams.values()) {
+    team.nextCell = cursors.get(team.id) ?? 0;
+  }
+  return true;
 }

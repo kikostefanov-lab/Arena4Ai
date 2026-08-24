@@ -13,6 +13,7 @@ import {
 import { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 import { createWorld, applyEvent, targetHeight } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
+import { IsoArenaRenderer } from './renderer.js';
 import { MODEL_COLORS } from '../design/tokens.js';
 
 const T0 = Date.parse('2026-08-24T00:00:00.000Z');
@@ -318,5 +319,98 @@ describe('a provider that cannot report operations gets a flat, hatched city', (
       const events = toFrameEvents([ev('FILE_CREATE', 'a', { path: 'x.py', op: 'create', opSource: 'tool', text: '' }, 0)], T0);
       expect(resolveTelemetry(p, events).editDepth).toBe('measured');
     }
+  });
+});
+
+describe('live mode — a stream that does not exist yet when the renderer is built', () => {
+  const teams = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }];
+  const file = (team: string, path: string, t: number, legacy = false) =>
+    toFrameEvent(
+      ev('FILE_CREATE', team, legacy ? { text: path } : { path, op: 'create', opSource: 'tool', text: '' }, t),
+      T0,
+    );
+
+  it('starts empty and still places blocks as events arrive', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    expect(r.world.structures.size).toBe(0);
+    r.appendEvents([file('a', 'src/x.py', 100), file('b', 'main.go', 200)]);
+    r.setTime(500);
+    expect(r.world.structures.size).toBe(2);
+  });
+
+  it('grows the floor rather than stacking, once the initial grid is outgrown', () => {
+    // The replay path sizes the grid up front. Live cannot, so the failure mode
+    // being guarded here is the prototype's: a placement cursor running past the
+    // end of `cells` and silently piling every later file onto the last one.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 600_000 });
+    const startCapacity = r.world.grid.capacity;
+    const n = startCapacity + 40;
+    for (let i = 0; i < n; i++) {
+      r.appendEvents([file('a', `src/f${i}.py`, i * 10)]);
+      r.setTime(i * 10 + 1);
+    }
+    expect(r.world.grid.capacity).toBeGreaterThan(startCapacity);
+    expect(r.world.structures.size).toBe(n);
+    const cells = new Set([...r.world.structures.values()].map((s) => `${s.x},${s.z}`));
+    expect(cells.size).toBe(n);
+  });
+
+  it('preserves placement ORDER across a regrow, so blocks keep their neighbours', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 600_000 });
+    const n = r.world.grid.capacity + 5;
+    for (let i = 0; i < n; i++) {
+      r.appendEvents([file('a', `src/f${i}.py`, i * 10)]);
+      r.setTime(i * 10 + 1);
+    }
+    // The order structures were created in must still match the cell order the
+    // (larger) grid hands out, or a regrow would shuffle the city.
+    const team = r.world.teams.get('a')!;
+    const placed = r.world.order
+      .map((id) => r.world.structures.get(id)!)
+      .filter((st) => st.teamId === 'a');
+    placed.forEach((st, i) => {
+      expect({ x: st.x, z: st.z }).toEqual({ x: team.cells[i].x, z: team.cells[i].z });
+    });
+  });
+
+  it('learns the provider reports no operations only once events arrive', () => {
+    // An empty live stream cannot yet know; it must not guess 'inferred' early
+    // and it must not stay 'measured' once legacy events prove otherwise.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    expect(r.world.teams.get('a')!.telemetry.editDepth).toBe('measured');
+    expect(r.honestyNotes).toEqual([]);
+
+    r.appendEvents([file('a', 'src/x.py', 100, true)]);
+    r.setTime(150);
+    r.appendEvents([]);
+    expect(r.world.teams.get('a')!.telemetry.editDepth).toBe('inferred');
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+  });
+
+  it('setTime is monotonic-safe and rebuilds coherently when time goes backwards', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([file('a', 'a.py', 100), file('a', 'b.py', 200), file('a', 'c.py', 300)]);
+    r.setTime(1000);
+    expect(r.world.structures.size).toBe(3);
+    r.setTime(150);
+    expect(r.world.structures.size).toBe(1);
+  });
+
+  it('does not clamp live time to a stream end it cannot know', () => {
+    // tick() is clamped to totalMs, which is right for a finished recording and
+    // wrong for a running competition — the clock would freeze during any quiet
+    // stretch. setTime is the live path precisely because the host owns the clock.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.setTime(500_000);
+    expect(r.world.t).toBe(500_000);
+  });
+
+  it('leaves the replay contract untouched', () => {
+    const events = [file('a', 'x.py', 100), file('a', 'y.py', 200)];
+    const r = new IsoArenaRenderer({ teams, events, timeLimitMs: 120_000 });
+    expect(r.totalMs).toBe(2200);
+    r.tick(10_000);
+    expect(r.world.t).toBe(2200);   // still clamped, as before
+    expect(r.world.structures.size).toBe(2);
   });
 });

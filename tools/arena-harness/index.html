@@ -120,6 +120,7 @@ canvas#arena{position:absolute;inset:0;width:100%;height:100%;display:block}
           <option value="legacy">legacy · pre-c965642</option>
           <option value="prose">absent · prose, no paths</option>
           <option value="undeclared">absent · undeclared provider</option>
+          <option value="live">LIVE · incremental append (AA-066 path)</option>
           <option value="stress">stress · 220 files / team</option>
           <option value="rollup">rollup · 900 files / team</option>
         </select>
@@ -160,6 +161,10 @@ const SCENARIOS = {
   legacy: { mode: 'legacy', filesPerTeam: 9,   label: '2 teams · pre-c965642, no op telemetry' },
   prose:  { mode: 'prose',  filesPerTeam: 9,   label: '2 teams · right team narrates prose, no paths at all' },
   undeclared: { mode: 'modern', filesPerTeam: 9, teams: TEAMS_UNDECLARED, label: '2 teams · right provider declares no file-op capability' },
+  // Drives the EXACT path ArenaViewerV2 uses in a running competition:
+  // construct with an empty stream, appendEvents() as they arrive, setTime()
+  // from a host-owned clock. The floor is not sized up front and must regrow.
+  live: { mode: 'modern', filesPerTeam: 140, live: true, label: 'LIVE · empty start, appendEvents + setTime, floor regrows' },
   // 220 sits just under MAX_BLOCKS_PER_TEAM, so this is the real one-block-per-
   // file stress: 440 blocks on the floor at once, which the spike's fixed 8×5
   // grid could not have drawn — it had 61 cells a side and stacked the rest.
@@ -209,6 +214,8 @@ function laneHtml(tm) {
   <div class="latest" id="${tm.id}-latest" style="--c:${c}"></div>`;
 }
 
+let liveFeed = null;
+
 function load(name) {
   const sc = SCENARIOS[name];
   $('scenario-label').textContent = sc.label;
@@ -216,7 +223,14 @@ function load(name) {
   const teams = sc.teams ?? TEAMS;
   const { events, timeLimitMs, originMs } = generateStream({ ...sc, seed: 7, teams });
   const frame = toFrameEvents(events, originMs);
+  liveFeed = null;
+  if (sc.live) {
+    // Empty construction, exactly as the app does for a running competition.
+    R = new IsoArenaRenderer({ teams, events: [], timeLimitMs });
+    liveFeed = { pending: frame, cursor: 0, clock: 0 };
+  } else {
   R = new IsoArenaRenderer({ teams, events: frame, timeLimitMs });
+  }
   R.attach(ctx);
   R.setWinner('team-a');
   buildMs = performance.now() - t0;
@@ -226,6 +240,7 @@ function load(name) {
   $('mB').textContent = teams[1].model + ' ▶'; $('mB').style.color = getModelColor(teams[1].model);
   window.__teams = teams;
   window.__eventCount = frame.length;
+  window.__R = R;   // harness diagnostics only; the app never reaches in like this
   resize();
   playing = true;
   $('play').textContent = 'Pause';
@@ -291,8 +306,23 @@ function frame(ts) {
   if (frames++ % 10 === 0) fps = fpsAcc;
 
   if (playing) {
-    R.tick(dt * speed);
-    if (R.world.t >= R.totalMs) { playing = false; $('play').textContent = 'Replay'; }
+    if (liveFeed) {
+      // Host-owned clock + incremental append — the AA-066 live contract.
+      liveFeed.clock += dt * speed;
+      const fresh = [];
+      while (liveFeed.cursor < liveFeed.pending.length
+             && liveFeed.pending[liveFeed.cursor].t <= liveFeed.clock + 1500) {
+        fresh.push(liveFeed.pending[liveFeed.cursor++]);
+      }
+      if (fresh.length) R.appendEvents(fresh);
+      R.setTime(liveFeed.clock);
+      if (liveFeed.cursor >= liveFeed.pending.length && liveFeed.clock > R.totalMs) {
+        playing = false; $('play').textContent = 'Replay';
+      }
+    } else {
+      R.tick(dt * speed);
+      if (R.world.t >= R.totalMs) { playing = false; $('play').textContent = 'Replay'; }
+    }
   }
   if (R.camera.orbit && R.world.phase !== 'reveal') R.camera.tyaw = -0.62 + Math.sin(ts / 9000) * 0.14;
   R.draw();
