@@ -74,11 +74,20 @@ export interface ProviderFileCapability {
  * a judge favouring its own vendor, except baked into the picture.
  *
  * `false` means the CLI does not emit the information AT ALL — not that we have
- * yet to parse it. `opSource` says how far the operation can be trusted:
- * gemini's 'verb' is parsed from prose and is not sound for edit counting.
+ * yet to parse it. `opSource` says how far the operation can be trusted.
+ *
+ * As of AA-037 all three providers report a tool-derived operation, so all three
+ * can support edit-counting. Codex remains the one that names no per-file tool:
+ * it applies edits via apply_patch, so `tool`/`input` are absent by nature rather
+ * than unparsed. Its operation is still reliable — it comes from the CLI's own
+ * A/M marker.
  */
 export const PROVIDER_FILE_CAPABILITIES: Record<'claude' | 'codex' | 'gemini', ProviderFileCapability> = {
   claude: { path: true, op: true, opSource: 'tool',   tool: true,  input: true  },
   codex:  { path: true, op: true, opSource: 'marker', tool: false, input: false },
-  gemini: { path: true, op: true, opSource: 'verb',   tool: false, input: false },
+  // AA-037: gemini now runs with `-o stream-json`, so tool_name and parameters
+  // arrive as data. Its operation is tool-derived like claude's, not parsed from
+  // prose — and `replace` with an empty old_string is read as a create, which the
+  // tool name alone would have got wrong.
+  gemini: { path: true, op: true, opSource: 'tool',   tool: true,  input: true  },
 };

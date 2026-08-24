@@ -14,6 +14,10 @@ function codexFileEvent(line: string) {
   n.addLine('codex'); n.addLine('x'); n.addLine('file update');
   return n.addLine(line)!;
 }
+/** gemini's primary path since AA-037: `-o stream-json` tool_use events. */
+const geminiFileEvent = (tool_name: string, file_path: string, extra: Record<string, unknown> = {}) =>
+  geminiLine(JSON.stringify({ type: 'tool_use', tool_name, tool_id: 'g1', parameters: { file_path, ...extra } }), BASE);
+
 const claudeFileEvent = (tool: string, path: string) =>
   claudeLine(JSON.stringify({
     type: 'assistant',
@@ -29,7 +33,7 @@ describe('cross-provider file event parity', () => {
     const evs = [
       claudeFileEvent('Write', '/var/folders/t/arena-team-a-Kq9/solution.py'),
       codexFileEvent('A /tmp/arena-team-a-X/solution.py'),
-      geminiLine('Created solution.py for the task', BASE),
+      geminiFileEvent('write_file', '/var/folders/t/arena-team-c-Kq9/solution.py'),
     ];
     for (const ev of evs) {
       expect(ev.type).toBe(EventType.FILE_CREATE);
@@ -45,7 +49,7 @@ describe('cross-provider file event parity', () => {
     const evs = [
       claudeFileEvent('Edit', '/var/folders/t/arena-team-a-Kq9/solution.py'),
       codexFileEvent('M /tmp/arena-team-a-X/solution.py'),
-      geminiLine('Modified solution.py with the fix', BASE),
+      geminiFileEvent('replace', '/var/folders/t/arena-team-c-Kq9/solution.py', { old_string: 'a' }),
     ];
     for (const ev of evs) {
       expect(ev.type).toBe(EventType.FILE_MODIFY);
@@ -58,7 +62,7 @@ describe('cross-provider file event parity', () => {
     const evs = [
       claudeFileEvent('Write', '/var/folders/t/arena-team-a-Kq9/a.py'),
       codexFileEvent('A /tmp/arena-team-a-X/a.py'),
-      geminiLine('Wrote a.py', BASE),
+      geminiFileEvent('write_file', '/var/folders/t/arena-team-c-Kq9/a.py'),
     ];
     for (const ev of evs) {
       for (const k of ['op', 'opSource', 'path', 'text']) {
@@ -67,32 +71,36 @@ describe('cross-provider file event parity', () => {
     }
   });
 
-  it('absent is absent: only claude reports tool/input, and the others OMIT them', () => {
-    const c = claudeFileEvent('Write', '/var/folders/t/arena-team-a-Kq9/a.py').payload as Record<string, unknown>;
-    expect(c.tool).toBe('Write');
-    expect(c.input).toBeDefined();
-
-    for (const ev of [codexFileEvent('A /tmp/arena-team-a-X/a.py'), geminiLine('Wrote a.py', BASE)]) {
+  it('absent is absent: codex omits tool/input entirely — claude and gemini report them', () => {
+    // AA-037 moved gemini into the reporting camp. Codex stays out of it by
+    // nature, not by neglect: it applies edits via apply_patch and names no
+    // per-file tool, so the keys are MISSING rather than present-and-falsy.
+    for (const ev of [
+      claudeFileEvent('Write', '/var/folders/t/arena-team-a-Kq9/a.py'),
+      geminiFileEvent('write_file', '/var/folders/t/arena-team-c-Kq9/a.py'),
+    ]) {
       const p = ev.payload as Record<string, unknown>;
-      // The key must be missing, not present-and-falsy. `?? 0` on a missing key
-      // is a bug a renderer can catch; `?? 0` on tool:'unknown' is one it cannot.
-      expect('tool' in p).toBe(false);
-      expect('input' in p).toBe(false);
+      expect(typeof p.tool).toBe('string');
+      expect(p.input).toBeDefined();
     }
+
+    const codex = codexFileEvent('A /tmp/arena-team-a-X/a.py').payload as Record<string, unknown>;
+    expect('tool' in codex).toBe(false);
+    expect('input' in codex).toBe(false);
   });
 
   it('opSource states how much the operation can be trusted', () => {
     expect((claudeFileEvent('Edit', '/var/folders/t/arena-team-a-Kq9/a.py').payload as Record<string, unknown>).opSource).toBe('tool');
     expect((codexFileEvent('M /tmp/arena-team-a-X/a.py').payload as Record<string, unknown>).opSource).toBe('marker');
-    expect((geminiLine('Modified a.py', BASE).payload as Record<string, unknown>).opSource).toBe('verb');
+    expect((geminiFileEvent('replace', 'a.py', { old_string: 'x' }).payload as Record<string, unknown>).opSource).toBe('tool');
   });
 
   it('the published capability table matches what the normalizers actually do', () => {
     expect(PROVIDER_FILE_CAPABILITIES.claude.tool).toBe(true);
     expect(PROVIDER_FILE_CAPABILITIES.codex.tool).toBe(false);
-    expect(PROVIDER_FILE_CAPABILITIES.gemini.tool).toBe(false);
+    expect(PROVIDER_FILE_CAPABILITIES.gemini.tool).toBe(true);   // AA-037: stream-json
     expect(PROVIDER_FILE_CAPABILITIES.codex.opSource).toBe('marker');
-    expect(PROVIDER_FILE_CAPABILITIES.gemini.opSource).toBe('verb');
+    expect(PROVIDER_FILE_CAPABILITIES.gemini.opSource).toBe('tool'); // AA-037: was 'verb'
   });
 });
 
