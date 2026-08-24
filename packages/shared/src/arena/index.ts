@@ -20,8 +20,8 @@ export { NO_INSETS, DEFAULT_YAW, DEFAULT_PITCH, createCamera, safeBox, worldScal
 export type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
 export { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 
-export type { KnownProvider, FrameEventKind, FrameEvent, EditDepthMode, TeamTelemetry } from './event-model.js';
-export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry } from './event-model.js';
+export type { KnownProvider, FrameEventKind, FrameEvent, EditDepthMode, TeamTelemetry, TeamManifest, ReconcileResult } from './event-model.js';
+export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry, reconcileWithManifest, isVendoredPath, corpusFromEvents } from './event-model.js';
 
 export type { TeamSpec, BlockKind, Structure, TeamState, Phase, World, ApplyEffects } from './world.js';
 export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, telemetryFromStats, refreshNotes, ensureGridCapacity } from './world.js';

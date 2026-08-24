@@ -2977,6 +2977,7 @@ export default function CompetitionPage() {
               timeLimitMs={brief?.timeLimitMs ?? 300000}
               scores={result?.teams?.map((t) => ({ teamId: t.teamId, finalScore: t.totalScore })) ?? undefined}
               winnerId={result?.winnerId ?? undefined}
+              deliverables={result?.deliverables ?? undefined}
             />
           </div>
         ) : (
