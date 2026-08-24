@@ -7,7 +7,6 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "prepare": "tsc -p tsconfig.json",
     "build:watch": "tsc -p tsconfig.json --watch",
     "studio": "npx remotion studio src/index.ts",
     "typecheck": "tsc --noEmit",

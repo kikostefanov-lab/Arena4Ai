@@ -1,0 +1,66 @@
+name: CI
+
+# Runs on every pull request and every push to main.
+#
+# DESIGN CONSTRAINT: this workflow must be green for a STRANGER WHO FORKED THE
+# REPO. That rules out anything needing a secret, a database, or an agent CLI —
+# no DATABASE_URL, no ANTHROPIC_API_KEY, no `claude`/`codex`/`gemini` on PATH.
+# Every step below was verified in a pristine clone with those scrubbed from the
+# environment. If you add a step that needs one of them, it does not belong here.
+#
+# It is also READ-ONLY: no publish, no deploy, no writes to the repo. The token
+# is scoped to `contents: read` so it cannot do any of those even by accident.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A fork's PR gets the same read-only token, so nothing here can act on the repo.
+permissions:
+  contents: read
+
+# A new push to the same branch cancels the previous run rather than queueing it.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: typecheck · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          # Matches the `engines.node` floor in package.json (>=22).
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` and not `npm install`: it installs exactly what the lockfile
+      # says and fails if package.json and the lockfile disagree, which is the
+      # point of having corrected that lockfile. The root `postinstall` builds
+      # @arena/shared and @arena/video through turbo here, because the other
+      # packages import their build output.
+      - name: Install dependencies (npm ci)
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # NOTE: at the time this workflow was added, this step FAILS — and that is
+      # deliberate. `next build` prerenders /api/analytics and /api/leaderboard,
+      # which fetch the orchestrator at build time; with no server running the
+      # fetch throws and the export aborts. It predates this workflow. It is left
+      # unmasked on purpose: CI that hides a real broken build is worse than no
+      # CI at all. See the AA-027 report for the diagnosis and proposed fix.
+      - name: Build
+        run: npm run build
