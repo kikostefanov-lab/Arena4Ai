@@ -1,17 +1,8 @@
 import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig, interpolate, staticFile } from 'remotion';
 import { TronGrid } from '../../components/TronGrid';
 import { ACCENT_CYAN, ACCENT_ORANGE, BG_DARK, BG_CARD, ORBITRON, TEXT_PRIMARY, TEXT_MUTED } from '../../tokens';
+import { ARENA_FORGE } from '../arena-data';
 
-const ARTIFACTS = [
-  { title: 'Executive Summary', ext: 'md',   desc: 'Verdict + 1-page insight'        },
-  { title: 'Business Case',      ext: 'md',   desc: 'Unit economics + margin math'    },
-  { title: 'Go-to-Market Plan',  ext: 'md',   desc: 'Launch sequence + channels'      },
-  { title: 'Stakeholder Map',    ext: 'md',   desc: 'Decision matrix'                 },
-  { title: 'Tool Recommendations', ext: 'md', desc: 'Stack + vendors'                 },
-  { title: 'Recommended Next Steps', ext: 'md', desc: '30-60-90 plan'                 },
-  { title: 'Launch Strategy',     ext: 'pptx', desc: 'Presentation deck'              },
-  { title: 'Risk Register',       ext: 'md',   desc: 'Red-team + mitigations'         },
-];
 
 export const TheForge: React.FC = () => {
   const frame = useCurrentFrame();
@@ -71,7 +62,7 @@ export const TheForge: React.FC = () => {
         gap: '1em',
         alignContent: 'center',
       }}>
-        {ARTIFACTS.map((a, i) => {
+        {ARENA_FORGE.map((a, i) => {
           const start = 15 + i * 8;
           const op = interpolate(frame, [start, start + 20], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
           const y  = interpolate(frame, [start, start + 20], [40, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
