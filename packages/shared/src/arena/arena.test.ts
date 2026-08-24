@@ -414,3 +414,57 @@ describe('live mode — a stream that does not exist yet when the renderer is bu
     expect(r.world.structures.size).toBe(2);
   });
 });
+
+describe('telemetry is derived on EVERY playback path, not just the live one', () => {
+  // A React host cannot know the events at mount, so it constructs with an
+  // empty list and feeds them in. If a path applies events without re-deriving
+  // telemetry, that host's honesty notes never appear at all — the caveat
+  // silently goes missing on exactly the competitions that need it.
+  const teams = [{ id: 'a', model: 'claude' }];
+  const legacy = toFrameEvent(ev('FILE_CREATE', 'a', { text: 'src/x.py' }, 100), T0);
+
+  it('appending derives it immediately — before the clock reaches the event', () => {
+    // The caveat must be true of the picture from the first frame. Waiting for
+    // playback to reach the evidence would mean an early screenshot of a
+    // historical competition ships without its qualification.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    expect(r.honestyNotes).toEqual([]);
+    r.appendEvents([legacy]);
+    expect(r.world.teams.get('a')!.telemetry.editDepth).toBe('inferred');
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+    r.tick(5000);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+  });
+
+  it('setTime() derives it', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([legacy]);
+    r.setTime(5000);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+  });
+
+  it('the caveat survives scrubbing — it describes the STREAM, not the playhead', () => {
+    // Losing the honesty note by dragging the scrubber to zero would mean the
+    // caveat is a function of where you are looking rather than of what the
+    // competition is, and a screenshot taken at t=0 would omit it.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([legacy]);
+    r.seek(5000);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates/);
+    r.seek(0);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates/);
+  });
+
+  it('a replay built from a full list never DOWNGRADES its telemetry as it plays', () => {
+    // The bug this pins: telemetry derived from APPLIED events meant a world
+    // constructed knowing the whole stream had its honesty note deleted by the
+    // first tick, for every team whose files came later in the competition.
+    const late = toFrameEvent(ev('FILE_CREATE', 'b', { text: 'late.py' }, 90_000), T0);
+    const two = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }];
+    const r = new IsoArenaRenderer({ teams: two, events: [legacy, late], timeLimitMs: 120_000 });
+    expect(r.honestyNotes.length).toBe(2);
+    r.tick(5000);                       // only team a's event has been applied
+    expect(r.honestyNotes.length).toBe(2);
+    expect(r.world.teams.get('b')!.telemetry.editDepth).toBe('inferred');
+  });
+});

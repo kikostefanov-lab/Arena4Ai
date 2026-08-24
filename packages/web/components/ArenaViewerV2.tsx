@@ -239,8 +239,18 @@ function WinnerBanner({ visible, winner, color, scores, teams }: {
 
 // ── Layout ──────────────────────────────────────────────────────
 
-const CW = 1200;
-const CH = 640;
+/**
+ * Fallback canvas size, used only until the element has been measured.
+ *
+ * The arena does NOT draw at a fixed resolution. Its container on the
+ * competition page is `flex: 1; min-height: 0; overflow: hidden` — a box whose
+ * height is whatever is left on the page — so a canvas that sizes itself from
+ * its own aspect ratio is simply clipped by it. The backing store is matched to
+ * the measured box instead, which also means the picture is sharp on a retina
+ * display rather than a 1200px bitmap stretched over it.
+ */
+const FALLBACK_W = 1200;
+const FALLBACK_H = 640;
 
 /**
  * Space the HUD occupies, in canvas units, reported to the renderer so it
@@ -259,7 +269,10 @@ export default function ArenaViewerV2({
   teams, events, state, elapsedMs, timeLimitMs, scores, winnerId,
 }: ArenaViewerV2Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<IsoArenaRenderer | null>(null);
+  /** Measured CSS size of the canvas box; the renderer composes into this. */
+  const sizeRef = useRef({ w: FALLBACK_W, h: FALLBACK_H, dpr: 1 });
 
   /**
    * How many of the `events` prop we have already handed to the renderer, plus
@@ -274,6 +287,8 @@ export default function ArenaViewerV2({
   const consumedRef = useRef(0);
   const lastIdRef = useRef<string | null>(null);
   const originRef = useRef<number | null>(null);
+  /** Current winner, so a renderer rebuilt mid-flight does not lose the verdict. */
+  const winnerRef = useRef<string | null>(null);
 
   const [momentum, setMomentum] = useState(0);
   const [latest, setLatest] = useState<Record<string, string>>({});
@@ -321,6 +336,29 @@ export default function ArenaViewerV2({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamsKey, timeLimitMs]);
 
+  // ── Track the box the arena has to live inside ────────────────
+  useEffect(() => {
+    const box = boxRef.current;
+    const canvas = canvasRef.current;
+    if (!box || !canvas) return;
+
+    const measure = (): void => {
+      const r = box.getBoundingClientRect();
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const w = Math.max(320, Math.round(r.width));
+      const h = Math.max(240, Math.round(r.height));
+      if (sizeRef.current.w === w && sizeRef.current.h === h && sizeRef.current.dpr === dpr) return;
+      sizeRef.current = { w, h, dpr };
+      canvas.width = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, []);
+
   // ── Feed the stream ───────────────────────────────────────────
   const ingest = useCallback(() => {
     const r = rendererRef.current;
@@ -334,6 +372,26 @@ export default function ArenaViewerV2({
     }
     const origin = originRef.current;
     if (origin === null) return;
+
+    /**
+     * A FINISHED competition is a replay, and the renderer has a contract for
+     * that: hand it the whole list at construction. Doing so matters for more
+     * than tidiness — telemetry is derived from what has been APPLIED, so a
+     * completed competition fed incrementally would withhold its own honesty
+     * caveat until playback happened to reach the evidence. We already know the
+     * whole stream; a viewer who screenshots the first five seconds must not get
+     * a picture with the caveat still missing from it.
+     */
+    if (!isLive && consumedRef.current === 0 && events.length > 0) {
+      const all = events.map((e) => toFrameEvent(e as never, origin));
+      const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
+      const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
+      replay.setWinner(winnerRef.current);
+      rendererRef.current = replay;
+      consumedRef.current = events.length;
+      lastIdRef.current = events[events.length - 1]?.eventId ?? null;
+      return;
+    }
 
     const consumed = consumedRef.current;
     const prefixIntact =
@@ -363,11 +421,12 @@ export default function ArenaViewerV2({
     r.appendEvents(fresh);
     consumedRef.current = events.length;
     lastIdRef.current = events[events.length - 1]?.eventId ?? null;
-  }, [events, teams, timeLimitMs]);
+  }, [events, teams, timeLimitMs, isLive]);
 
   // ── Winner / terminal poses ───────────────────────────────────
   useEffect(() => {
-    rendererRef.current?.setWinner(phase === 'reveal' ? (winnerId ?? null) : null);
+    winnerRef.current = phase === 'reveal' ? (winnerId ?? null) : null;
+    rendererRef.current?.setWinner(winnerRef.current);
   }, [phase, winnerId]);
 
   // ── The single animation loop ─────────────────────────────────
@@ -401,8 +460,10 @@ export default function ArenaViewerV2({
             r.camera.tyaw = -0.62 + Math.sin(performance.now() / 9000) * 0.14;
           }
 
+          const { w, h, dpr } = sizeRef.current;
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
           r.attach(ctx as unknown as Ctx2D);
-          r.setViewport({ width: CW, height: CH, dpr: 1, insets: HUD_INSETS });
+          r.setViewport({ width: w, height: h, dpr, insets: HUD_INSETS });
           r.draw();
 
           // HUD text is throttled to ~4Hz. It is prose for a human to read;
@@ -435,7 +496,7 @@ export default function ArenaViewerV2({
   const notes = rendererRef.current?.honestyNotes ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
       {teams.length === 2 && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'start', gap: 12 }}>
           <LaneHeader
@@ -450,12 +511,15 @@ export default function ArenaViewerV2({
         </div>
       )}
 
-      <div style={{ position: 'relative', width: '100%' }}>
+      <div ref={boxRef} style={{ position: 'relative', width: '100%', flex: 1, minHeight: 240 }}>
         <canvas
           ref={canvasRef}
-          width={CW}
-          height={CH}
-          style={{ width: '100%', height: 'auto', display: 'block', borderRadius: 6, background: '#03060b' }}
+          width={FALLBACK_W}
+          height={FALLBACK_H}
+          style={{
+            width: '100%', height: '100%', display: 'block',
+            borderRadius: 6, background: '#03060b',
+          }}
         />
         <WinnerBanner
           visible={phase === 'reveal' && !!winnerId}

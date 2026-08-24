@@ -5,7 +5,7 @@ import type { CameraState, Viewport, Projected } from './camera.js';
 import { createCamera, project, worldScale, focus, stepCamera, safeBox, NO_INSETS, DEFAULT_YAW } from './camera.js';
 import type { FrameEvent } from './event-model.js';
 import type { World, TeamState, Structure, TeamSpec } from './world.js';
-import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity } from './world.js';
+import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats } from './world.js';
 
 /**
  * The isometric arena renderer.
@@ -160,9 +160,16 @@ export class IsoArenaRenderer {
    */
   appendEvents(incoming: FrameEvent[]): void {
     if (incoming.length === 0) return;
-    for (const ev of incoming) this.events.push(ev);
+    for (const ev of incoming) {
+      this.events.push(ev);
+      if (ev.kind === 'file' && ev.teamId) {
+        const team = this.world.teams.get(ev.teamId);
+        if (team) foldFileStats(team.fileStats, ev);
+      }
+    }
     const last = this.events[this.events.length - 1];
     this.totalMs = Math.max(this.totalMs, last.t + 2000);
+    this.syncTelemetry();
   }
 
   /**
@@ -225,7 +232,7 @@ export class IsoArenaRenderer {
       this.applyLive(ev);
       applied = true;
     }
-    if (applied) this.syncTelemetry();
+    void applied;
   }
 
   // ─── time ──────────────────────────────────────────────────────────────────
@@ -233,11 +240,14 @@ export class IsoArenaRenderer {
   /** Advance playback by `dtMs` of arena time, applying any events it passes. */
   tick(dtMs: number): void {
     this.world.t = Math.min(this.totalMs, this.world.t + dtMs);
+    let applied = false;
     while (this.applied < this.events.length && this.events[this.applied].t <= this.world.t) {
       const ev = this.events[this.applied++];
       this.reserveCell(ev);
       this.applyLive(ev);
+      applied = true;
     }
+    void applied;
   }
 
   /** Jump to `t`, rebuilding the world without firing effects. */

@@ -15,6 +15,31 @@ export interface TeamSpec {
 
 export type BlockKind = 'src' | 'test' | 'doc' | 'config';
 
+/** Running tallies over a team's file events. See `TeamState.fileStats`. */
+export interface FileStats { total: number; withContract: number; withPath: number; legacy: number }
+
+/**
+ * Fold one file event into a team's tallies.
+ *
+ * Called when an event becomes KNOWN, not when it is applied. What a provider
+ * reports is a property of the stream, not of the playhead: an event that has
+ * arrived already proves what its provider does and does not tell us, whether
+ * or not the clock has reached it. Deriving it from applied events instead made
+ * a replay silently DOWNGRADE its own telemetry — the world is built knowing
+ * the whole list, and the first tick then recomputed from a partial tally and
+ * dropped the honesty note for every team whose files came later.
+ *
+ * Grid capacity is the opposite and must stay apply-time: a cell is only
+ * occupied when the block is actually placed.
+ */
+export function foldFileStats(stats: FileStats, ev: FrameEvent): void {
+  if (ev.kind !== 'file') return;
+  stats.total++;
+  if (ev.opSource && ev.op) stats.withContract++;
+  if (ev.path) stats.withPath++;
+  if (ev.legacy) stats.legacy++;
+}
+
 export interface Structure {
   teamId: string;
   /** The label drawn above the block — a path, or a directory once rolled up. */
@@ -64,7 +89,7 @@ export interface TeamState extends TeamSpec {
    * event would be O(n) per event — O(n squared) over a competition — so the
    * facts telemetry depends on are accumulated as events are applied instead.
    */
-  fileStats: { total: number; withContract: number; withPath: number; legacy: number };
+  fileStats: FileStats;
 }
 
 export type Phase = 'active' | 'freeze' | 'judging' | 'reveal';
@@ -174,7 +199,8 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
       telemetry,
       budget,
       seen: new Set(),
-      fileStats: { total: 0, withContract: 0, withPath: 0, legacy: 0 },
+      fileStats: fileEvents.reduce<FileStats>((acc, e) => { foldFileStats(acc, e); return acc; },
+        { total: 0, withContract: 0, withPath: 0, legacy: 0 }),
     });
     if (telemetry.note) world.notes.push(telemetry.note);
     if (budget.note) world.notes.push(budget.note);
@@ -199,7 +225,8 @@ export function resetWorld(world: World): void {
     team.counts = { files: 0, edits: 0, tools: 0, errors: 0, reasoning: 0 };
     team.latest = '';
     team.seen.clear();
-    team.fileStats = { total: 0, withContract: 0, withPath: 0, legacy: 0 };
+    // fileStats deliberately survive: they describe the STREAM, so scrubbing to
+    // the start must not make a competition's honesty caveat disappear.
   }
 }
 
@@ -305,10 +332,6 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
     }
 
     case 'file': {
-      team.fileStats.total++;
-      if (ev.opSource && ev.op) team.fileStats.withContract++;
-      if (ev.path) team.fileStats.withPath++;
-      if (ev.legacy) team.fileStats.legacy++;
       if (!ev.path) {
         // A file event with no recoverable path cannot become a block. Counting
         // it as a file anyway would inflate the stat panel above what the floor
