@@ -444,7 +444,10 @@ npm run sizzle:render --workspace=packages/video   # all three aspect ratios
 npm run sizzle        --workspace=packages/video   # capture + render
 npx tsx packages/video/scripts/inspect-sizzle.ts   # single-frame still per scene for fast QA
 ```
-Output lands in `packages/video/out/` (gitignored). The landscape cut is copied to `marketing/sizzle.mp4` and `packages/web/public/sizzle.mp4` for web hosting; `marketing/index.html` embeds it in the hero via `<video autoplay muted loop playsinline>` with a click-to-unmute button.
+Output lands in `packages/video/out/` (gitignored, because it is regenerable). It
+is NOT copied anywhere inside this repository — publishing to arena4.ai happens in
+the separate site repository, which content-hashes the asset URL so a corrected
+video reaches viewers who already have the page cached.
 
 ### Brief pre-select from library
 `/briefs` Launch button links to `/competitions/new?briefSlug={brief.id}`. On mount, `competitions/new/page.tsx` reads `?briefSlug`, fetches `/api/briefs`, finds the matching brief, and pre-populates all form fields. Jumps to step 3 (teams).

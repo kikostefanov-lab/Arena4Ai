@@ -19,6 +19,10 @@ runs/
 # Local debug artifacts
 .claude/
 .playwright-mcp/
+# Ad-hoc screenshots taken while debugging. NOTE: README.md must not embed a
+# file matching these patterns — it did, and the images 404'd on GitHub for
+# every visitor while looking fine locally. Images the README shows belong in
+# docs/, which is tracked.
 /arena-v2-*.png
 /homepage-*.png
 
