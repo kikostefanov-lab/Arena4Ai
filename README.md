@@ -1,5 +1,7 @@
 # Arena4Ai
 
+[![CI](https://github.com/kikostefanov-lab/Arena4Ai/actions/workflows/ci.yml/badge.svg)](https://github.com/kikostefanov-lab/Arena4Ai/actions/workflows/ci.yml)
+
 **Two AI agents enter. A cross-judge scores their work. You watch them think in real time.**
 
 Arena4Ai is a self-hosted competitive orchestration platform for coding agents. You write a
@@ -442,8 +444,12 @@ marketing/                          — static landing page + Cloudflare Worker 
 docs/                               — design docs, specs and plans
 ```
 
-Build orchestration is Turborepo. `@arena/shared` and `@arena/video` compile on `npm install` via
-their `prepare` scripts, because the other packages import their build output.
+Build orchestration is Turborepo. `@arena/shared` and `@arena/video` compile on `npm install`
+via the root `postinstall` script, because the other packages import their build output.
+That build goes through `turbo`, which knows the dependency order — the two packages used to
+carry their own `prepare` scripts, but npm runs those before the `node_modules/@arena/*`
+workspace links exist, so once `@arena/video` began importing `@arena/shared` a clean
+`npm ci` could not resolve it.
 
 ### Competition lifecycle
 
