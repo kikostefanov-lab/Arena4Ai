@@ -4,7 +4,7 @@ import { ACCENT_CYAN, BG_DARK, ORBITRON, TEXT_PRIMARY, TEXT_MUTED, getModelColor
 
 const MODEL_CHIPS = [
   { label: 'CLAUDE', color: getModelColor('claude') },
-  { label: 'GPT-4',  color: getModelColor('codex') }, // our Codex slot maps to GPT family
+  { label: 'CODEX',  color: getModelColor('codex') }, // name the CLI we spawn, not a model number that rots
   { label: 'GEMINI', color: getModelColor('gemini') },
 ];
 

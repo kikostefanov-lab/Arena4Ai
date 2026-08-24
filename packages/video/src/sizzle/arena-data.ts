@@ -41,4 +41,61 @@ export const ARENA_SUMMARY: ArenaTeamSummary[] = [
     "score": 0.78
   }
 ];
+
+/**
+ * The brief's own rubric criteria, for the brief scene.
+ *
+ * These used to be hardcoded as "Go-to-market plan / Pricing + BYOM economics /
+ * Open-source positioning" — the rubric of a DIFFERENT competition, from a
+ * commercial strategy this project has since abandoned. A hardcoded list cannot
+ * follow the competition it claims to describe, which is exactly how it outlived
+ * two attempts to remove it.
+ */
+export const ARENA_CRITERIA: string[] = [
+  "Voice capture",
+  "Field extraction",
+  "Google sheets integration",
+  "PWA security",
+  "UX speed"
+];
+
+/** The artifacts the Forge actually produced for this run, with real filenames. */
+export interface ArenaForgeArtifact { title: string; ext: string; desc: string }
+export const ARENA_FORGE: ArenaForgeArtifact[] = [
+  {
+    "title": "Executive Summary",
+    "ext": "md",
+    "desc": "executive_summary.md"
+  },
+  {
+    "title": "Recommended Next Steps",
+    "ext": "md",
+    "desc": "next_steps.md"
+  },
+  {
+    "title": "Tool Recommendations",
+    "ext": "md",
+    "desc": "tool_recommendations.md"
+  },
+  {
+    "title": "Implementation Roadmap",
+    "ext": "md",
+    "desc": "roadmap.md"
+  },
+  {
+    "title": "API Contracts",
+    "ext": "md",
+    "desc": "api_contracts.md"
+  },
+  {
+    "title": "Dockerfile",
+    "ext": "file",
+    "desc": "Dockerfile"
+  },
+  {
+    "title": "CI Pipeline",
+    "ext": "yml",
+    "desc": ".github/workflows/ci.yml"
+  }
+];
 export const ARENA_EVENTS: FrameEvent[] = [{"t":5565,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":10703,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":16439,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":22152,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/.env.example","kind":"file","path":".env.example","tool":"Write","legacy":true},{"t":27535,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/server/package.json","kind":"file","path":"server/package.json","tool":"Write","legacy":true},{"t":53333,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":63407,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/server/index.js","kind":"file","path":"server/index.js","tool":"Write","legacy":true},{"t":80590,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/server/transcription.js","kind":"file","path":"server/transcription.js","tool":"Write","legacy":true},{"t":122035,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/server/field-extraction.js","kind":"file","path":"server/field-extraction.js","tool":"Write","legacy":true},{"t":145410,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/server/sheets.js","kind":"file","path":"server/sheets.js","tool":"Write","legacy":true},{"t":167681,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":175346,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/server/dtools.js","kind":"file","path":"server/dtools.js","tool":"Write","legacy":true},{"t":183325,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/manifest.json","kind":"file","path":"manifest.json","tool":"Write","legacy":true},{"t":210330,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/service-worker.js","kind":"file","path":"service-worker.js","tool":"Write","legacy":true},{"t":251527,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/index.html","kind":"file","path":"app/index.html","tool":"Write","legacy":true},{"t":302043,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/css/app.css","kind":"file","path":"app/css/app.css","tool":"Write","legacy":true},{"t":313236,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/js/auth.js","kind":"file","path":"app/js/auth.js","tool":"Write","legacy":true},{"t":341328,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/js/recorder.js","kind":"file","path":"app/js/recorder.js","tool":"Write","legacy":true},{"t":361597,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/js/offline-queue.js","kind":"file","path":"app/js/offline-queue.js","tool":"Write","legacy":true},{"t":418611,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/js/app.js","kind":"file","path":"app/js/app.js","tool":"Write","legacy":true},{"t":479217,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/app/js/app.js","kind":"file","path":"app/js/app.js","tool":"Write","legacy":true},{"t":483560,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":496160,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":529656,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/README.md","kind":"file","path":"README.md","tool":"Write","legacy":true},{"t":581340,"teamId":"team-a","text":"/private/var/folders/8q/mdrhff0x40db3yk_5t24hmkw0000gq/T/arena-team-a-42TXmB/setup-guide.md","kind":"file","path":"setup-guide.md","tool":"Write","legacy":true},{"t":584893,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":594494,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":600659,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":606571,"teamId":"team-a","text":"","kind":"tool","tool":"Bash","legacy":false},{"t":666032,"teamId":"team-b","text":"app/styles.css","kind":"file","path":"app/styles.css","legacy":true},{"t":684718,"teamId":"team-b","kind":"file","path":".env.example","text":".env.example","legacy":false,"recovered":true},{"t":703404,"teamId":"team-b","kind":"file","path":".gitignore","text":".gitignore","legacy":false,"recovered":true},{"t":722090,"teamId":"team-b","kind":"file","path":"app/icon.svg","text":"app/icon.svg","legacy":false,"recovered":true},{"t":740776,"teamId":"team-b","kind":"file","path":"app/index.html","text":"app/index.html","legacy":false,"recovered":true},{"t":759462,"teamId":"team-b","kind":"file","path":"manifest.json","text":"manifest.json","legacy":false,"recovered":true},{"t":768786,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":778148,"teamId":"team-b","kind":"file","path":"package.json","text":"package.json","legacy":false,"recovered":true},{"t":796834,"teamId":"team-b","kind":"file","path":"server/auth.mjs","text":"server/auth.mjs","legacy":false,"recovered":true},{"t":815519,"teamId":"team-b","kind":"file","path":"server/deepgram.mjs","text":"server/deepgram.mjs","legacy":false,"recovered":true},{"t":827486,"teamId":"team-b","text":"README.md","kind":"file","path":"README.md","legacy":true},{"t":834205,"teamId":"team-b","kind":"file","path":"server/dtools.mjs","text":"server/dtools.mjs","legacy":false,"recovered":true},{"t":849519,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":852891,"teamId":"team-b","kind":"file","path":"server/googleSheets.mjs","text":"server/googleSheets.mjs","legacy":false,"recovered":true},{"t":857653,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":871577,"teamId":"team-b","kind":"file","path":"server/index.mjs","text":"server/index.mjs","legacy":false,"recovered":true},{"t":874797,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":877517,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":881567,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":890263,"teamId":"team-b","kind":"file","path":"service-worker.js","text":"service-worker.js","legacy":false,"recovered":true},{"t":902506,"teamId":"team-b","text":"server/extract.mjs","kind":"file","path":"server/extract.mjs","legacy":true},{"t":908949,"teamId":"team-b","kind":"file","path":"setup-guide.md","text":"setup-guide.md","legacy":false,"recovered":true},{"t":912229,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false},{"t":927635,"teamId":"team-b","text":"app/app.js","kind":"file","path":"app/app.js","legacy":true},{"t":932610,"teamId":"team-b","text":"","kind":"tool","tool":"bash","legacy":false}];

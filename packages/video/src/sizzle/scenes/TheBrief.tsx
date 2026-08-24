@@ -1,15 +1,8 @@
 import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig, interpolate, staticFile } from 'remotion';
 import { TronGrid } from '../../components/TronGrid';
 import { ACCENT_CYAN, BG_DARK, BG_CARD, ORBITRON, TEXT_PRIMARY, TEXT_MUTED, ACCENT_ORANGE } from '../../tokens';
+import { ARENA_CRITERIA, ARENA_SOURCE_TITLE } from '../arena-data';
 
-const BRIEF_TITLE = 'Arena4Ai — Commercial Launch Strategy';
-const CRITERIA = [
-  'Security architecture',
-  'Go-to-market plan',
-  'Pricing + BYOM economics',
-  'Developer experience',
-  'Open-source positioning',
-];
 
 export const TheBrief: React.FC = () => {
   const frame = useCurrentFrame();
@@ -92,12 +85,12 @@ export const TheBrief: React.FC = () => {
             letterSpacing: '0.01em',
             marginBottom: '1.2em',
           }}>
-            {BRIEF_TITLE}
+            {ARENA_SOURCE_TITLE}
           </div>
 
           {/* Criteria rows */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6em' }}>
-            {CRITERIA.map((c, i) => {
+            {ARENA_CRITERIA.map((c, i) => {
               const start = rowDelay + i * 12;
               const op = interpolate(frame, [start, start + 14], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
               const x = interpolate(frame, [start, start + 14], [-30, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
