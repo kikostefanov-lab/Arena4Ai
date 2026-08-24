@@ -10,8 +10,9 @@ import { IntroBumper } from './scenes/IntroBumper';
 import { TheQuestion } from './scenes/TheQuestion';
 import { GladiatorReveal } from './scenes/GladiatorReveal';
 import { TheBrief } from './scenes/TheBrief';
-import { BattleHighlights } from './scenes/BattleHighlights';
+import { ArenaCity } from './scenes/ArenaCity';
 import { TheVerdict } from './scenes/TheVerdict';
+import { TheRecord } from './scenes/TheRecord';
 import { TheForge } from './scenes/TheForge';
 import { ThreePillars } from './scenes/ThreePillars';
 import { SizzleOutro } from './scenes/SizzleOutro';
@@ -19,13 +20,21 @@ import { SizzleOutro } from './scenes/SizzleOutro';
 // Scene durations @ 30fps (total 1890 frames = 63s)
 const SCENES = [
   { C: IntroBumper,      frames: 90  }, //   0–90   (0–3s)    intro bumper
-  { C: TheQuestion,      frames: 150 }, //  90–240  (3–8s)    which model wins?
+  { C: TheQuestion,      frames: 120 }, //  90–210  (3–7s)    which model wins?
   { C: GladiatorReveal,  frames: 210 }, // 240–450  (8–15s)   three gladiators in the ring
   { C: TheBrief,         frames: 210 }, // 450–660  (15–22s)  real brief, real criteria
-  { C: BattleHighlights, frames: 300 }, // 660–960  (22–32s)  clash, shockwaves, live
+  // AA-067: was BattleHighlights, a hand-rolled flat gladiator ring with no
+  // information in it. This runs the SAME isometric renderer the live app uses,
+  // over a real competition's real events — the site's claim and the reel's
+  // footage are now the same code.
+  { C: ArenaCity,        frames: 300 }, // 660–960  (22–32s)  the cities build
   { C: TheVerdict,       frames: 300 }, // 960–1260 (32–42s)  cross-judge + winner
-  { C: TheForge,         frames: 300 }, //1260–1560 (42–52s)  artifacts fly past
-  { C: ThreePillars,     frames: 180 }, //1560–1740 (52–58s)  REAL / LIVE / FORGED
+  { C: TheForge,         frames: 240 }, //          artifacts fly past
+  // The three-provider claim, evidenced across every competition rather than by
+  // one three-way match — which is also what let the reel move to a two-team
+  // competition without losing it.
+  { C: TheRecord,        frames: 150 }, //          26 competitions, all providers
+  { C: ThreePillars,     frames: 120 }, //          REAL / LIVE / FORGED
   { C: SizzleOutro,      frames: 150 }, //1740–1890 (58–63s)  logo + tagline + URL
 ];
 
