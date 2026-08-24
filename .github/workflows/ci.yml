@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Turborepo's interactive TUI is unreadable in CI logs.
+  # Salvaged from a parallel attempt at this card (worker-aa027-ci-v2).
+  TURBO_UI: false
+
 # A new push to the same branch cancels the previous run rather than queueing it.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
