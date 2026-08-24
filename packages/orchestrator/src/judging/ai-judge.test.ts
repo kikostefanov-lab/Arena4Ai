@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CompetitionFormat } from '@arena/shared';
 import type { Brief } from '@arena/shared';
-import { buildJudgePrompt, aiJudge, classifyJudgeFailure } from './ai-judge.js';
+import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, judgeIdFor } from './ai-judge.js';
+import { resolveJudgeModel as resolveJudgeModelFn, requireDefaultModel as requireDefaultModelFn } from '../adapters/model-registry.js';
 import { DEFAULT_JUDGE_MODEL, DEFAULT_ADVERSARIAL_JUDGE_MODEL } from '../adapters/model-registry.js';
 
 describe('buildJudgePrompt', () => {
@@ -198,5 +199,67 @@ describe('classifyJudgeFailure', () => {
     );
     expect(failure.kind).toBe('model-unavailable');
     expect(failure.message).toContain('o4-mini');
+  });
+});
+
+// ── AA-046: provider-agnostic judging ────────────────────────────────────────
+describe('buildJudgeInvocation — the three CLIs differ in ways that have bitten us', () => {
+  it('claude takes the prompt on stdin and answers on stdout', () => {
+    const inv = buildJudgeInvocation('claude', 'claude-opus-5', 'PROMPT');
+    expect(inv.promptVia).toBe('stdin');
+    expect(inv.answerStream).toBe('stdout');
+    expect(inv.args).toContain('--model');
+    expect(inv.args).toContain('claude-opus-5');
+    expect(inv.args).not.toContain('PROMPT'); // prompt must NOT be an argv entry
+  });
+
+  it('codex takes the prompt on argv, is read-only, and answers on stdout', () => {
+    const inv = buildJudgeInvocation('codex', 'gpt-5.6-sol', 'PROMPT');
+    expect(inv.promptVia).toBe('argv');
+    expect(inv.answerStream).toBe('stdout');
+    expect(inv.args).toContain('PROMPT');
+    expect(inv.args).toContain('-m');           // codex's model flag, from the registry
+    expect(inv.args).toContain('gpt-5.6-sol');
+    // A judge that can write can edit the thing it is grading.
+    expect(inv.args.join(' ')).toContain('-s read-only');
+    expect(inv.args).not.toContain('workspace-write');
+  });
+
+  it('gemini uses its read-only plan mode rather than --yolo', () => {
+    const inv = buildJudgeInvocation('gemini', 'gemini-3-flash', 'PROMPT');
+    expect(inv.promptVia).toBe('argv');
+    expect(inv.args).toContain('--approval-mode');
+    expect(inv.args).toContain('plan');
+    expect(inv.args).not.toContain('--yolo');
+    expect(inv.args).toContain('--model');
+  });
+
+  it('uses each provider\'s own model flag from the registry', () => {
+    expect(buildJudgeInvocation('codex', 'M', 'P').args).toContain('-m');
+    expect(buildJudgeInvocation('claude', 'M', 'P').args).toContain('--model');
+    expect(buildJudgeInvocation('gemini', 'M', 'P').args).toContain('--model');
+  });
+});
+
+describe('judgeIdFor — a scorecard must name the judge that produced it', () => {
+  it('records provider AND model', () => {
+    expect(judgeIdFor('codex', 'gpt-5.6-sol')).toBe('ai-codex/gpt-5.6-sol');
+    expect(judgeIdFor('claude', 'claude-opus-5')).toBe('ai-claude/claude-opus-5');
+  });
+  it('marks an adversarial judge, and stays detectable by the adversarial check', () => {
+    const id = judgeIdFor('gemini', 'gemini-3-pro', true);
+    expect(id).toBe('ai-gemini/gemini-3-pro+adversarial');
+    expect(id.includes('adversarial')).toBe(true); // buildJudgePrompt keys off this
+  });
+});
+
+describe('resolveJudgeModel is provider-aware', () => {
+  it('pins a codex judge to a codex model, not a claude one', () => {
+    const m = resolveJudgeModelFn('ai-codex', 'codex');
+    expect(m).not.toMatch(/^claude/);
+    expect(m).toBe(requireDefaultModelFn('codex'));
+  });
+  it('leaves the claude default unchanged for existing callers', () => {
+    expect(resolveJudgeModelFn('ai-claude')).toBe(resolveJudgeModelFn('ai-claude', 'claude'));
   });
 });

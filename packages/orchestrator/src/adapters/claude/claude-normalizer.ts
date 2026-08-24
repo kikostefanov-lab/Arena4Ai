@@ -3,6 +3,9 @@ import {
   stripAnsi,
   makeEvent,
   FILE_PATH_RE,
+  makeFileEvent,
+  toRelativePath,
+  operationFromVerb,
   type NormalizeContext,
 } from '../normalizer-utils.js';
 
@@ -74,10 +77,11 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
 
     case 'text': {
       const text = stripAnsi(String(msg.text ?? ''));
-      const isFile = FILE_PATH_RE.test(text);
-      return makeEvent(
-        isFile ? EventType.FILE_CREATE : EventType.REASONING,
-        { text },
+      const m = FILE_PATH_RE.exec(text);
+      if (!m) return makeEvent(EventType.REASONING, { text }, ctx);
+      // Prose, not a tool call — the verb is the only operation signal available.
+      return makeFileEvent(
+        { op: operationFromVerb(m[1]), opSource: 'verb', text, path: m[2] },
         ctx,
       );
     }
@@ -109,17 +113,28 @@ function normalizeContentBlock(block: ContentBlock, ctx: NormalizeContext): Aren
       const isFileWrite = toolName === 'Write' || toolName === 'Edit' || toolName === 'NotebookEdit';
       if (isFileWrite) {
         const filePath = (block.input?.file_path as string) ?? (block.input?.path as string) ?? '';
-        return makeEvent(EventType.FILE_CREATE, { tool: toolName, text: filePath, input: block.input ?? {} }, ctx);
+        // Claude names the tool, so the operation is a fact rather than a guess:
+        // Write creates, Edit/NotebookEdit change something already there. We take
+        // the tool at its word even for a Write over an existing path — the tool is
+        // the strongest signal the CLI gives us, and inventing a second rule on top
+        // of it would only make Claude's events disagree with Claude's own log.
+        const op = toolName === 'Write' ? 'create' : 'modify';
+        const relPath = toRelativePath(filePath);
+        return makeFileEvent(
+          { op, opSource: 'tool', text: relPath, path: relPath || undefined, tool: toolName, input: block.input ?? {} },
+          ctx,
+        );
       }
       return makeEvent(EventType.TOOL_CALL, { tool: toolName, input: block.input ?? {} }, ctx);
     }
 
     case 'text': {
       const text = stripAnsi(String(block.text ?? ''));
-      const isFile = FILE_PATH_RE.test(text);
-      return makeEvent(
-        isFile ? EventType.FILE_CREATE : EventType.REASONING,
-        { text },
+      const m = FILE_PATH_RE.exec(text);
+      if (!m) return makeEvent(EventType.REASONING, { text }, ctx);
+      // Prose, not a tool call — the verb is the only operation signal available.
+      return makeFileEvent(
+        { op: operationFromVerb(m[1]), opSource: 'verb', text, path: m[2] },
         ctx,
       );
     }

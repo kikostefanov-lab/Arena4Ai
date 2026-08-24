@@ -7,17 +7,18 @@ import type React from 'react';
  * Import from here — never hardcode hex values in components.
  */
 
-/** Model identity colors — TRON palette. */
-export const MODEL_COLORS: Record<string, string> = {
-  claude: '#ff6600', // recognizer orange
-  codex:  '#0066ff', // TRON blue
-  gemini: '#00f0ff', // electric cyan
-};
-
-export function getModelColor(model: string): string {
-  const base = model.toLowerCase().split(':')[0];
-  return MODEL_COLORS[base] ?? '#4a8fa8';
-}
+/**
+ * Model identity colors — TRON palette. LOAD-BEARING BRAND.
+ *
+ * Re-exported, not redefined. These values also lived in
+ * packages/video/src/tokens.ts under a comment telling a human to keep the two
+ * copies in sync by hand. A viewer identifies a competitor by its colour in the
+ * reel and on the live site, so the two drifting apart would break that
+ * identification without anything failing. @arena/shared is the single source of
+ * truth; both packages consume it.
+ */
+export { MODEL_COLORS, getModelColor } from '@arena/shared';
+import { MODEL_COLORS } from '@arena/shared';
 
 /** Lane colors for multi-team scenarios (indexed by team position). */
 export const LANE_COLORS = [

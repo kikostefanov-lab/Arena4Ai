@@ -55,12 +55,23 @@ export class GeminiAdapter extends BaseAdapter {
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
 
     this.executionDone = new Promise<void>((resolve, reject) => {
-      // gemini -p <prompt> --yolo  — non-interactive, auto-approve all tools
+      // gemini -p <prompt> --yolo -o stream-json
+      //   --yolo          non-interactive, auto-approve all tools (a competitor
+      //                   agent genuinely needs to write files)
+      //   -o stream-json  structured JSONL on stdout, one event per line.
+      //
+      // AA-037: without stream-json the CLI narrates in prose, so the normalizer
+      // could only infer a file operation from a verb in an English sentence —
+      // which made gemini the one provider whose edit counts could not be trusted.
+      // Verified in gemini-cli 0.38.2: StreamJsonFormatter.emitEvent() calls
+      // process.stdout.write() once per event, so this streams incrementally and
+      // the live arena keeps updating. Requires gemini-cli >= 0.38; the normalizer
+      // falls back to prose parsing for any line that is not a stream-json event.
       //
       // SECURITY: spawn with an argv array, never through `/bin/sh -c`. The model
       // variant and the prompt are user-supplied; as argv entries they can only
       // ever be one argument each, whatever characters they contain.
-      const args = ['-p', this.promptText!, '--yolo'];
+      const args = ['-p', this.promptText!, '--yolo', '-o', 'stream-json'];
       const modelVariant = safeModelVariant(this.modelVariant);
       if (modelVariant) {
         args.push('--model', modelVariant);

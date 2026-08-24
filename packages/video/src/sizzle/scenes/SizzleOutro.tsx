@@ -85,7 +85,7 @@ export const SizzleOutro: React.FC = () => {
             boxShadow: `0 0 40px ${ACCENT_CYAN}33`,
             textTransform: 'uppercase',
           }}>
-            arena4ai.com
+            arena4.ai
           </div>
           <div style={{
             fontFamily: ORBITRON,
@@ -95,7 +95,7 @@ export const SizzleOutro: React.FC = () => {
             color: TEXT_MUTED,
             textTransform: 'uppercase',
           }}>
-            Early access · no credit card
+            Open source · self-hosted · no API key
           </div>
         </div>
       </AbsoluteFill>

@@ -137,10 +137,26 @@ export function resolveStageModel(): string {
   return process.env['ARENA_STAGE_MODEL'] || DEFAULT_STAGE_MODEL;
 }
 
-/** Resolve the model a judge run should be pinned to. */
-export function resolveJudgeModel(judgeId: string): string {
-  if (judgeId.includes('adversarial')) {
-    return process.env['ARENA_ADVERSARIAL_JUDGE_MODEL'] || DEFAULT_ADVERSARIAL_JUDGE_MODEL;
+/**
+ * Resolve the model a judge run should be pinned to.
+ *
+ * `provider` defaults to 'claude' so existing callers are unchanged. For any
+ * other provider the pin comes from that provider's own registry default —
+ * pinning a codex judge to `claude-opus-5` would simply be rejected by the CLI.
+ *
+ * The env overrides still win, and are deliberately provider-agnostic: they
+ * exist to reproduce one specific historical score, at which point the operator
+ * knows exactly which model they mean.
+ */
+export function resolveJudgeModel(judgeId: string, provider: string = 'claude'): string {
+  const adversarial = judgeId.includes('adversarial');
+  const override = adversarial
+    ? process.env['ARENA_ADVERSARIAL_JUDGE_MODEL']
+    : process.env['ARENA_JUDGE_MODEL'];
+  if (override) return override;
+
+  if (provider === 'claude') {
+    return adversarial ? DEFAULT_ADVERSARIAL_JUDGE_MODEL : DEFAULT_JUDGE_MODEL;
   }
-  return process.env['ARENA_JUDGE_MODEL'] || DEFAULT_JUDGE_MODEL;
+  return requireDefaultModel(provider);
 }

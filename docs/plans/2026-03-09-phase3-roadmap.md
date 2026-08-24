@@ -1,3 +1,5 @@
+> **Historical design document, March 2026.** Written while the project was still called *Agent Arena*. Model ids, APIs, file paths and the project name below are as of that date and are **not current**. Kept as a record of what was decided then, not as guidance. See `README.md` for how Arena4Ai works today.
+
 # Agent Arena — Phase 3 Roadmap
 
 > **PM Synthesis** — Research conducted by Software Architect, Frontend Design, and Quality/Security Engineer agents.

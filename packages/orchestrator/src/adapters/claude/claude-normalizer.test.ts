@@ -29,10 +29,28 @@ describe('normalizeLine()', () => {
     expect((event.payload as { text: string }).text).toBe('/tmp/foo.ts');
   });
 
-  it('maps an assistant Edit tool_use to FILE_CREATE', () => {
+  // AA-064: an Edit is a MODIFY. This test previously asserted FILE_CREATE, which
+  // is why the UI's edit badge counted zero for four months.
+  it('maps an assistant Edit tool_use to FILE_MODIFY, with a tool-derived operation', () => {
     const raw = assistantMsg([{ type: 'tool_use', name: 'Edit', input: { file_path: '/tmp/bar.py' } }]);
     const event = normalizeLine(raw, BASE);
+    expect(event.type).toBe(EventType.FILE_MODIFY);
+    const p = event.payload as Record<string, unknown>;
+    expect(p.op).toBe('modify');
+    expect(p.opSource).toBe('tool');
+    expect(p.path).toBe('/tmp/bar.py');
+    expect(p.tool).toBe('Edit');
+    expect(p.text).toBe('/tmp/bar.py');   // backwards compatibility
+  });
+
+  it('maps an assistant Write tool_use to FILE_CREATE', () => {
+    const raw = assistantMsg([{ type: 'tool_use', name: 'Write', input: { file_path: '/tmp/new.py' } }]);
+    const event = normalizeLine(raw, BASE);
     expect(event.type).toBe(EventType.FILE_CREATE);
+    const p = event.payload as Record<string, unknown>;
+    expect(p.op).toBe('create');
+    expect(p.opSource).toBe('tool');
+    expect(p.path).toBe('/tmp/new.py');
   });
 
   it('maps an assistant text block to REASONING', () => {
