@@ -73,6 +73,16 @@ export interface FrameEvent {
   state?: string;
   /** True when this event arrived in the pre-c965642 payload shape. */
   legacy: boolean;
+  /**
+   * True when this event was NOT in the provider's stream and was recovered from
+   * the deliverables manifest by `reconcileWithManifest()`.
+   *
+   * It exists so the recovery cannot be silent. A recovered event proves a file
+   * EXISTS; it says nothing about how many times that file was edited, so a team
+   * carrying any recovered event is reported as `inferred` rather than
+   * `measured` — see `telemetryFromStats`.
+   */
+  recovered?: boolean;
 }
 
 // ─── legacy payload handling ─────────────────────────────────────────────────
@@ -272,4 +282,123 @@ export function resolveTelemetry(model: string, fileEvents: FrameEvent[]): TeamT
     legacy: anyLegacy,
     note: `${provider}: no file paths in these events — block heights are not measurable and are drawn flat`,
   };
+}
+
+// ─── AA-079(b): reconciling an incomplete stream against the manifest ────────
+
+/** The files a team actually delivered, from `results.deliverables`. */
+export interface TeamManifest {
+  teamId: string;
+  paths: string[];
+}
+
+export interface ReconcileResult {
+  events: FrameEvent[];
+  /** Per team, how many paths had to be recovered. Empty when nothing was. */
+  recovered: Map<string, number>;
+  /** Per team, how many manifest paths were skipped as vendored/build output. */
+  skipped: Map<string, number>;
+}
+
+/**
+ * Paths that are in the deliverables manifest but were not WRITTEN by the agent.
+ *
+ * `collectDeliverables` walks the workspace, so anything the agent installed or
+ * generated is collected too. Measured on competition a5a12e73: team-a's
+ * manifest holds 749 files, of which 737 are `server/node_modules/**`. Recovering
+ * those would replace one false picture with a worse one — a floor where the
+ * agent that ran `npm install` towers over the agent that did not, which is no
+ * more a measure of work than the short city this function exists to prevent.
+ *
+ * Deliberately conservative: it matches only unambiguous dependency and build
+ * directories, as a path SEGMENT, so a hand-written `src/dist-config.ts` is kept.
+ * A file the agent really did write into one of these is lost, which is the safer
+ * error — under-drawing a vendored directory misleads nobody.
+ */
+const VENDOR_SEGMENT_RE =
+  /(^|\/)(node_modules|\.git|\.next|\.turbo|dist|build|out|coverage|vendor|venv|\.venv|__pycache__|target|\.cache)(\/|$)/;
+
+/** True when a manifest path is vendored or generated rather than authored. */
+export function isVendoredPath(path: string): boolean {
+  return VENDOR_SEGMENT_RE.test(path);
+}
+
+/**
+ * Fill in file events a provider's stream never reported.
+ *
+ * WHY THIS IS NOT IN `PROVIDER_FILE_CAPABILITIES`. That table records whether a
+ * provider's events CARRY a field, and it is right as it stands — the events a
+ * short stream does emit are perfectly well-formed. Completeness is a property
+ * of a STREAM, not of a provider's field schema, and it varies run to run.
+ * Writing "codex is incomplete" into a static table would be a claim about a
+ * MODEL standing in for a fact about its TOOLING, which is the same class of
+ * error as drawing a logging gap as less work — and it would become false the
+ * moment the normalizer is fixed.
+ *
+ * So the check is dynamic and lives here, at load time, where both the events
+ * and the manifest are in hand. It stays correct after the normalizer is fixed
+ * (it simply finds nothing to do) and it generalises to providers we have not
+ * met yet.
+ *
+ * Recovered events are marked `recovered: true`, which drives the team to
+ * `inferred` in `telemetryFromStats()`. Recovery is never silent.
+ *
+ * Timing: a recovered file has no timestamp of its own, so it is spread evenly
+ * across the window in which that team was observed writing. That keeps the city
+ * building over time instead of appearing all at once, and it never invents
+ * activity outside the team's real working window.
+ */
+export function reconcileWithManifest(
+  events: FrameEvent[],
+  manifests: TeamManifest[],
+): ReconcileResult {
+  const recovered = new Map<string, number>();
+  const skipped = new Map<string, number>();
+  if (manifests.length === 0) return { events, recovered, skipped };
+
+  const spanEnd = events.length ? events[events.length - 1].t : 0;
+  // Built lazily: a complete stream must return the SAME array reference, so a
+  // React host can keep its identity check and not re-init the renderer on every
+  // poll. Reconciliation is a no-op far more often than not.
+  let out: FrameEvent[] | null = null;
+
+  for (const { teamId, paths } of manifests) {
+    if (!paths.length) continue;
+    const ownFiles = events.filter((e) => e.teamId === teamId && e.kind === 'file');
+    const seen = new Set(ownFiles.map((e) => e.path).filter((p): p is string => !!p));
+    const candidates = paths.filter((p) => p && !seen.has(p));
+    // Vendored files are dropped BEFORE recovery, not drawn and then explained.
+    const missing = candidates.filter((p) => !isVendoredPath(p));
+    const vendored = candidates.length - missing.length;
+    if (vendored > 0) skipped.set(teamId, vendored);
+    if (!missing.length) continue;
+
+    recovered.set(teamId, missing.length);
+    if (!out) out = [...events];
+
+    const times = ownFiles.map((e) => e.t);
+    const lo = times.length ? Math.min(...times) : 0;
+    const hi = times.length ? Math.max(...times) : spanEnd;
+    const span = Math.max(1, hi - lo);
+
+    missing.forEach((path, i) => {
+      out!.push({
+        t: lo + Math.round((span * (i + 1)) / (missing.length + 1)),
+        teamId,
+        kind: 'file',
+        path,
+        text: path,
+        legacy: false,
+        recovered: true,
+        // `op` and `opSource` are deliberately ABSENT. The manifest proves the
+        // file exists; it says nothing about create-vs-modify. Asserting one
+        // would be inventing the very fact this function exists to stop
+        // inventing.
+      });
+    });
+  }
+
+  if (!out) return { events, recovered, skipped };
+  out.sort((a, b) => a.t - b.t);
+  return { events: out, recovered, skipped };
 }

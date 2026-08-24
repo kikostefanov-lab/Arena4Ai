@@ -20,8 +20,8 @@ import { fileURLToPath } from 'node:url';
 // under tsx, which resolves it as CJS, and @arena/shared's exports map declares
 // only an `import` condition. The scene code below uses the package name
 // normally — this is a build-script-only detail.
-import { toFrameEvents } from '../../shared/dist/index.js';
-import type { ArenaEvent, FrameEvent } from '../../shared/dist/index.js';
+import { toFrameEvents, reconcileWithManifest } from '../../shared/dist/index.js';
+import type { ArenaEvent, FrameEvent, TeamManifest } from '../../shared/dist/index.js';
 import { SIZZLE_COMPETITION_ID } from './sizzle-source.js';
 
 const API = process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000';
@@ -91,77 +91,26 @@ async function main(): Promise<void> {
     }
   } catch { scores = {}; }
 
-  // ── RECONCILE THE STREAM AGAINST THE MANIFEST ────────────────────────────
+  // ── RECONCILE THE STREAM AGAINST THE MANIFEST (AA-079(b)) ───────────────
   //
-  // WHY THIS EXISTS. An earlier cut of this reel captioned the floor
-  // "claude 17 files vs codex 4 files". Both teams delivered SEVENTEEN. The 4 was
-  // the number of FILE_CREATE events codex's stream produced, not the number of
-  // files it wrote: codex applies edits via apply_patch and emits unified diffs,
-  // and codex-normalizer.ts turns only the first path of a patch block into an
-  // event. The other 13 paths are still in the stream, as `+++ b/<path>` headers
-  // inside REASONING events, and are dropped. Counting events and calling the
-  // result "files" made a public claim that a competitor's model did a quarter of
-  // the work.
+  // An earlier cut of this reel captioned the floor "claude 17 files vs codex 4
+  // files". Both teams delivered SEVENTEEN. The 4 was the number of file events
+  // codex's stream produced: it applies edits via apply_patch, and the normalizer
+  // turned only the first path of each patch block into an event. Counting events
+  // and calling the result "files" made a public claim that a competitor's model
+  // did a quarter of the work — exactly the misreading the renderer's
+  // honest-absence design exists to prevent, promoted to a caption where no
+  // hatching can qualify it.
   //
-  // That is precisely the misreading the renderer's three-state design exists to
-  // prevent — a logging gap must never render as less work — so the floor may not
-  // be built from the event stream alone when a completer source is right there.
-  // `results.deliverables` is the manifest of what was actually collected off
-  // disk. Where the stream is short of it, the missing files are added.
-  //
-  // THE HONESTY COST IS PAID, NOT HIDDEN. A recovered path tells us a file
-  // exists; it does not tell us how many times that file was edited. So a team
-  // whose stream was incomplete has `opSource` stripped from ALL of its file
-  // events, which drops it from `measured` to `inferred` in
-  // `telemetryFromStats()` and draws its caps DASHED. That is deliberately more
-  // conservative than dashing only the recovered blocks: once we know a stream
-  // dropped 13 of 17 events, the surviving 4 no longer license presenting that
-  // team's heights at the same confidence as a complete stream's.
-  //
-  // Edit depth is per-TEAM by design (see `TeamTelemetry`), not per-block, so
-  // "dash only the recovered ones" is not expressible without a renderer change.
-  // The durable fix is the normalizer (arena card AA-079); this is the reel's
-  // honest reading of the data as it stands today.
-  const reconciled: FrameEvent[] = [];
-  const incomplete: string[] = [];
-  for (const team of teams) {
-    const own = kept.filter((e) => e.teamId === team.id);
-    const ownFiles = own.filter((e) => e.kind === 'file');
-    const seen = new Set(ownFiles.map((e) => e.path).filter(Boolean) as string[]);
-    const missing = (manifest.get(team.id) ?? []).filter((p) => !seen.has(p));
-
-    if (missing.length === 0) { reconciled.push(...own); continue; }
-    incomplete.push(`${team.id} (+${missing.length})`);
-
-    // Strip the operation contract: this team's heights are now partly guessed.
-    for (const e of own) {
-      if (e.kind === 'file') { delete e.opSource; delete e.op; }
-      reconciled.push(e);
-    }
-
-    // Spread the recovered files across the window the team was actually active
-    // in, so the city still builds over time instead of appearing at once.
-    const times = ownFiles.map((e) => e.t);
-    const lo = times.length ? Math.min(...times) : 0;
-    const hi = times.length ? Math.max(...times) : (kept.length ? kept[kept.length - 1].t : 0);
-    const span = Math.max(1, hi - lo);
-    missing.forEach((path, i) => {
-      reconciled.push({
-        t: lo + Math.round((span * (i + 1)) / (missing.length + 1)),
-        teamId: team.id,
-        kind: 'file',
-        path,
-        text: path,
-        legacy: false,
-      });
-    });
-  }
-  // Anything with no team (or a team not in the roster) passes through untouched.
-  const rosterIds = new Set(teams.map((t) => t.id));
-  reconciled.push(...kept.filter((e) => !e.teamId || !rosterIds.has(e.teamId)));
-  reconciled.sort((a, b) => a.t - b.t);
-  if (incomplete.length) {
-    console.log(`[arena-data] stream INCOMPLETE, recovered from manifest: ${incomplete.join(', ')}`);
+  // The reconciliation itself now lives in @arena/shared so the reel and the live
+  // app cannot drift apart on it. Recovered files are marked, which drops the team
+  // to `inferred` (dashed caps) — the manifest proves a file exists, not how many
+  // times it was edited.
+  const manifests: TeamManifest[] = [];
+  for (const [teamId, paths] of manifest) manifests.push({ teamId, paths });
+  const { events: reconciled, recovered } = reconcileWithManifest(kept, manifests);
+  for (const [teamId, n] of recovered) {
+    console.log(`[arena-data] stream INCOMPLETE for ${teamId}: recovered ${n} file(s) from the manifest`);
   }
 
   // The floor is built from the reconciled set, so per-team counts must be too.

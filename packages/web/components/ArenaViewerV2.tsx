@@ -1,7 +1,8 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor } from '@arena/shared';
+import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest } from '@arena/shared';
+import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
 import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
@@ -47,6 +48,18 @@ interface ArenaViewerV2Props {
   timeLimitMs: number;
   scores?: Array<{ teamId: string; finalScore: number }>;
   winnerId?: string;
+  /**
+   * `results.deliverables` — the files actually collected off disk, when the
+   * competition has finished. AA-079(b): a provider's event stream can be
+   * INCOMPLETE (codex applies edits via apply_patch and, before the normalizer
+   * was fixed, reported only the first file of each patch block), and a team
+   * that reported 4 of the 17 files it delivered would otherwise be drawn as a
+   * team that did a quarter of the work. Passing this lets the floor be built
+   * from what was delivered, with the recovered blocks marked `inferred`.
+   * Absent while a competition is still running — there is nothing to compare to
+   * yet, and a partial run is legitimately partial.
+   */
+  deliverables?: Array<{ teamId: string; files?: Array<{ path: string }> }>;
 }
 
 // ── HUD subcomponents ───────────────────────────────────────────
@@ -266,13 +279,35 @@ const HUD_INSETS = { top: 18, right: 24, bottom: 34, left: 24 };
 const SPEEDS = [1, 3, 8] as const;
 
 export default function ArenaViewerV2({
-  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId,
+  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables,
 }: ArenaViewerV2Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<IsoArenaRenderer | null>(null);
   /** Measured CSS size of the canvas box; the renderer composes into this. */
   const sizeRef = useRef({ w: FALLBACK_W, h: FALLBACK_H, dpr: 1 });
+
+  /** `deliverables` in the shape `reconcileWithManifest` wants (AA-079(b)). */
+  const manifests = useMemo<TeamManifest[]>(
+    () => (deliverables ?? [])
+      .map((d) => ({ teamId: d.teamId, paths: (d.files ?? []).map((f) => f.path).filter(Boolean) }))
+      .filter((m) => m.paths.length > 0),
+    [deliverables],
+  );
+
+  /**
+   * Build the frame list for a BULK load, reconciling it against the manifest.
+   *
+   * Only the bulk paths use this. The incremental live path deliberately does
+   * not: while a competition is running there are no deliverables to compare
+   * against, and a run that is only half done is legitimately half drawn.
+   * `reconcileWithManifest` returns its input array unchanged when the stream is
+   * already complete, so this costs nothing in the common case.
+   */
+  const loadFrames = useCallback((evs: ArenaEvent[], origin: number) => {
+    const all = toFrameEvents(evs as never, origin);
+    return manifests.length ? reconcileWithManifest(all, manifests).events : all;
+  }, [manifests]);
 
   /**
    * How many of the `events` prop we have already handed to the renderer, plus
@@ -408,7 +443,7 @@ export default function ArenaViewerV2({
       // toFrameEvents (plural) sorts; toFrameEvent (singular) does not. The
       // renderer walks its list with a monotonic cursor, so an unsorted list
       // stalls at the first out-of-order timestamp.
-      const all = toFrameEvents(events as never, origin);
+      const all = loadFrames(events, origin);
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
       const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
       replay.setWinner(winnerRef.current);
@@ -438,7 +473,7 @@ export default function ArenaViewerV2({
     if (!prefixIntact) {
       // A reorder: the only coherent response is to rebuild from scratch.
       // Rare, and cheaper to do correctly than to patch up incrementally.
-      const all = toFrameEvents(events as never, origin);
+      const all = loadFrames(events, origin);
       r.appendEvents([]);
       r.seek(0);
       rendererRef.current = null;
@@ -461,7 +496,7 @@ export default function ArenaViewerV2({
     r.appendEvents(fresh);
     consumedRef.current = events.length;
     lastIdRef.current = events[events.length - 1]?.eventId ?? null;
-  }, [events, teams, timeLimitMs, isLive]);
+  }, [events, teams, timeLimitMs, isLive, loadFrames]);
 
   // ── Winner / terminal poses ───────────────────────────────────
   useEffect(() => {

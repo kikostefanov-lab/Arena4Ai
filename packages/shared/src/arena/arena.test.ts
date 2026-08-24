@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ArenaEvent } from '../types/event.js';
+import type { FrameEvent } from './event-model.js';
 import { PROVIDER_FILE_CAPABILITIES } from '../types/event.js';
 import {
   toFrameEvent,
@@ -9,9 +10,11 @@ import {
   providerOf,
   recoverLegacyPath,
   UNKNOWN_PROVIDER_CAPABILITY,
+  reconcileWithManifest,
+  isVendoredPath,
 } from './event-model.js';
 import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
-import { createWorld, applyEvent, targetHeight } from './world.js';
+import { createWorld, applyEvent, targetHeight, foldFileStats, telemetryFromStats } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
 import { IsoArenaRenderer } from './renderer.js';
 import { MODEL_COLORS } from '../design/tokens.js';
@@ -571,3 +574,104 @@ describe('parallel bands — N teams get N bands, and none of them overlap', () 
     }
   });
 })
+
+// ─── AA-079(b): manifest reconciliation ──────────────────────────────────────
+
+describe('reconcileWithManifest', () => {
+  const fileEv = (t: number, teamId: string, path: string, contract = true): FrameEvent => ({
+    t, teamId, kind: 'file', path, text: path, legacy: false,
+    ...(contract ? { op: 'create' as const, opSource: 'marker' as const } : {}),
+  });
+
+  it('adds only the paths the stream never reported', () => {
+    const events = [fileEv(100, 'b', 'a.js'), fileEv(200, 'b', 'b.js')];
+    const { events: out, recovered } = reconcileWithManifest(events, [
+      { teamId: 'b', paths: ['a.js', 'b.js', 'c.js', 'd.js'] },
+    ]);
+    expect(recovered.get('b')).toBe(2);
+    const paths = out.filter((e) => e.kind === 'file').map((e) => e.path).sort();
+    expect(paths).toEqual(['a.js', 'b.js', 'c.js', 'd.js']);
+  });
+
+  it('is a no-op when the stream already matches the manifest', () => {
+    const events = [fileEv(100, 'b', 'a.js')];
+    const { events: out, recovered } = reconcileWithManifest(events, [
+      { teamId: 'b', paths: ['a.js'] },
+    ]);
+    expect(recovered.size).toBe(0);
+    expect(out).toBe(events); // same reference — nothing copied, nothing changed
+  });
+
+  it('marks recovered events and leaves op/opSource ABSENT', () => {
+    const { events: out } = reconcileWithManifest([fileEv(100, 'b', 'a.js')], [
+      { teamId: 'b', paths: ['a.js', 'c.js'] },
+    ]);
+    const rec = out.find((e) => e.path === 'c.js')!;
+    expect(rec.recovered).toBe(true);
+    expect(rec.op).toBeUndefined();
+    expect(rec.opSource).toBeUndefined();
+  });
+
+  it('places recovered files inside the team’s own working window', () => {
+    const { events: out } = reconcileWithManifest(
+      [fileEv(1000, 'b', 'a.js'), fileEv(2000, 'b', 'b.js')],
+      [{ teamId: 'b', paths: ['a.js', 'b.js', 'c.js'] }],
+    );
+    const rec = out.find((e) => e.path === 'c.js')!;
+    expect(rec.t).toBeGreaterThanOrEqual(1000);
+    expect(rec.t).toBeLessThanOrEqual(2000);
+  });
+
+  it('does not touch a team that is not in the manifest', () => {
+    const events = [fileEv(100, 'a', 'x.js'), fileEv(200, 'b', 'y.js')];
+    const { events: out } = reconcileWithManifest(events, [
+      { teamId: 'b', paths: ['y.js', 'z.js'] },
+    ]);
+    expect(out.filter((e) => e.teamId === 'a')).toHaveLength(1);
+    expect(out.filter((e) => e.teamId === 'b')).toHaveLength(2);
+  });
+
+  it('downgrades an incomplete team to inferred, with the RIGHT reason', () => {
+    const { events: out } = reconcileWithManifest([fileEv(100, 'b', 'a.js')], [
+      { teamId: 'b', paths: ['a.js', 'c.js'] },
+    ]);
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
+    for (const e of out) foldFileStats(stats, e);
+
+    const tel = telemetryFromStats('codex', stats);
+    expect(tel.editDepth).toBe('inferred');
+    // The reason must name the under-reporting, NOT the legacy-competition case.
+    expect(tel.note).toContain('recovered from the deliverables manifest');
+    expect(tel.note).not.toContain('predates');
+  });
+
+  it('does NOT recover vendored or build output', () => {
+    // a5a12e73/team-a really does have 749 manifest files, 737 of them under
+    // server/node_modules. Recovering those would tower over an agent that
+    // simply did not run npm install.
+    const { events: out, recovered, skipped } = reconcileWithManifest(
+      [fileEv(100, 'b', 'server/index.mjs')],
+      [{ teamId: 'b', paths: [
+        'server/index.mjs', 'server/app.mjs',
+        'server/node_modules/express/index.js', 'dist/bundle.js', '.next/static/x.js',
+      ] }],
+    );
+    expect(recovered.get('b')).toBe(1);          // only server/app.mjs
+    expect(skipped.get('b')).toBe(3);
+    expect(out.map((e) => e.path).sort()).toEqual(['server/app.mjs', 'server/index.mjs']);
+  });
+
+  it('treats vendored names as path SEGMENTS, not substrings', () => {
+    expect(isVendoredPath('server/node_modules/x/index.js')).toBe(true);
+    expect(isVendoredPath('dist/bundle.js')).toBe(true);
+    expect(isVendoredPath('src/dist-config.ts')).toBe(false);
+    expect(isVendoredPath('app/outbound.ts')).toBe(false);
+    expect(isVendoredPath('build.sh')).toBe(false);
+  });
+
+  it('a complete stream with a contract stays MEASURED', () => {
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
+    foldFileStats(stats, fileEv(100, 'b', 'a.js'));
+    expect(telemetryFromStats('codex', stats).editDepth).toBe('measured');
+  });
+});

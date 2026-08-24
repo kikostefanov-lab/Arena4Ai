@@ -16,7 +16,7 @@ export interface TeamSpec {
 export type BlockKind = 'src' | 'test' | 'doc' | 'config';
 
 /** Running tallies over a team's file events. See `TeamState.fileStats`. */
-export interface FileStats { total: number; withContract: number; withPath: number; legacy: number }
+export interface FileStats { total: number; withContract: number; withPath: number; legacy: number; recovered: number }
 
 /**
  * Fold one file event into a team's tallies.
@@ -38,6 +38,7 @@ export function foldFileStats(stats: FileStats, ev: FrameEvent): void {
   if (ev.opSource && ev.op) stats.withContract++;
   if (ev.path) stats.withPath++;
   if (ev.legacy) stats.legacy++;
+  if (ev.recovered) stats.recovered++;
 }
 
 export interface Structure {
@@ -212,7 +213,7 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
       budget,
       seen: new Set(),
       fileStats: fileEvents.reduce<FileStats>((acc, e) => { foldFileStats(acc, e); return acc; },
-        { total: 0, withContract: 0, withPath: 0, legacy: 0 }),
+        { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 }),
     });
     if (telemetry.note) world.notes.push(telemetry.note);
     if (budget.note) world.notes.push(budget.note);
@@ -418,6 +419,24 @@ export function telemetryFromStats(model: string, stats: TeamState['fileStats'])
     return {
       provider, capability, editDepth: 'unavailable', legacy,
       note: `${provider}: this provider does not report file operations — block heights are drawn flat, not low`,
+    };
+  }
+  // AA-079(b). An INCOMPLETE stream is checked before the contract test, and it
+  // has its own reason. A provider that reports SOME of its writes looks
+  // perfectly healthy — every event it did emit is well-formed — so the surviving
+  // events would otherwise report `measured` and the missing ones would simply be
+  // absent. That is the same failure as drawing `unavailable` short, only harder
+  // to see. Once files have been recovered from the manifest, this team's heights
+  // are a guess: the recovered blocks have no edit count at all, and the ones that
+  // did arrive can no longer stand for the whole run.
+  //
+  // DO NOT fold this into the `withPath` branch below: that note says the
+  // competition PREDATES file-operation telemetry, which is a different and, here,
+  // false explanation.
+  if (stats.recovered > 0) {
+    return {
+      provider, capability, editDepth: 'inferred', legacy,
+      note: `${provider}: ${stats.recovered} of ${stats.total} files were recovered from the deliverables manifest — this CLI under-reports its own writes, so block heights are inferred, not measured`,
     };
   }
   if (stats.withContract > 0) return { provider, capability, editDepth: 'measured', legacy };
