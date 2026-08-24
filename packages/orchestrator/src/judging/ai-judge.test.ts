@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CompetitionFormat } from '@arena/shared';
 import type { Brief } from '@arena/shared';
-import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, judgeIdFor } from './ai-judge.js';
+import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, judgeIdFor, normalizeJudgeScores, quantizeScore, SCORE_RESOLUTION } from './ai-judge.js';
 import { resolveJudgeModel as resolveJudgeModelFn, requireDefaultModel as requireDefaultModelFn } from '../adapters/model-registry.js';
 import { DEFAULT_JUDGE_MODEL, DEFAULT_ADVERSARIAL_JUDGE_MODEL } from '../adapters/model-registry.js';
 
@@ -261,5 +261,121 @@ describe('resolveJudgeModel is provider-aware', () => {
   });
   it('leaves the claude default unchanged for existing callers', () => {
     expect(resolveJudgeModelFn('ai-claude')).toBe(resolveJudgeModelFn('ai-claude', 'claude'));
+  });
+});
+
+describe('quantizeScore — the grid must not corrupt what the judge already stated (AA-063)', () => {
+  it('leaves a value that is already on the grid exactly alone', () => {
+    // The naive spelling `Math.round(s / 0.1) * 0.1` returns 8.200000000000001
+    // here: 0.1 is not representable in binary64, so a function whose only job
+    // is numeric fidelity was corrupting clean input.
+    expect(quantizeScore(8.2)).toBe(8.2);
+    expect(quantizeScore(7.8)).toBe(7.8);
+    expect(quantizeScore(9)).toBe(9);
+  });
+
+  it('rounds a half-step UP rather than down', () => {
+    // 6.35 / 0.1 is 63.49999999999999, so divide-then-multiply yields 6.3.
+    expect(quantizeScore(6.35)).toBe(6.4);
+    expect(quantizeScore(8.15)).toBe(8.2);
+    expect(quantizeScore(7.25)).toBe(7.3);
+  });
+
+  it('never returns a value off the one-decimal grid', () => {
+    for (let raw = 0; raw <= 10.0001; raw += 0.017) {
+      const q = quantizeScore(raw);
+      expect(Math.abs(q * 10 - Math.round(q * 10))).toBeLessThan(1e-9);
+    }
+  });
+
+  it('keeps the declared resolution as the single source of truth', () => {
+    expect(SCORE_RESOLUTION).toBe(0.1);
+  });
+});
+
+describe('normalizeJudgeScores — what the judge emits is untrusted input (AA-063)', () => {
+  const rubric = {
+    criteria: [
+      { id: 'correctness', description: 'Correct', weight: 1, maxScore: 10 },
+      { id: 'clarity', description: 'Clear', weight: 1, maxScore: 5 },
+    ],
+  };
+
+  it('preserves one decimal place end to end', () => {
+    // The whole point of AA-063: a decimal the judge reports must survive into
+    // the stored scorecard. A prompt asking for 7.3 is worthless if the parse
+    // layer rounds it to 7.
+    const out = normalizeJudgeScores(
+      [{ criterionId: 'correctness', score: 7.3, commentary: 'ok' }],
+      rubric,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].score).toBe(7.3);
+  });
+
+  it('accepts a quoted number, because models sometimes emit one', () => {
+    const out = normalizeJudgeScores([{ criterionId: 'correctness', score: '8.6' }], rubric);
+    expect(out[0].score).toBe(8.6);
+  });
+
+  it('drops NaN rather than letting it become a silent zero', () => {
+    const out = normalizeJudgeScores(
+      [
+        { criterionId: 'correctness', score: 'not a number' },
+        { criterionId: 'clarity', score: Number.NaN },
+      ],
+      rubric,
+    );
+    expect(out).toHaveLength(0);
+  });
+
+  it('drops a criterionId that is not in the rubric', () => {
+    const out = normalizeJudgeScores(
+      [
+        { criterionId: 'invented-criterion', score: 9 },
+        { criterionId: 'clarity', score: 4.2 },
+      ],
+      rubric,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].criterionId).toBe('clarity');
+  });
+
+  it('keeps only the first entry when a criterion is scored twice', () => {
+    const out = normalizeJudgeScores(
+      [
+        { criterionId: 'clarity', score: 4.2 },
+        { criterionId: 'clarity', score: 1.1 },
+      ],
+      rubric,
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].score).toBe(4.2);
+  });
+
+  it("clamps to the criterion's OWN maxScore, not a global 10", () => {
+    const out = normalizeJudgeScores(
+      [
+        { criterionId: 'clarity', score: 9.7 },
+        { criterionId: 'correctness', score: -3 },
+      ],
+      rubric,
+    );
+    const byId = Object.fromEntries(out.map((s) => [s.criterionId, s.score]));
+    expect(byId.clarity).toBe(5);
+    expect(byId.correctness).toBe(0);
+  });
+
+  it('returns empty for a non-array, so the caller reports a judge FAILURE', () => {
+    // An empty result is what makes aiJudge report a failure instead of
+    // recording a legitimate-looking all-zero scorecard.
+    expect(normalizeJudgeScores(null, rubric)).toEqual([]);
+    expect(normalizeJudgeScores({ scores: [] }, rubric)).toEqual([]);
+    expect(normalizeJudgeScores('[]', rubric)).toEqual([]);
+  });
+
+  it('defaults commentary to a string when the judge omits it', () => {
+    const out = normalizeJudgeScores([{ criterionId: 'clarity', score: 3.3 }], rubric);
+    expect(out[0].commentary).toBe('');
   });
 });

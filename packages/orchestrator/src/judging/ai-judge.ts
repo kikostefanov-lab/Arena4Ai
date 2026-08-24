@@ -193,6 +193,82 @@ export function classifyJudgeFailure(
 }
 
 /**
+ * The resolution the judge prompt asks for: one decimal place on the criterion's
+ * own scale. Scores are quantised to this grid — never to whole numbers.
+ *
+ * AA-063: the prompt used to say only `<number 0–maxScore>`, so claude-opus-5
+ * volunteered whole numbers (4 distinct values across 18 cells) and a 0.865 vs
+ * 0.855 launch margin turned out to be rounding rather than judgement. Asking
+ * for a decimal is only half the fix — the parse layer has to keep it.
+ */
+export const SCORE_RESOLUTION = 0.1;
+
+/**
+ * Snap to the one-decimal grid without ever collapsing to an integer.
+ *
+ * Divide-then-multiply (`Math.round(s / 0.1) * 0.1`) is the obvious spelling and
+ * it is wrong twice over, because 0.1 is not representable in binary64:
+ *   - it CORRUPTS clean input — 8.2 comes back as 8.200000000000001, so a score
+ *     the judge stated exactly is stored wrong by a function whose only job is
+ *     numeric fidelity;
+ *   - it ROUNDS THE WRONG WAY at the boundary — 6.35 / 0.1 is 63.49999999999999,
+ *     so it yields 6.3 where 6.4 is correct.
+ * Scaling by the integer inverse keeps every intermediate exact.
+ */
+const SCORE_STEPS = Math.round(1 / SCORE_RESOLUTION);
+
+export function quantizeScore(score: number): number {
+  return Math.round(score * SCORE_STEPS) / SCORE_STEPS;
+}
+
+/**
+ * Turn whatever the judge CLI emitted into criterion scores we are willing to
+ * store.
+ *
+ * The old code cast the parsed JSON straight to `CriterionScore[]` and clamped
+ * it, which meant a string `"8.5"`, a `null`, a NaN or an id that matches no
+ * criterion all travelled onward untyped. Every entry now has to name a real
+ * rubric criterion and carry a finite number; anything else is dropped, and an
+ * empty result is reported to the caller as a judge failure rather than as a
+ * zero-scored match.
+ *
+ * Resolution is preserved: scores are quantised to {@link SCORE_RESOLUTION}
+ * (one decimal), then clamped to the criterion's own [0, maxScore].
+ */
+export function normalizeJudgeScores(raw: unknown, rubric: Rubric): CriterionScore[] {
+  if (!Array.isArray(raw)) return [];
+  const out: CriterionScore[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue;
+    const e = entry as Record<string, unknown>;
+
+    const criterionId = typeof e.criterionId === 'string' ? e.criterionId.trim() : '';
+    if (!criterionId || seen.has(criterionId)) continue;
+    const criterion = rubric.criteria.find((c) => c.id === criterionId);
+    if (!criterion) continue;
+
+    // Models occasionally quote the number ("8.5"). Accept it, but only if it
+    // really is a number — never let NaN through as a silent zero.
+    const rawScore = typeof e.score === 'string' ? Number(e.score.trim()) : e.score;
+    if (typeof rawScore !== 'number' || !Number.isFinite(rawScore)) continue;
+
+    const max = criterion.maxScore ?? 10;
+    const score = Math.max(0, Math.min(max, quantizeScore(rawScore)));
+
+    seen.add(criterionId);
+    out.push({
+      criterionId,
+      score,
+      commentary: typeof e.commentary === 'string' ? e.commentary : '',
+    });
+  }
+
+  return out;
+}
+
+/**
  * Build the judge prompt for a deliverable and rubric.
  * When judgeId includes 'adversarial', critical evaluation instructions are added.
  */
@@ -227,10 +303,24 @@ For each rubric criterion, evaluate whether the deliverable:
 3. Produced the expected deliverable files
 4. Demonstrates quality and completeness relative to the criterion
 
+## Score Resolution — REQUIRED
+Report every score to EXACTLY ONE DECIMAL PLACE (e.g. 7.3, 8.6, 9.1). This is not
+cosmetic. Two strong entries must stay distinguishable: whole numbers collapse a
+10-point scale into a handful of buckets, and a competition then gets decided by
+rounding rather than by judgement.
+- Do NOT default to whole numbers. A score ending in .0 must be a deliberate,
+  exact verdict, not a rounded one — treat it as rare.
+- Do NOT reuse the same value for two criteria unless the deliverable really is
+  equally strong on both; prefer 7.8 vs 8.2 over 8 vs 8.
+- Use the whole range. Reserve 9.0+ for work with no material weakness, and go
+  below 5.0 when the criterion is genuinely unmet.
+- The tenths digit carries the fine judgement: use it to record that one entry
+  is slightly ahead of another on the same criterion.
+
 Return ONLY a JSON object with this exact shape (no markdown, no prose):
 {
   "scores": [
-    { "criterionId": "<id>", "score": <number 0–maxScore>, "commentary": "<2–3 sentences referencing specific deliverable content>" }
+    { "criterionId": "<id>", "score": <number 0–maxScore, one decimal place>, "commentary": "<2–3 sentences referencing specific deliverable content>" }
   ]
 }`;
 }
@@ -308,9 +398,10 @@ export async function aiJudge(
       child.on('error', (err) => settle(() => reject(err)));
     });
 
-    const parsed = JSON.parse(extractJson(stdout)) as { scores: CriterionScore[] };
-    if (Array.isArray(parsed.scores) && parsed.scores.length > 0) {
-      scores = parsed.scores;
+    const parsed = JSON.parse(extractJson(stdout)) as { scores?: unknown };
+    const normalized = normalizeJudgeScores(parsed.scores, rubric);
+    if (normalized.length > 0) {
+      scores = normalized;
     } else {
       failure = classifyJudgeFailure(new Error('judge returned no scores'), '', claudeBin, model, provider);
     }
@@ -326,12 +417,8 @@ export async function aiJudge(
     scores = scores.map((s) => ({ ...s, commentary: failure!.message }));
   }
 
-  // Clamp scores to [0, maxScore]
-  scores = scores.map((s) => {
-    const criterion = rubric.criteria.find((c) => c.id === s.criterionId);
-    const max = criterion?.maxScore ?? 10;
-    return { ...s, score: Math.max(0, Math.min(max, s.score)) };
-  });
+  // Quantising + clamping already happened in normalizeJudgeScores(); the only
+  // other path to `scores` is the zeroed fallback, which needs neither.
 
   return {
     judgeId,
