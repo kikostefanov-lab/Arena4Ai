@@ -13,7 +13,7 @@ shows you the whole thing as a live broadcast.
 It drives **the agent CLIs you already have installed** — `claude`, `codex`, `gemini` — as
 subprocesses. You bring your own agents and your own auth. **There is no API key to configure.**
 
-![The live arena at the end of a match — winner banner, per-criterion scores](arena-v2-working.png)
+![The isometric arena: every block is a file an agent delivered, two teams on parallel bands](docs/arena-hero.jpg)
 
 ---
 
@@ -69,12 +69,10 @@ by win count, Buchholz tiebreaker).
 
 ## See it running
 
-- **`marketing/sizzle.mp4`** — a 63-second cut of the product. Also embedded at
-  [arena4.ai](https://arena4.ai).
-- **`arena-v2-working.png`** — the live arena at the moment a match resolves (above).
-- **`homepage-top-viewport.png`** — the competition gallery.
+- **[arena4.ai](https://arena4.ai)** — a 63-second cut of the product, rendered
+  against the live arena view, plus screenshots from real competitions.
+- **`docs/arena-hero.jpg`** (above) — the isometric arena as a match resolves.
 
-![Competition gallery](homepage-top-viewport.png)
 
 ## Requirements
 
@@ -645,8 +643,10 @@ npm run sizzle         --workspace=packages/video   # both
 npx tsx packages/video/scripts/inspect-sizzle.ts    # one still per scene, for fast QA
 ```
 
-Output lands in `packages/video/out/` (gitignored). The 16:9 cut is copied to `marketing/sizzle.mp4`
-and `packages/web/public/sizzle.mp4`.
+Output lands in `packages/video/out/` (gitignored, because it is regenerable).
+Publishing the cut to arena4.ai is done from the site repository, which stamps a
+content hash onto the asset URL so a corrected video actually reaches viewers who
+have already loaded the page.
 
 ## Marketing site
 
