@@ -18,7 +18,10 @@ import { chromium, Browser, Page } from 'playwright';
 import path from 'node:path';
 import fs from 'node:fs';
 
-const LAUNCH_COMPETITION_ID = '78c7452f-bab5-47cf-915e-188249503c80';
+// The competition the reel is cut from. Single constant, single place — see
+// scripts/sizzle-source.ts for why it is no longer the launch-strategy run.
+import { SIZZLE_COMPETITION_ID } from './sizzle-source.js';
+const LAUNCH_COMPETITION_ID = SIZZLE_COMPETITION_ID;
 const WEB = 'http://localhost:3001';
 
 const OUT_DIR = path.resolve(__dirname, '../public/sizzle-assets');

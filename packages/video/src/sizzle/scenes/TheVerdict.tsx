@@ -1,12 +1,25 @@
 import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig, interpolate, staticFile, spring } from 'remotion';
 import { TronGrid } from '../../components/TronGrid';
 import { ACCENT_CYAN, ACCENT_ORANGE, BG_DARK, BG_CARD, ORBITRON, TEXT_PRIMARY, TEXT_MUTED, getModelColor } from '../../tokens';
+import { ARENA_SUMMARY, ARENA_WINNER_ID } from '../arena-data';
 
-const SCORES = [
-  { model: 'claude', persona: 'architect',  score: 87, color: getModelColor('claude'), winner: true },
-  { model: 'codex',  persona: 'adversarial', score: 86, color: getModelColor('codex'), winner: false },
-  { model: 'gemini', persona: 'pioneer',    score: 68, color: getModelColor('gemini'), winner: false },
-];
+/**
+ * Scores come from the SAME competition the screenshot behind them shows.
+ *
+ * They used to be a hardcoded 87 / 86 / 68 — the real numbers from a different
+ * competition than the one on screen. Once the reel was re-cut against another
+ * run, the foreground and the background were telling different stories, and the
+ * bars would have been presenting one competition's result over another's
+ * picture. Generated from `ARENA_SUMMARY` now, so the two cannot diverge again.
+ */
+const SCORES = ARENA_SUMMARY.map((t, i) => ({
+  model: t.model,
+  score: Math.round((t.score ?? 0) * 100),
+  color: getModelColor(t.model),
+  // From the stored winnerId, not from max(score): this competition is a TIE on
+  // final score, and max() would light up both bars as the winner.
+  winner: t.id === ARENA_WINNER_ID,
+}));
 
 export const TheVerdict: React.FC = () => {
   const frame = useCurrentFrame();
@@ -109,10 +122,21 @@ export const TheVerdict: React.FC = () => {
                 fontSize: titleSize,
                 fontWeight: 800,
                 color: s.color,
-                minWidth: '10em',
+                // FIXED width, not minWidth: the bar track is `flex: 1`, so a
+                // label that overflows steals track width and two IDENTICAL
+                // scores render as two visibly DIFFERENT bar lengths — the
+                // picture contradicting the caption on the one scene whose
+                // point is that the scores are level.
+                width: '10em',
+                flexShrink: 0,
+                overflow: 'hidden',
+                whiteSpace: 'nowrap',
                 letterSpacing: '0.05em',
               }}>
-                {s.model}:{s.persona}
+                {/* Model only. The stored persona ("turnaround chief pruban") is
+                    internal config, reads as gibberish publicly, and the claim
+                    this scene makes is about models, not personas. */}
+                {s.model}
               </div>
               <div style={{ flex: 1, height: 8, background: 'rgba(255,255,255,0.05)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
                 <div style={{
