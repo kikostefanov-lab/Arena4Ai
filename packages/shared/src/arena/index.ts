@@ -17,8 +17,8 @@ export { clamp, lerp, easeOut, poly, rrect } from './canvas2d.js';
 export type { Insets, Viewport, Projected, CameraState } from './camera.js';
 export { NO_INSETS, DEFAULT_YAW, DEFAULT_PITCH, createCamera, safeBox, worldScale, focus, project, stepCamera, setYaw } from './camera.js';
 
-export type { Cell, GridExtent, BlockBudget } from './layout.js';
-export { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
+export type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
+export { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 
 export type { KnownProvider, FrameEventKind, FrameEvent, EditDepthMode, TeamTelemetry } from './event-model.js';
 export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry } from './event-model.js';

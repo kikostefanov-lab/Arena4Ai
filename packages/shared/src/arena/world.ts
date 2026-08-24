@@ -1,8 +1,8 @@
 import type { FrameEvent, TeamTelemetry, EditDepthMode } from './event-model.js';
 import { resolveTelemetry, providerOf, capabilityFor } from './event-model.js';
 import { getModelColor } from '../design/tokens.js';
-import type { Cell, GridExtent, BlockBudget } from './layout.js';
-import { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
+import type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
+import { planGrid, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 
 /** What the renderer needs to know about one competitor. */
 export interface TeamSpec {
@@ -69,7 +69,15 @@ export interface Structure {
 }
 
 export interface TeamState extends TeamSpec {
+  /**
+   * Which half of the floor the team leans toward, used for facing and for the
+   * camera. It is derived from the band rather than from the team index — the
+   * bug this replaced was `side = i % 2 === 0 ? -1 : 1`, which handed teams 0
+   * and 2 the same half and stood them inside one another.
+   */
   side: -1 | 1;
+  /** The team's parallel band of the long axis, and where its figure stands. */
+  band: Band;
   color: string;
   cells: Cell[];
   nextCell: number;
@@ -164,7 +172,7 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     widest = Math.max(widest, blocks);
   }
 
-  const grid = planGrid(Math.max(widest, 1));
+  const grid = planGrid(Math.max(widest, 1), teams.length);
 
   const world: World = {
     grid,
@@ -183,16 +191,20 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     notes: [],
   };
 
+  const bands = bandsFor(teams.length, grid, baseX);
+
   teams.forEach((spec, i) => {
-    const side: -1 | 1 = i % 2 === 0 ? -1 : 1;
+    const band = bands[i];
+    const side: -1 | 1 = band.baseX < 0 ? -1 : 1;
     const fileEvents = events.filter((e) => e.kind === 'file' && e.teamId === spec.id);
     const telemetry = resolveTelemetry(spec.model, fileEvents);
     const budget = budgets.get(spec.id)!;
     world.teams.set(spec.id, {
       ...spec,
       side,
+      band,
       color: getModelColor(spec.model),
-      cells: cellOrder(side, grid, baseX),
+      cells: bandCells(band, grid),
       nextCell: 0,
       counts: { files: 0, edits: 0, tools: 0, errors: 0, reasoning: 0 },
       latest: '',
@@ -452,11 +464,15 @@ export function refreshNotes(world: World): void {
 export function ensureGridCapacity(world: World, needed: number): boolean {
   if (needed <= world.grid.capacity) return false;
 
-  const grid = planGrid(needed);
+  const grid = planGrid(needed, world.teams.size);
   world.grid = grid;
 
+  const bands = bandsFor(world.teams.size, grid, world.baseX);
+  let i = 0;
   for (const team of world.teams.values()) {
-    team.cells = cellOrder(team.side, grid, world.baseX);
+    team.band = bands[i++];
+    team.side = team.band.baseX < 0 ? -1 : 1;
+    team.cells = bandCells(team.band, grid);
   }
   // Re-place every existing structure in its original insertion order.
   const cursors = new Map<string, number>();

@@ -121,6 +121,8 @@ canvas#arena{position:absolute;inset:0;width:100%;height:100%;display:block}
           <option value="prose">absent · prose, no paths</option>
           <option value="undeclared">absent · undeclared provider</option>
           <option value="live">LIVE · incremental append (AA-066 path)</option>
+          <option value="three">bands · 3 teams</option>
+          <option value="four">bands · 4 teams</option>
           <option value="stress">stress · 220 files / team</option>
           <option value="rollup">rollup · 900 files / team</option>
         </select>
@@ -150,6 +152,16 @@ const TEAMS = [
 // An adapter that has not declared its capabilities in PROVIDER_FILE_CAPABILITIES.
 // It reports paths perfectly well but no operation, so its floor is placed and
 // then held flat and hatched — the case that cannot be seen event-by-event.
+const TEAMS_3 = [
+  { id: 'team-a', model: 'claude', persona: 'architect',   modelVariant: 'claude-opus-5' },
+  { id: 'team-b', model: 'codex',  persona: 'speedrunner', modelVariant: 'gpt-5.3-codex' },
+  { id: 'team-c', model: 'gemini', persona: 'pioneer',     modelVariant: 'gemini-3-pro' },
+];
+const TEAMS_4 = [
+  ...TEAMS_3,
+  { id: 'team-d', model: 'claude', persona: 'adversarial', modelVariant: 'claude-sonnet-5' },
+];
+
 const TEAMS_UNDECLARED = [
   TEAMS[0],
   { id: 'team-b', model: 'mistral', persona: 'speedrunner', modelVariant: 'mistral-large' },
@@ -165,6 +177,8 @@ const SCENARIOS = {
   // construct with an empty stream, appendEvents() as they arrive, setTime()
   // from a host-owned clock. The floor is not sized up front and must regrow.
   live: { mode: 'modern', filesPerTeam: 140, live: true, label: 'LIVE · empty start, appendEvents + setTime, floor regrows' },
+  three: { mode: 'modern', filesPerTeam: 30, teams: TEAMS_3, label: '3 teams · parallel bands' },
+  four:  { mode: 'modern', filesPerTeam: 30, teams: TEAMS_4, label: '4 teams · parallel bands' },
   // 220 sits just under MAX_BLOCKS_PER_TEAM, so this is the real one-block-per-
   // file stress: 440 blocks on the floor at once, which the spike's fixed 8×5
   // grid could not have drawn — it had 61 cells a side and stacked the rest.
@@ -260,6 +274,11 @@ function updateHud() {
 
   if (hudAcc++ % 3 === 0) {
     for (const team of w.teams.values()) {
+      // The harness HUD has lanes for the first two teams only; a 3- or 4-team
+      // scenario has world teams with no DOM behind them. Guard rather than
+      // throw — an exception here kills the animation frame and the arena stops
+      // dead, which is exactly how a HUD bug gets mistaken for a renderer bug.
+      if (!$(`${team.id}-files`)) continue;
       for (const k of ['files', 'edits', 'tools', 'errors']) $(`${team.id}-${k}`).textContent = team.counts[k];
       $(`${team.id}-latest`).textContent = team.latest || '—';
       const tel = $(`${team.id}-tel`);

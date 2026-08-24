@@ -10,7 +10,7 @@ import {
   recoverLegacyPath,
   UNKNOWN_PROVIDER_CAPABILITY,
 } from './event-model.js';
-import { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
+import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 import { createWorld, applyEvent, targetHeight } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
 import { IsoArenaRenderer } from './renderer.js';
@@ -468,3 +468,106 @@ describe('telemetry is derived on EVERY playback path, not just the live one', (
     expect(r.world.teams.get('b')!.telemetry.editDepth).toBe('inferred');
   });
 });
+
+describe('parallel bands — N teams get N bands, and none of them overlap', () => {
+  /**
+   * The bug this replaces: `side = i % 2 === 0 ? -1 : 1` gave teams 0 and 2 the
+   * SAME half of the floor — the same cells and the same standing position — so
+   * a three-way competition rendered two gladiators inside each other and one
+   * city on top of another. Every test and every harness scenario used two
+   * teams, which is exactly why nothing caught it until a real 3-team
+   * competition was opened.
+   */
+  const mk = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `t${i}`, model: ['claude', 'codex', 'gemini', 'claude'][i] }));
+
+  /** Place `count` files for every team and return the world. */
+  const build = (n: number, count: number) => {
+    const teams = mk(n);
+    const raw = teams.flatMap((t, ti) =>
+      Array.from({ length: count }, (_, i) =>
+        ev('FILE_CREATE', t.id, { path: `${t.id}/f${i}.py`, op: 'create', opSource: 'tool', text: '' }, ti * 1000 + i),
+      ),
+    );
+    const evs = toFrameEvents(raw, T0);
+    const w = createWorld(teams, evs);
+    for (const e of evs) { w.t = e.t; applyEvent(w, e, false); }
+    return w;
+  };
+
+  it('THE TWO-TEAM LAYOUT IS UNCHANGED — pinned so it cannot drift', () => {
+    // god's constraint: bands must reproduce the accepted composition exactly.
+    // These are the values the two-team arena has always had.
+    const grid = planGrid(1, 2);
+    expect(grid.gx).toBe(8);
+    expect(grid.gz).toBe(5);
+    expect(bandFor(0, 2, grid, 6.2).baseX).toBe(-6.2);
+    expect(bandFor(1, 2, grid, 6.2).baseX).toBe(6.2);
+    // Bands split at the centre line, and the x=0 column belongs to neither.
+    const left = bandCells(bandFor(0, 2, grid, 6.2), grid);
+    const right = bandCells(bandFor(1, 2, grid, 6.2), grid);
+    expect(left.every((c) => c.x < 0)).toBe(true);
+    expect(right.every((c) => c.x > 0)).toBe(true);
+    expect(left.length).toBe(right.length);
+    // Nearest-to-base ordering: the first cell is the closest to the figure.
+    expect(Math.abs(left[0].x - -6.2)).toBeLessThan(1.5);
+  });
+
+  it.each([2, 3, 4])('gives %i teams DISTINCT gladiator positions', (n) => {
+    const w = build(n, 3);
+    const xs = [...w.teams.values()].map((t) => t.band.baseX);
+    expect(new Set(xs).size).toBe(n);
+  });
+
+  it.each([2, 3, 4])('gives %i teams NON-OVERLAPPING bands in team order', (n) => {
+    const grid = planGrid(1, n);
+    const bands = bandsFor(n, grid, 6.2);
+    expect(bands.length).toBe(n);
+    for (let i = 1; i < n; i++) {
+      expect(bands[i].lo).toBeGreaterThanOrEqual(bands[i - 1].hi - 1e-9);
+    }
+    expect(bands[0].lo).toBeCloseTo(-grid.gx);
+    expect(bands[n - 1].hi).toBeCloseTo(grid.gx);
+  });
+
+  it.each([2, 3, 4])('never places two of %i teams on the same cell', (n) => {
+    const w = build(n, 12);
+    const seen = new Map<string, string>();
+    for (const st of w.structures.values()) {
+      const key = `${st.x},${st.z}`;
+      const other = seen.get(key);
+      expect(other === undefined || other === st.teamId).toBe(true);
+      seen.set(key, st.teamId);
+    }
+    expect(w.structures.size).toBe(n * 12);
+    expect(seen.size).toBe(n * 12);
+  });
+
+  it('a figure never stands inside another team’s band', () => {
+    for (const n of [2, 3, 4]) {
+      const grid = planGrid(1, n);
+      const bands = bandsFor(n, grid, 6.2);
+      bands.forEach((b, i) => {
+        expect(b.baseX).toBeGreaterThanOrEqual(b.lo);
+        expect(b.baseX).toBeLessThanOrEqual(b.hi);
+        bands.forEach((o, j) => {
+          if (i === j) return;
+          expect(b.baseX > o.lo && b.baseX < o.hi).toBe(false);
+        });
+      });
+    }
+  });
+
+  it('sizes the floor per BAND, so four teams are not given a two-team floor', () => {
+    // planGrid(needed, n) must grow with n: the same per-team demand on more
+    // teams needs more floor, or the extra bands stack like the old code did.
+    const two = planGrid(60, 2);
+    const four = planGrid(60, 4);
+    expect(four.gx).toBeGreaterThan(two.gx);
+    for (const n of [2, 3, 4]) {
+      const g = planGrid(60, n);
+      const bands = bandsFor(n, g, 6.2);
+      for (const b of bands) expect(bandCells(b, g).length).toBeGreaterThanOrEqual(60);
+    }
+  });
+})

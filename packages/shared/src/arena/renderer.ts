@@ -103,7 +103,7 @@ export class IsoArenaRenderer {
       this.units.set(team.id, {
         teamId: team.id,
         side: team.side,
-        x: team.side * this.world.baseX,
+        x: team.band.baseX,
         z: 0,
         color: team.color,
         provider: team.telemetry.provider,
@@ -361,8 +361,28 @@ export class IsoArenaRenderer {
     // territory tint
     for (const team of this.world.teams.values()) {
       const isLoser = this.world.phase === 'reveal' && this.world.winnerId !== null && team.id !== this.world.winnerId;
-      const pts = [P(team.side * 0.2, 0, -gz), P(team.side * gx, 0, -gz), P(team.side * gx, 0, gz), P(team.side * 0.2, 0, gz)];
-      const g = ctx.createLinearGradient(P(team.side * gx, 0, 0).x, 0, P(0, 0, 0).x, 0);
+      /**
+       * The tint fills the team's OWN BAND. Painting a whole half-floor per team
+       * was fine while there were only ever two of them; at three it drew two
+       * teams' territory on top of each other — the same bug as the cells.
+       *
+       * A band that lies to one side of the centre line keeps the original
+       * treatment exactly: solid at its outer edge, fading to nothing at the
+       * inner edge, which is held 0.2 short of the centre so the floor still
+       * reads as divided. At N=2 those are the only bands there are, so this is
+       * the accepted two-team picture unchanged. A band STRADDLING the centre
+       * line — only possible for the middle team of an odd split — has no outer
+       * edge to anchor to, so it fades outward from where its figure stands.
+       */
+      const { lo, hi } = team.band;
+      const straddles = lo < 0 && hi > 0;
+      const outer = straddles ? hi : Math.abs(lo) >= Math.abs(hi) ? lo : hi;
+      const innerRaw = straddles ? lo : outer === lo ? hi : lo;
+      const inner = straddles ? innerRaw : innerRaw + (outer < innerRaw ? -0.2 : 0.2);
+      const pts = [P(inner, 0, -gz), P(outer, 0, -gz), P(outer, 0, gz), P(inner, 0, gz)];
+      const g = straddles
+        ? ctx.createLinearGradient(P(team.band.baseX, 0, 0).x, 0, P(outer, 0, 0).x, 0)
+        : ctx.createLinearGradient(P(outer, 0, 0).x, 0, P(0, 0, 0).x, 0);
       const a = (isLoser ? 0.03 : 0.1) * dim + (this.world.phase === 'reveal' && team.id === this.world.winnerId ? 0.06 : 0);
       g.addColorStop(0, rgba(team.color, a));
       g.addColorStop(1, rgba(team.color, 0));
