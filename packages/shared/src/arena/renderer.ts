@@ -5,7 +5,7 @@ import type { CameraState, Viewport, Projected } from './camera.js';
 import { createCamera, project, worldScale, focus, stepCamera, safeBox, NO_INSETS, DEFAULT_YAW } from './camera.js';
 import type { FrameEvent } from './event-model.js';
 import type { World, TeamState, Structure, TeamSpec } from './world.js';
-import { createWorld, resetWorld, applyEvent, phaseFor } from './world.js';
+import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats } from './world.js';
 
 /**
  * The isometric arena renderer.
@@ -61,13 +61,20 @@ interface Pose { lean: number; armR: number; armL: number; crouch: number; tint:
 
 const EFFECT_CAP = 220;
 
+/**
+ * How many extra cells a live regrow buys. Growing by one every time would
+ * rescale the floor on every single file; growing in chunks keeps the rescale
+ * rare enough to read as a camera move rather than a twitch.
+ */
+const GRID_GROWTH_STEP = 32;
+
 export class IsoArenaRenderer {
   readonly world: World;
   readonly camera: CameraState = createCamera();
 
   private ctx: Ctx2D | null = null;
   private viewport: Viewport = { width: 1200, height: 640, dpr: 1, insets: NO_INSETS };
-  private readonly events: FrameEvent[];
+  private events: FrameEvent[];
   private readonly units = new Map<string, Unit>();
   private effects: Effect[] = [];
   private applied = 0;
@@ -75,7 +82,8 @@ export class IsoArenaRenderer {
   private showLegend: boolean;
 
   readonly timeLimitMs: number;
-  readonly totalMs: number;
+  /** End of the stream. Grows in live mode as events arrive. */
+  totalMs: number;
 
   /** Reused across frames so a 400-block floor allocates nothing per frame. */
   private sortIdx: Int32Array = new Int32Array(0);
@@ -95,7 +103,7 @@ export class IsoArenaRenderer {
       this.units.set(team.id, {
         teamId: team.id,
         side: team.side,
-        x: team.side * this.world.baseX,
+        x: team.band.baseX,
         z: 0,
         color: team.color,
         provider: team.telemetry.provider,
@@ -129,14 +137,117 @@ export class IsoArenaRenderer {
     return this.world.notes;
   }
 
+  // ─── live mode ─────────────────────────────────────────────────────────────
+  //
+  // Everything above this line is the replay contract: hand the renderer a
+  // finished event list and scrub through it. That is what a recorded
+  // competition and a Remotion render both need, and its behaviour is unchanged.
+  //
+  // A LIVE competition is a different shape and the replay contract cannot
+  // express it: the events do not exist yet when the renderer is constructed, so
+  // the floor cannot be sized, the end of the stream is unknown, and what the
+  // provider actually reports is not yet observable. The two methods below are
+  // ADDITIVE — no existing method changes behaviour — and they are the whole of
+  // what live needs.
+
+  /**
+   * Feed newly-arrived events. Safe to call every frame with an empty array.
+   *
+   * Appends rather than rebuilding, so the cost is proportional to what ARRIVED,
+   * not to the length of the competition so far. A live arena that re-derived
+   * its world from the full history on every websocket message would degrade
+   * quadratically over exactly the runs worth watching.
+   */
+  appendEvents(incoming: FrameEvent[]): void {
+    if (incoming.length === 0) return;
+    for (const ev of incoming) {
+      this.events.push(ev);
+      if (ev.kind === 'file' && ev.teamId) {
+        const team = this.world.teams.get(ev.teamId);
+        if (team) foldFileStats(team.fileStats, ev);
+      }
+    }
+    const last = this.events[this.events.length - 1];
+    this.totalMs = Math.max(this.totalMs, last.t + 2000);
+    this.syncTelemetry();
+  }
+
+  /**
+   * Make room for one more block before it is placed.
+   *
+   * This has to run in the APPLY path rather than when events are appended.
+   * Both the floor's occupancy and a team's telemetry are consequences of events
+   * being APPLIED, not of their arriving — an event that has arrived but whose
+   * timestamp the clock has not yet reached has changed nothing. Doing it at
+   * append time left both exactly one step stale, which for the grid means the
+   * check passes and then the block that overflows it is placed anyway.
+   */
+  private reserveCell(ev: FrameEvent): void {
+    if (ev.kind !== 'file' || !ev.path || !ev.teamId) return;
+    const team = this.world.teams.get(ev.teamId);
+    if (!team) return;
+    // Two cells of headroom: the check must fail BEFORE the cursor can be
+    // clamped, never on the event that would already have been stacked.
+    if (team.nextCell < team.cells.length - 2) return;
+    ensureGridCapacity(this.world, team.cells.length + GRID_GROWTH_STEP);
+  }
+
+  /**
+   * Re-derive per-team telemetry from the running tallies. What a provider
+   * actually reports is not observable until it has reported something, so a
+   * live arena starts out knowing only what the capability table declares and
+   * learns the rest. Cheap — one pass over the teams, not over the events.
+   */
+  private syncTelemetry(): void {
+    let changed = false;
+    for (const team of this.world.teams.values()) {
+      const next = telemetryFromStats(team.model, team.fileStats);
+      if (next.editDepth !== team.telemetry.editDepth || next.note !== team.telemetry.note) {
+        team.telemetry = next;
+        changed = true;
+      }
+    }
+    if (changed) refreshNotes(this.world);
+  }
+
+  /**
+   * Set the arena clock directly. In live mode the HOST owns the clock — it
+   * knows the real elapsed competition time — whereas `tick()` integrates its
+   * own and is clamped to the end of a known stream, which a live stream has
+   * not got. Applies every event the jump passed over, with effects, so the
+   * arena animates rather than teleporting.
+   */
+  setTime(tMs: number): void {
+    const t = Math.max(0, tMs);
+    if (t < this.world.t) {
+      // Time moved backwards: only a rebuild is coherent.
+      this.seek(t);
+      return;
+    }
+    this.world.t = t;
+    let applied = false;
+    while (this.applied < this.events.length && this.events[this.applied].t <= t) {
+      const ev = this.events[this.applied++];
+      this.reserveCell(ev);
+      this.applyLive(ev);
+      applied = true;
+    }
+    void applied;
+  }
+
   // ─── time ──────────────────────────────────────────────────────────────────
 
   /** Advance playback by `dtMs` of arena time, applying any events it passes. */
   tick(dtMs: number): void {
     this.world.t = Math.min(this.totalMs, this.world.t + dtMs);
+    let applied = false;
     while (this.applied < this.events.length && this.events[this.applied].t <= this.world.t) {
-      this.applyLive(this.events[this.applied++]);
+      const ev = this.events[this.applied++];
+      this.reserveCell(ev);
+      this.applyLive(ev);
+      applied = true;
     }
+    void applied;
   }
 
   /** Jump to `t`, rebuilding the world without firing effects. */
@@ -250,8 +361,28 @@ export class IsoArenaRenderer {
     // territory tint
     for (const team of this.world.teams.values()) {
       const isLoser = this.world.phase === 'reveal' && this.world.winnerId !== null && team.id !== this.world.winnerId;
-      const pts = [P(team.side * 0.2, 0, -gz), P(team.side * gx, 0, -gz), P(team.side * gx, 0, gz), P(team.side * 0.2, 0, gz)];
-      const g = ctx.createLinearGradient(P(team.side * gx, 0, 0).x, 0, P(0, 0, 0).x, 0);
+      /**
+       * The tint fills the team's OWN BAND. Painting a whole half-floor per team
+       * was fine while there were only ever two of them; at three it drew two
+       * teams' territory on top of each other — the same bug as the cells.
+       *
+       * A band that lies to one side of the centre line keeps the original
+       * treatment exactly: solid at its outer edge, fading to nothing at the
+       * inner edge, which is held 0.2 short of the centre so the floor still
+       * reads as divided. At N=2 those are the only bands there are, so this is
+       * the accepted two-team picture unchanged. A band STRADDLING the centre
+       * line — only possible for the middle team of an odd split — has no outer
+       * edge to anchor to, so it fades outward from where its figure stands.
+       */
+      const { lo, hi } = team.band;
+      const straddles = lo < 0 && hi > 0;
+      const outer = straddles ? hi : Math.abs(lo) >= Math.abs(hi) ? lo : hi;
+      const innerRaw = straddles ? lo : outer === lo ? hi : lo;
+      const inner = straddles ? innerRaw : innerRaw + (outer < innerRaw ? -0.2 : 0.2);
+      const pts = [P(inner, 0, -gz), P(outer, 0, -gz), P(outer, 0, gz), P(inner, 0, gz)];
+      const g = straddles
+        ? ctx.createLinearGradient(P(team.band.baseX, 0, 0).x, 0, P(outer, 0, 0).x, 0)
+        : ctx.createLinearGradient(P(outer, 0, 0).x, 0, P(0, 0, 0).x, 0);
       const a = (isLoser ? 0.03 : 0.1) * dim + (this.world.phase === 'reveal' && team.id === this.world.winnerId ? 0.06 : 0);
       g.addColorStop(0, rgba(team.color, a));
       g.addColorStop(1, rgba(team.color, 0));

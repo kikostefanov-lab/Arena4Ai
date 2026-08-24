@@ -10,9 +10,10 @@ import {
   recoverLegacyPath,
   UNKNOWN_PROVIDER_CAPABILITY,
 } from './event-model.js';
-import { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
+import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 import { createWorld, applyEvent, targetHeight } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
+import { IsoArenaRenderer } from './renderer.js';
 import { MODEL_COLORS } from '../design/tokens.js';
 
 const T0 = Date.parse('2026-08-24T00:00:00.000Z');
@@ -320,3 +321,253 @@ describe('a provider that cannot report operations gets a flat, hatched city', (
     }
   });
 });
+
+describe('live mode — a stream that does not exist yet when the renderer is built', () => {
+  const teams = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }];
+  const file = (team: string, path: string, t: number, legacy = false) =>
+    toFrameEvent(
+      ev('FILE_CREATE', team, legacy ? { text: path } : { path, op: 'create', opSource: 'tool', text: '' }, t),
+      T0,
+    );
+
+  it('starts empty and still places blocks as events arrive', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    expect(r.world.structures.size).toBe(0);
+    r.appendEvents([file('a', 'src/x.py', 100), file('b', 'main.go', 200)]);
+    r.setTime(500);
+    expect(r.world.structures.size).toBe(2);
+  });
+
+  it('grows the floor rather than stacking, once the initial grid is outgrown', () => {
+    // The replay path sizes the grid up front. Live cannot, so the failure mode
+    // being guarded here is the prototype's: a placement cursor running past the
+    // end of `cells` and silently piling every later file onto the last one.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 600_000 });
+    const startCapacity = r.world.grid.capacity;
+    const n = startCapacity + 40;
+    for (let i = 0; i < n; i++) {
+      r.appendEvents([file('a', `src/f${i}.py`, i * 10)]);
+      r.setTime(i * 10 + 1);
+    }
+    expect(r.world.grid.capacity).toBeGreaterThan(startCapacity);
+    expect(r.world.structures.size).toBe(n);
+    const cells = new Set([...r.world.structures.values()].map((s) => `${s.x},${s.z}`));
+    expect(cells.size).toBe(n);
+  });
+
+  it('preserves placement ORDER across a regrow, so blocks keep their neighbours', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 600_000 });
+    const n = r.world.grid.capacity + 5;
+    for (let i = 0; i < n; i++) {
+      r.appendEvents([file('a', `src/f${i}.py`, i * 10)]);
+      r.setTime(i * 10 + 1);
+    }
+    // The order structures were created in must still match the cell order the
+    // (larger) grid hands out, or a regrow would shuffle the city.
+    const team = r.world.teams.get('a')!;
+    const placed = r.world.order
+      .map((id) => r.world.structures.get(id)!)
+      .filter((st) => st.teamId === 'a');
+    placed.forEach((st, i) => {
+      expect({ x: st.x, z: st.z }).toEqual({ x: team.cells[i].x, z: team.cells[i].z });
+    });
+  });
+
+  it('learns the provider reports no operations only once events arrive', () => {
+    // An empty live stream cannot yet know; it must not guess 'inferred' early
+    // and it must not stay 'measured' once legacy events prove otherwise.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    expect(r.world.teams.get('a')!.telemetry.editDepth).toBe('measured');
+    expect(r.honestyNotes).toEqual([]);
+
+    r.appendEvents([file('a', 'src/x.py', 100, true)]);
+    r.setTime(150);
+    r.appendEvents([]);
+    expect(r.world.teams.get('a')!.telemetry.editDepth).toBe('inferred');
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+  });
+
+  it('setTime is monotonic-safe and rebuilds coherently when time goes backwards', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([file('a', 'a.py', 100), file('a', 'b.py', 200), file('a', 'c.py', 300)]);
+    r.setTime(1000);
+    expect(r.world.structures.size).toBe(3);
+    r.setTime(150);
+    expect(r.world.structures.size).toBe(1);
+  });
+
+  it('does not clamp live time to a stream end it cannot know', () => {
+    // tick() is clamped to totalMs, which is right for a finished recording and
+    // wrong for a running competition — the clock would freeze during any quiet
+    // stretch. setTime is the live path precisely because the host owns the clock.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.setTime(500_000);
+    expect(r.world.t).toBe(500_000);
+  });
+
+  it('leaves the replay contract untouched', () => {
+    const events = [file('a', 'x.py', 100), file('a', 'y.py', 200)];
+    const r = new IsoArenaRenderer({ teams, events, timeLimitMs: 120_000 });
+    expect(r.totalMs).toBe(2200);
+    r.tick(10_000);
+    expect(r.world.t).toBe(2200);   // still clamped, as before
+    expect(r.world.structures.size).toBe(2);
+  });
+});
+
+describe('telemetry is derived on EVERY playback path, not just the live one', () => {
+  // A React host cannot know the events at mount, so it constructs with an
+  // empty list and feeds them in. If a path applies events without re-deriving
+  // telemetry, that host's honesty notes never appear at all — the caveat
+  // silently goes missing on exactly the competitions that need it.
+  const teams = [{ id: 'a', model: 'claude' }];
+  const legacy = toFrameEvent(ev('FILE_CREATE', 'a', { text: 'src/x.py' }, 100), T0);
+
+  it('appending derives it immediately — before the clock reaches the event', () => {
+    // The caveat must be true of the picture from the first frame. Waiting for
+    // playback to reach the evidence would mean an early screenshot of a
+    // historical competition ships without its qualification.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    expect(r.honestyNotes).toEqual([]);
+    r.appendEvents([legacy]);
+    expect(r.world.teams.get('a')!.telemetry.editDepth).toBe('inferred');
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+    r.tick(5000);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+  });
+
+  it('setTime() derives it', () => {
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([legacy]);
+    r.setTime(5000);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates file-operation telemetry/);
+  });
+
+  it('the caveat survives scrubbing — it describes the STREAM, not the playhead', () => {
+    // Losing the honesty note by dragging the scrubber to zero would mean the
+    // caveat is a function of where you are looking rather than of what the
+    // competition is, and a screenshot taken at t=0 would omit it.
+    const r = new IsoArenaRenderer({ teams, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([legacy]);
+    r.seek(5000);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates/);
+    r.seek(0);
+    expect(r.honestyNotes.join(' ')).toMatch(/predates/);
+  });
+
+  it('a replay built from a full list never DOWNGRADES its telemetry as it plays', () => {
+    // The bug this pins: telemetry derived from APPLIED events meant a world
+    // constructed knowing the whole stream had its honesty note deleted by the
+    // first tick, for every team whose files came later in the competition.
+    const late = toFrameEvent(ev('FILE_CREATE', 'b', { text: 'late.py' }, 90_000), T0);
+    const two = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }];
+    const r = new IsoArenaRenderer({ teams: two, events: [legacy, late], timeLimitMs: 120_000 });
+    expect(r.honestyNotes.length).toBe(2);
+    r.tick(5000);                       // only team a's event has been applied
+    expect(r.honestyNotes.length).toBe(2);
+    expect(r.world.teams.get('b')!.telemetry.editDepth).toBe('inferred');
+  });
+});
+
+describe('parallel bands — N teams get N bands, and none of them overlap', () => {
+  /**
+   * The bug this replaces: `side = i % 2 === 0 ? -1 : 1` gave teams 0 and 2 the
+   * SAME half of the floor — the same cells and the same standing position — so
+   * a three-way competition rendered two gladiators inside each other and one
+   * city on top of another. Every test and every harness scenario used two
+   * teams, which is exactly why nothing caught it until a real 3-team
+   * competition was opened.
+   */
+  const mk = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ id: `t${i}`, model: ['claude', 'codex', 'gemini', 'claude'][i] }));
+
+  /** Place `count` files for every team and return the world. */
+  const build = (n: number, count: number) => {
+    const teams = mk(n);
+    const raw = teams.flatMap((t, ti) =>
+      Array.from({ length: count }, (_, i) =>
+        ev('FILE_CREATE', t.id, { path: `${t.id}/f${i}.py`, op: 'create', opSource: 'tool', text: '' }, ti * 1000 + i),
+      ),
+    );
+    const evs = toFrameEvents(raw, T0);
+    const w = createWorld(teams, evs);
+    for (const e of evs) { w.t = e.t; applyEvent(w, e, false); }
+    return w;
+  };
+
+  it('THE TWO-TEAM LAYOUT IS UNCHANGED — pinned so it cannot drift', () => {
+    // god's constraint: bands must reproduce the accepted composition exactly.
+    // These are the values the two-team arena has always had.
+    const grid = planGrid(1, 2);
+    expect(grid.gx).toBe(8);
+    expect(grid.gz).toBe(5);
+    expect(bandFor(0, 2, grid, 6.2).baseX).toBe(-6.2);
+    expect(bandFor(1, 2, grid, 6.2).baseX).toBe(6.2);
+    // Bands split at the centre line, and the x=0 column belongs to neither.
+    const left = bandCells(bandFor(0, 2, grid, 6.2), grid);
+    const right = bandCells(bandFor(1, 2, grid, 6.2), grid);
+    expect(left.every((c) => c.x < 0)).toBe(true);
+    expect(right.every((c) => c.x > 0)).toBe(true);
+    expect(left.length).toBe(right.length);
+    // Nearest-to-base ordering: the first cell is the closest to the figure.
+    expect(Math.abs(left[0].x - -6.2)).toBeLessThan(1.5);
+  });
+
+  it.each([2, 3, 4])('gives %i teams DISTINCT gladiator positions', (n) => {
+    const w = build(n, 3);
+    const xs = [...w.teams.values()].map((t) => t.band.baseX);
+    expect(new Set(xs).size).toBe(n);
+  });
+
+  it.each([2, 3, 4])('gives %i teams NON-OVERLAPPING bands in team order', (n) => {
+    const grid = planGrid(1, n);
+    const bands = bandsFor(n, grid, 6.2);
+    expect(bands.length).toBe(n);
+    for (let i = 1; i < n; i++) {
+      expect(bands[i].lo).toBeGreaterThanOrEqual(bands[i - 1].hi - 1e-9);
+    }
+    expect(bands[0].lo).toBeCloseTo(-grid.gx);
+    expect(bands[n - 1].hi).toBeCloseTo(grid.gx);
+  });
+
+  it.each([2, 3, 4])('never places two of %i teams on the same cell', (n) => {
+    const w = build(n, 12);
+    const seen = new Map<string, string>();
+    for (const st of w.structures.values()) {
+      const key = `${st.x},${st.z}`;
+      const other = seen.get(key);
+      expect(other === undefined || other === st.teamId).toBe(true);
+      seen.set(key, st.teamId);
+    }
+    expect(w.structures.size).toBe(n * 12);
+    expect(seen.size).toBe(n * 12);
+  });
+
+  it('a figure never stands inside another team’s band', () => {
+    for (const n of [2, 3, 4]) {
+      const grid = planGrid(1, n);
+      const bands = bandsFor(n, grid, 6.2);
+      bands.forEach((b, i) => {
+        expect(b.baseX).toBeGreaterThanOrEqual(b.lo);
+        expect(b.baseX).toBeLessThanOrEqual(b.hi);
+        bands.forEach((o, j) => {
+          if (i === j) return;
+          expect(b.baseX > o.lo && b.baseX < o.hi).toBe(false);
+        });
+      });
+    }
+  });
+
+  it('sizes the floor per BAND, so four teams are not given a two-team floor', () => {
+    // planGrid(needed, n) must grow with n: the same per-team demand on more
+    // teams needs more floor, or the extra bands stack like the old code did.
+    const two = planGrid(60, 2);
+    const four = planGrid(60, 4);
+    expect(four.gx).toBeGreaterThan(two.gx);
+    for (const n of [2, 3, 4]) {
+      const g = planGrid(60, n);
+      const bands = bandsFor(n, g, 6.2);
+      for (const b of bands) expect(bandCells(b, g).length).toBeGreaterThanOrEqual(60);
+    }
+  });
+})

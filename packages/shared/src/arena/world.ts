@@ -1,8 +1,8 @@
 import type { FrameEvent, TeamTelemetry, EditDepthMode } from './event-model.js';
-import { resolveTelemetry } from './event-model.js';
+import { resolveTelemetry, providerOf, capabilityFor } from './event-model.js';
 import { getModelColor } from '../design/tokens.js';
-import type { Cell, GridExtent, BlockBudget } from './layout.js';
-import { planGrid, cellOrder, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
+import type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
+import { planGrid, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 
 /** What the renderer needs to know about one competitor. */
 export interface TeamSpec {
@@ -14,6 +14,31 @@ export interface TeamSpec {
 }
 
 export type BlockKind = 'src' | 'test' | 'doc' | 'config';
+
+/** Running tallies over a team's file events. See `TeamState.fileStats`. */
+export interface FileStats { total: number; withContract: number; withPath: number; legacy: number }
+
+/**
+ * Fold one file event into a team's tallies.
+ *
+ * Called when an event becomes KNOWN, not when it is applied. What a provider
+ * reports is a property of the stream, not of the playhead: an event that has
+ * arrived already proves what its provider does and does not tell us, whether
+ * or not the clock has reached it. Deriving it from applied events instead made
+ * a replay silently DOWNGRADE its own telemetry — the world is built knowing
+ * the whole list, and the first tick then recomputed from a partial tally and
+ * dropped the honesty note for every team whose files came later.
+ *
+ * Grid capacity is the opposite and must stay apply-time: a cell is only
+ * occupied when the block is actually placed.
+ */
+export function foldFileStats(stats: FileStats, ev: FrameEvent): void {
+  if (ev.kind !== 'file') return;
+  stats.total++;
+  if (ev.opSource && ev.op) stats.withContract++;
+  if (ev.path) stats.withPath++;
+  if (ev.legacy) stats.legacy++;
+}
 
 export interface Structure {
   teamId: string;
@@ -44,7 +69,15 @@ export interface Structure {
 }
 
 export interface TeamState extends TeamSpec {
+  /**
+   * Which half of the floor the team leans toward, used for facing and for the
+   * camera. It is derived from the band rather than from the team index — the
+   * bug this replaced was `side = i % 2 === 0 ? -1 : 1`, which handed teams 0
+   * and 2 the same half and stood them inside one another.
+   */
   side: -1 | 1;
+  /** The team's parallel band of the long axis, and where its figure stands. */
+  band: Band;
   color: string;
   cells: Cell[];
   nextCell: number;
@@ -54,6 +87,17 @@ export interface TeamState extends TeamSpec {
   budget: BlockBudget;
   /** Paths seen, for first-sighting inference on legacy streams. */
   seen: Set<string>;
+  /**
+   * Running tallies over this team's file events.
+   *
+   * LIVE MODE needs these. `resolveTelemetry()` folds a whole event list at
+   * once, which is right for a replay whose events all exist up front, but a
+   * live competition starts with an empty stream and learns what its provider
+   * reports only as events arrive. Re-folding the entire list on every arriving
+   * event would be O(n) per event — O(n squared) over a competition — so the
+   * facts telemetry depends on are accumulated as events are applied instead.
+   */
+  fileStats: FileStats;
 }
 
 export type Phase = 'active' | 'freeze' | 'judging' | 'reveal';
@@ -128,7 +172,7 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     widest = Math.max(widest, blocks);
   }
 
-  const grid = planGrid(Math.max(widest, 1));
+  const grid = planGrid(Math.max(widest, 1), teams.length);
 
   const world: World = {
     grid,
@@ -147,22 +191,28 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     notes: [],
   };
 
+  const bands = bandsFor(teams.length, grid, baseX);
+
   teams.forEach((spec, i) => {
-    const side: -1 | 1 = i % 2 === 0 ? -1 : 1;
+    const band = bands[i];
+    const side: -1 | 1 = band.baseX < 0 ? -1 : 1;
     const fileEvents = events.filter((e) => e.kind === 'file' && e.teamId === spec.id);
     const telemetry = resolveTelemetry(spec.model, fileEvents);
     const budget = budgets.get(spec.id)!;
     world.teams.set(spec.id, {
       ...spec,
       side,
+      band,
       color: getModelColor(spec.model),
-      cells: cellOrder(side, grid, baseX),
+      cells: bandCells(band, grid),
       nextCell: 0,
       counts: { files: 0, edits: 0, tools: 0, errors: 0, reasoning: 0 },
       latest: '',
       telemetry,
       budget,
       seen: new Set(),
+      fileStats: fileEvents.reduce<FileStats>((acc, e) => { foldFileStats(acc, e); return acc; },
+        { total: 0, withContract: 0, withPath: 0, legacy: 0 }),
     });
     if (telemetry.note) world.notes.push(telemetry.note);
     if (budget.note) world.notes.push(budget.note);
@@ -187,6 +237,8 @@ export function resetWorld(world: World): void {
     team.counts = { files: 0, edits: 0, tools: 0, errors: 0, reasoning: 0 };
     team.latest = '';
     team.seen.clear();
+    // fileStats deliberately survive: they describe the STREAM, so scrubbing to
+    // the start must not make a competition's honesty caveat disappear.
   }
 }
 
@@ -345,4 +397,98 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
       break;
     }
   }
+}
+
+// ─── live mode ───────────────────────────────────────────────────────────────
+
+/**
+ * Recompute a team's telemetry from its running tallies.
+ *
+ * Deliberately mirrors `resolveTelemetry()` branch for branch — the two must not
+ * be allowed to disagree, because one drives a replay's legend and the other
+ * drives a live competition's, and a viewer comparing the same competition live
+ * and afterwards must be told the same thing about it.
+ */
+export function telemetryFromStats(model: string, stats: TeamState['fileStats']): TeamTelemetry {
+  const provider = providerOf(model);
+  const capability = capabilityFor(model);
+  const legacy = stats.legacy > 0;
+
+  if (!capability.op) {
+    return {
+      provider, capability, editDepth: 'unavailable', legacy,
+      note: `${provider}: this provider does not report file operations — block heights are drawn flat, not low`,
+    };
+  }
+  if (stats.withContract > 0) return { provider, capability, editDepth: 'measured', legacy };
+  if (stats.total === 0) return { provider, capability, editDepth: 'measured', legacy: false };
+  if (stats.withPath > 0) {
+    return {
+      provider, capability, editDepth: 'inferred', legacy,
+      note: `${provider}: edit depth inferred from repeated paths — this competition predates file-operation telemetry`,
+    };
+  }
+  return {
+    provider, capability, editDepth: 'unavailable', legacy,
+    note: `${provider}: no file paths in these events — block heights are not measurable and are drawn flat`,
+  };
+}
+
+/** Rebuild `world.notes` from the current per-team telemetry and budgets. */
+export function refreshNotes(world: World): void {
+  world.notes.length = 0;
+  for (const team of world.teams.values()) {
+    if (team.telemetry.note) world.notes.push(team.telemetry.note);
+    if (team.budget.note) world.notes.push(team.budget.note);
+  }
+}
+
+/**
+ * Grow the floor so `needed` blocks fit for one team, WITHOUT disturbing which
+ * block sits where relative to its neighbours.
+ *
+ * A live competition cannot size its grid up front — it does not yet know how
+ * many files the agents will write. Left alone, the placement cursor would run
+ * past the end of `cells` and silently stack every later file onto the last
+ * cell, which is exactly the failure removed from the prototype in AA-065.
+ *
+ * Regrowing moves blocks, and that is a genuine cost: a viewer watching the
+ * floor sees it rescale. It is the lesser evil. The alternative — sizing every
+ * live arena for hundreds of files up front — would render a nine-file fizzbuzz
+ * as nine specks in an empty stadium, every time, to avoid a rescale that most
+ * competitions never trigger. Placement order is preserved exactly, so a block
+ * keeps its neighbours and its distance from the base; only the scale changes.
+ *
+ * Returns true when the grid actually changed.
+ */
+export function ensureGridCapacity(world: World, needed: number): boolean {
+  if (needed <= world.grid.capacity) return false;
+
+  const grid = planGrid(needed, world.teams.size);
+  world.grid = grid;
+
+  const bands = bandsFor(world.teams.size, grid, world.baseX);
+  let i = 0;
+  for (const team of world.teams.values()) {
+    team.band = bands[i++];
+    team.side = team.band.baseX < 0 ? -1 : 1;
+    team.cells = bandCells(team.band, grid);
+  }
+  // Re-place every existing structure in its original insertion order.
+  const cursors = new Map<string, number>();
+  for (const id of world.order) {
+    const st = world.structures.get(id);
+    if (!st) continue;
+    const team = world.teams.get(st.teamId);
+    if (!team) continue;
+    const i = cursors.get(team.id) ?? 0;
+    cursors.set(team.id, i + 1);
+    const cell = team.cells[Math.min(i, team.cells.length - 1)];
+    st.x = cell.x;
+    st.z = cell.z;
+  }
+  for (const team of world.teams.values()) {
+    team.nextCell = cursors.get(team.id) ?? 0;
+  }
+  return true;
 }
