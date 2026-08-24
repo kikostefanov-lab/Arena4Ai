@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { IsoArenaRenderer, toFrameEvent, phaseFor } from '@arena/shared';
+import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
 import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
@@ -289,6 +289,8 @@ export default function ArenaViewerV2({
   const originRef = useRef<number | null>(null);
   /** Current winner, so a renderer rebuilt mid-flight does not lose the verdict. */
   const winnerRef = useRef<string | null>(null);
+  /** End of stream the paused view is currently parked on. */
+  const parkedAtRef = useRef<number | null>(null);
 
   const [momentum, setMomentum] = useState(0);
   const [latest, setLatest] = useState<Record<string, string>>({});
@@ -364,14 +366,34 @@ export default function ArenaViewerV2({
     const r = rendererRef.current;
     if (!r) return;
 
-    // Competition start, fixed on the first event we ever see, so the renderer
-    // works in elapsed time regardless of when the events were recorded. This
-    // is also what makes a historical competition replay correctly.
-    if (originRef.current === null && events.length > 0) {
-      originRef.current = Date.parse(events[0].timestamp);
+    if (events.length === 0) return;
+
+    /**
+     * Competition start = the EARLIEST timestamp we hold, recomputed whenever
+     * something older turns up.
+     *
+     * Taking it from `events[0]` of the first non-empty array looked equivalent
+     * and was not: the page fills its event list progressively, so the first
+     * array to arrive is often a later chunk. Everything preceding that origin
+     * then clamped to t=0 and the whole competition collapsed into a couple of
+     * seconds — 78c7452f, which really spans 831s, reported a totalMs of 2426ms
+     * and drew an empty floor. An origin that can only ever be too late is a
+     * bug that hides as "nothing has happened yet".
+     */
+    let earliest = Infinity;
+    for (const e of events) {
+      const ts = Date.parse(e.timestamp);
+      if (ts < earliest) earliest = ts;
+    }
+    if (!Number.isFinite(earliest)) return;
+    if (originRef.current === null || earliest < originRef.current) {
+      // An older event than anything seen so far invalidates every `t` already
+      // computed, so the world has to be rebuilt against the corrected origin.
+      originRef.current = earliest;
+      consumedRef.current = 0;
+      lastIdRef.current = null;
     }
     const origin = originRef.current;
-    if (origin === null) return;
 
     /**
      * A FINISHED competition is a replay, and the renderer has a contract for
@@ -383,11 +405,26 @@ export default function ArenaViewerV2({
      * a picture with the caveat still missing from it.
      */
     if (!isLive && consumedRef.current === 0 && events.length > 0) {
-      const all = events.map((e) => toFrameEvent(e as never, origin));
+      // toFrameEvents (plural) sorts; toFrameEvent (singular) does not. The
+      // renderer walks its list with a monotonic cursor, so an unsorted list
+      // stalls at the first out-of-order timestamp.
+      const all = toFrameEvents(events as never, origin);
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
       const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
       replay.setWinner(winnerRef.current);
+      /**
+       * Open a FINISHED competition on its finished state, not on an empty floor.
+       *
+       * Playing a completed competition from t=0 by default is what made the
+       * arena look broken on real data: 78c7452f spans 831 seconds and its first
+       * file event is at t+259s, so at the default 3x a viewer stares at a bare
+       * floor for 86 seconds and waits four minutes to see all nine blocks. The
+       * city is the result; someone opening a finished match wants to see what
+       * was built, and can then rewind deliberately with the transport.
+       */
+      replay.seek(replay.totalMs);
       rendererRef.current = replay;
+      setPlaying(false);
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
       return;
@@ -401,7 +438,7 @@ export default function ArenaViewerV2({
     if (!prefixIntact) {
       // A reorder: the only coherent response is to rebuild from scratch.
       // Rare, and cheaper to do correctly than to patch up incrementally.
-      const all = events.map((e) => toFrameEvent(e as never, origin));
+      const all = toFrameEvents(events as never, origin);
       r.appendEvents([]);
       r.seek(0);
       rendererRef.current = null;
@@ -418,6 +455,9 @@ export default function ArenaViewerV2({
     for (let i = consumed; i < events.length; i++) {
       fresh.push(toFrameEvent(events[i] as never, origin));
     }
+    // The tail is appended in arrival order; the renderer's cursor needs it
+    // ordered, and a websocket can deliver two events out of order.
+    fresh.sort((a, b) => a.t - b.t);
     r.appendEvents(fresh);
     consumedRef.current = events.length;
     lastIdRef.current = events[events.length - 1]?.eventId ?? null;
@@ -454,6 +494,23 @@ export default function ArenaViewerV2({
             r.setTime(elapsedMs);
           } else if (playing) {
             r.tick(16.7 * speed);
+            parkedAtRef.current = null;
+          } else if (r.totalMs !== parkedAtRef.current) {
+            /**
+             * A finished competition parks on its END STATE, and re-parks
+             * whenever the stream grows.
+             *
+             * Seeking once at construction is not enough: the page delivers its
+             * events progressively, so the first batch can be a single event.
+             * The renderer then gets built from that one-event snapshot — end of
+             * stream 2,000ms — and everything afterwards is appended, so the
+             * view stays parked two seconds into an 831-second competition and
+             * the floor is bare. That is the empty arena. Re-parking on each
+             * change of totalMs converges on the real end as the list fills, and
+             * costs one seek per change rather than one per frame.
+             */
+            r.seek(r.totalMs);
+            parkedAtRef.current = r.totalMs;
           }
 
           if (orbit && phase !== 'reveal') {
@@ -556,8 +613,17 @@ export default function ArenaViewerV2({
       }}>
         {!isLive && (
           <>
-            <button type="button" onClick={() => setPlaying((p) => !p)} style={ctrlStyle(playing)}>
-              {playing ? 'Pause' : 'Play'}
+            <button
+              type="button"
+              onClick={() => {
+                const r = rendererRef.current;
+                // Sitting on the final frame, Play means "watch it again".
+                if (r && !playing && r.world.t >= r.totalMs) r.seek(0);
+                setPlaying((p) => !p);
+              }}
+              style={ctrlStyle(playing)}
+            >
+              {playing ? 'Pause' : 'Replay'}
             </button>
             {SPEEDS.map((s) => (
               <button key={s} type="button" onClick={() => setSpeed(s)} style={ctrlStyle(speed === s)}>

@@ -54,7 +54,15 @@ export function createApp(): Application {
   // Read-only routes stay open — that is the documented contract.
   app.use(requireApiKeyForMutations);
 
-  // Rate limiting: max 10 new competitions per minute per IP
+  // Rate limiting: max 10 new competitions per minute per IP.
+  //
+  // SCOPE THIS TO THE MUTATION, NEVER TO THE ROUTER. Mounted as
+  // `app.use('/competitions', createLimiter, router)` it charged every GET to
+  // the create budget — listing competitions, opening one, streaming its events
+  // — so a viewer refreshing a page a few times got
+  // "Too many competitions created" and the arena silently rendered no data at
+  // all. A limiter on a read path fails as MISSING CONTENT rather than as an
+  // error anyone notices, which is what let it survive.
   const createLimiter = rateLimit({
     windowMs: 60_000,
     max: 10,
@@ -72,7 +80,11 @@ export function createApp(): Application {
     legacyHeaders: false,
   });
 
-  // Limit for AI brief generation
+  // Limit for AI brief generation.
+  // Mounted with `app.use` below, which is safe ONLY because every route in
+  // that router is a POST. If a GET is ever added there it will be rate-limited
+  // as though it were a generation — the same defect fixed above. Same for
+  // /generate-persona.
   const generateBriefLimiter = rateLimit({
     windowMs: 60_000,
     max: 20,
@@ -106,7 +118,12 @@ export function createApp(): Application {
   // limiter registered after it is dead code.
   app.post('/competitions/:id/forge', forgeSynthesisLimiter);
   app.post('/competitions/:id/synthesis', forgeSynthesisLimiter);
-  app.use('/competitions', createLimiter, createCompetitionsRouter(agentRepo));
+  // Creation only. Same registration-order rule as above: this must precede the
+  // router, and it is `app.post` rather than `app.use` so the seven GET routes
+  // underneath (list, fetch, events, forge status, forge progress, forge
+  // download, synthesis status) are never charged for it.
+  app.post('/competitions', createLimiter);
+  app.use('/competitions', createCompetitionsRouter(agentRepo));
   app.use('/analytics/criteria', criteriaRouter);
   app.use('/analytics', analyticsRouter);
   app.use('/compare', compareRouter);

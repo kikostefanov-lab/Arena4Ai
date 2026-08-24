@@ -206,3 +206,59 @@ describe('the 5/min forge + synthesis limiter actually runs', () => {
     expect(statuses[5]).toBe(429);
   });
 });
+
+describe('the create limiter charges CREATES ONLY, never reads', () => {
+  const savedKey = process.env.ARENA_API_KEY;
+
+  afterEach(() => {
+    if (savedKey === undefined) delete process.env.ARENA_API_KEY;
+    else process.env.ARENA_API_KEY = savedKey;
+  });
+
+  // The bug: mounted as `app.use('/competitions', createLimiter, router)`, the
+  // 10-per-minute CREATE budget was spent by every GET underneath it. Opening a
+  // competition page a few times returned 429 and the arena rendered nothing —
+  // a limiter on a read path fails as missing content, not as a visible error.
+  it.each([
+    ['list', '/competitions'],
+    ['one competition', '/competitions/abc'],
+    ['its events', '/competitions/abc/events'],
+    ['forge status', '/competitions/abc/forge'],
+    ['synthesis status', '/competitions/abc/synthesis'],
+  ])('never 429s a GET of %s, however many times it is read', async (_label, path) => {
+    delete process.env.ARENA_API_KEY;
+    const app = createApp();
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 25; i++) {
+      statuses.push((await request(app).get(path)).status);
+    }
+
+    expect(statuses.filter((s) => s === 429)).toEqual([]);
+  });
+
+  it('still caps POST /competitions at 10 per minute', async () => {
+    delete process.env.ARENA_API_KEY;
+    const app = createApp();
+
+    const statuses: number[] = [];
+    for (let i = 0; i < 11; i++) {
+      statuses.push((await request(app).post('/competitions').send({}).catch(() => ({ status: 0 }) as never)).status);
+    }
+
+    expect(statuses.slice(0, 10).every((s) => s !== 429)).toBe(true);
+    expect(statuses[10]).toBe(429);
+  });
+
+  it('reading does not consume the create budget', async () => {
+    // The property that actually matters: a viewer refreshing a page must not
+    // make the next legitimate create fail.
+    delete process.env.ARENA_API_KEY;
+    const app = createApp();
+
+    for (let i = 0; i < 30; i++) await request(app).get('/competitions/abc/events');
+    const afterReads = await request(app).post('/competitions').send({});
+
+    expect(afterReads.status).not.toBe(429);
+  });
+});
