@@ -1,7 +1,7 @@
 import { AbsoluteFill, Img, useCurrentFrame, useVideoConfig, interpolate, staticFile, spring } from 'remotion';
 import { TronGrid } from '../../components/TronGrid';
 import { ACCENT_CYAN, ACCENT_ORANGE, BG_DARK, BG_CARD, ORBITRON, TEXT_PRIMARY, TEXT_MUTED, getModelColor } from '../../tokens';
-import { ARENA_SUMMARY, ARENA_WINNER_ID } from '../arena-data';
+import { ARENA_SUMMARY, ARENA_WINNER_ID, ARENA_JUDGE_CARDS } from '../arena-data';
 
 /**
  * Scores come from the SAME competition the screenshot behind them shows.
@@ -12,6 +12,34 @@ import { ARENA_SUMMARY, ARENA_WINNER_ID } from '../arena-data';
  * bars would have been presenting one competition's result over another's
  * picture. Generated from `ARENA_SUMMARY` now, so the two cannot diverge again.
  */
+/**
+ * The winning team's own model, from the stored winnerId.
+ *
+ * The banner used to hardcode "CLAUDE WINS" and `getModelColor('claude')`. That
+ * is the same defect as the hardcoded 87/86/68 scores this file already carries
+ * a note about: it renders a result rather than reporting one, and it would keep
+ * crowning claude after a re-judge handed the win to somebody else.
+ */
+const WINNER_MODEL = ARENA_SUMMARY.find((t) => t.id === ARENA_WINNER_ID)?.model ?? 'claude';
+
+/**
+ * Each judge's own card, as integer percents, in team order.
+ *
+ * ARENA_SUMMARY.score is the MEAN across judges, and on this run the mean is the
+ * one number nobody can check: the claude judge scored it 83-78 for claude while
+ * the codex judge scored it level, 80-80. Averaging those produces a single
+ * clean winner and silently discards the disagreement — which is precisely the
+ * thing a cross-model panel exists to expose.
+ */
+const JUDGE_ROWS = ARENA_JUDGE_CARDS.map((card) => ({
+  judgeId: card.judgeId,
+  cells: ARENA_SUMMARY.map((t) => ({
+    model: t.model,
+    color: getModelColor(t.model),
+    pct: Math.round((card.byTeam[t.id] ?? 0) * 100),
+  })),
+}));
+
 const SCORES = ARENA_SUMMARY.map((t, i) => ({
   model: t.model,
   score: Math.round((t.score ?? 0) * 100),
@@ -161,6 +189,57 @@ export const TheVerdict: React.FC = () => {
         })}
       </AbsoluteFill>
 
+      {/* The panel split — what the average hides */}
+      <div style={{
+        position: 'absolute',
+        bottom: isPortrait ? '26%' : '24%',
+        left: 0, right: 0,
+        textAlign: 'center',
+        fontFamily: ORBITRON,
+        opacity: interpolate(frame, [110, 145], [0, 1], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }),
+      }}>
+        <div style={{
+          fontSize: kickerSize * 0.8,
+          fontWeight: 800,
+          letterSpacing: '0.35em',
+          color: TEXT_MUTED,
+          textTransform: 'uppercase',
+          marginBottom: '0.7em',
+        }}>
+          the judges disagreed
+        </div>
+        {JUDGE_ROWS.map((row) => (
+          <div key={row.judgeId} style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'baseline',
+            gap: '1.2em',
+            fontSize: kickerSize * 0.85,
+            marginTop: '0.35em',
+          }}>
+            {/* nowrap + a column wide enough for the longest judge id: these
+                labels carry provider AND model on purpose, and a wrapped
+                "ai-codex/gpt-5.6-/sol" reads as a rendering fault rather than
+                as the point. */}
+            <div style={{
+              color: TEXT_MUTED,
+              width: '15em',
+              textAlign: 'right',
+              letterSpacing: '0.03em',
+              whiteSpace: 'nowrap',
+              fontSize: '0.88em',
+            }}>
+              {row.judgeId}
+            </div>
+            {row.cells.map((c) => (
+              <div key={c.model} style={{ color: c.color, fontWeight: 800, letterSpacing: '0.08em' }}>
+                {c.model} {c.pct}
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
       {/* Winner banner at bottom */}
       <div style={{
         position: 'absolute',
@@ -175,7 +254,7 @@ export const TheVerdict: React.FC = () => {
           fontSize: labelSize,
           fontWeight: 800,
           letterSpacing: '0.5em',
-          color: getModelColor('claude'),
+          color: getModelColor(WINNER_MODEL),
           textTransform: 'uppercase',
           marginBottom: '0.4em',
         }}>
@@ -186,12 +265,12 @@ export const TheVerdict: React.FC = () => {
           fontSize: winnerSize,
           fontWeight: 900,
           letterSpacing: '0.1em',
-          color: getModelColor('claude'),
+          color: getModelColor(WINNER_MODEL),
           textTransform: 'uppercase',
-          textShadow: `0 0 40px ${getModelColor('claude')}, 0 0 80px ${getModelColor('claude')}55`,
+          textShadow: `0 0 40px ${getModelColor(WINNER_MODEL)}, 0 0 80px ${getModelColor(WINNER_MODEL)}55`,
           lineHeight: 1,
         }}>
-          CLAUDE WINS
+          {WINNER_MODEL} WINS
         </div>
         <div style={{
           fontFamily: ORBITRON,

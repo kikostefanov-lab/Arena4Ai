@@ -74,12 +74,20 @@ async function main(): Promise<void> {
   const forge: Array<{ title: string; ext: string; desc: string }> = [];
   /** teamId -> the files the team actually DELIVERED, straight from the manifest. */
   const manifest = new Map<string, string[]>();
+  /** One entry per judge that scored this run, with its own per-team overall. */
+  const judgeCards: Array<{ judgeId: string; byTeam: Record<string, number> }> = [];
+  const rubricCriteria = ((comp.brief as { rubric?: { criteria?: Array<{ id?: string; weight?: number; maxScore?: number }> } } | undefined)
+    ?.rubric?.criteria) ?? [];
   try {
     const rs = await fetch(`${API}/competitions/${id}`);
     // The shape is result.scorecards[].finalScore (0–1), not result.teams[].
     const full = await rs.json() as {
       result?: {
-        scorecards?: Array<{ teamId: string; finalScore?: number }>;
+        scorecards?: Array<{
+          teamId: string;
+          finalScore?: number;
+          judgeResults?: Array<{ judgeId?: string; scores?: Array<{ criterionId?: string; score?: number }> }>;
+        }>;
         winnerId?: string;
         deliverables?: Array<{ teamId: string; files?: Array<{ path: string }> }>;
         forge?: Array<{ artifacts?: Array<{ title?: string; filename?: string; outputFormat?: string }> }>;
@@ -87,6 +95,25 @@ async function main(): Promise<void> {
     };
     for (const sc of full.result?.scorecards ?? []) {
       if (typeof sc.finalScore === 'number') scores[sc.teamId] = sc.finalScore;
+      // Per-judge cards. The stored finalScore is the MEAN across judges, and a
+      // mean is exactly what hides a split panel: on this competition the claude
+      // judge and the codex judge disagree about who won, and averaging them
+      // renders as one clean winner. Recomputed here from each judge's own
+      // criterion scores using the rubric's weights — the same arithmetic
+      // computeOverallScore does — so the reel can show the disagreement.
+      for (const jr of sc.judgeResults ?? []) {
+        const jid = jr.judgeId ?? 'unknown';
+        let raw = 0;
+        for (const cs of jr.scores ?? []) {
+          const c = rubricCriteria.find((x) => x.id === cs.criterionId);
+          if (!c || typeof cs.score !== 'number') continue;
+          raw += (cs.score / (c.maxScore ?? 10)) * (c.weight ?? 1);
+        }
+        const overall = Math.min(1, Math.max(0, raw));
+        let card = judgeCards.find((k) => k.judgeId === jid);
+        if (!card) { card = { judgeId: jid, byTeam: {} }; judgeCards.push(card); }
+        card.byTeam[sc.teamId] = overall;
+      }
     }
     winnerId = full.result?.winnerId ?? '';
     for (const d of full.result?.deliverables ?? []) {
@@ -221,6 +248,16 @@ export const ARENA_CRITERIA: string[] = ${JSON.stringify(criteria, null, 2)};
 /** The artifacts the Forge actually produced for this run, with real filenames. */
 export interface ArenaForgeArtifact { title: string; ext: string; desc: string }
 export const ARENA_FORGE: ArenaForgeArtifact[] = ${JSON.stringify(forge, null, 2)};
+/**
+ * Every judge's own card, NOT the average.
+ *
+ * ARENA_SUMMARY.score is the mean across judges. On a split panel that mean is
+ * the one number that cannot be checked against anything on screen: it shows a
+ * clean winner where the judges disagreed. Kept separate so a scene can render
+ * the disagreement instead of hiding it.
+ */
+export interface ArenaJudgeCard { judgeId: string; byTeam: Record<string, number> }
+export const ARENA_JUDGE_CARDS: ArenaJudgeCard[] = ${JSON.stringify(judgeCards, null, 2)};
 export const ARENA_EVENTS: FrameEvent[] = ${JSON.stringify(reconciled)};
 `;
   writeFileSync(OUT, body);
