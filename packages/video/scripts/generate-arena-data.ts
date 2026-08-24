@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 // under tsx, which resolves it as CJS, and @arena/shared's exports map declares
 // only an `import` condition. The scene code below uses the package name
 // normally — this is a build-script-only detail.
-import { toFrameEvents, reconcileWithManifest } from '../../shared/dist/index.js';
+import { toFrameEvents, reconcileWithManifest, corpusFromEvents } from '../../shared/dist/index.js';
 import type { ArenaEvent, FrameEvent, TeamManifest } from '../../shared/dist/index.js';
 import { SIZZLE_COMPETITION_ID } from './sizzle-source.js';
 
@@ -106,11 +106,27 @@ async function main(): Promise<void> {
   // app cannot drift apart on it. Recovered files are marked, which drops the team
   // to `inferred` (dashed caps) — the manifest proves a file exists, not how many
   // times it was edited.
+  // The corpus comes from `raw`, NOT from `frames`/`kept`. `kept` filters
+  // REASONING out, and REASONING is exactly where codex's `+++ b/<path>` diff
+  // headers live — all 13 of the paths team-b depends on. Build it from the
+  // filtered list and recovery silently drops to zero. See `corpusFromEvents`.
+  const corpora = corpusFromEvents(raw);
   const manifests: TeamManifest[] = [];
-  for (const [teamId, paths] of manifest) manifests.push({ teamId, paths });
-  const { events: reconciled, recovered } = reconcileWithManifest(kept, manifests);
+  for (const [teamId, paths] of manifest) {
+    manifests.push({ teamId, paths, corpus: corpora.get(teamId) ?? '' });
+  }
+  const { events: reconciled, recovered, skipped, unattributed } = reconcileWithManifest(kept, manifests);
   for (const [teamId, n] of recovered) {
     console.log(`[arena-data] stream INCOMPLETE for ${teamId}: recovered ${n} file(s) from the manifest`);
+  }
+  // Never silent: a skipped path is a block we chose not to draw, and the reason
+  // matters — vendored output is not the agent's work, and an unnamed path cannot
+  // be attributed to the agent at all.
+  for (const [teamId, n] of skipped) {
+    console.log(`[arena-data] ${teamId}: skipped ${n} vendored/build path(s)`);
+  }
+  for (const [teamId, n] of unattributed) {
+    console.log(`[arena-data] ${teamId}: skipped ${n} path(s) the stream never names (program-generated)`);
   }
 
   // The floor is built from the reconciled set, so per-team counts must be too.

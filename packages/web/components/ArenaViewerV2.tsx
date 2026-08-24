@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest } from '@arena/shared';
+import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
@@ -287,13 +287,26 @@ export default function ArenaViewerV2({
   /** Measured CSS size of the canvas box; the renderer composes into this. */
   const sizeRef = useRef({ w: FALLBACK_W, h: FALLBACK_H, dpr: 1 });
 
-  /** `deliverables` in the shape `reconcileWithManifest` wants (AA-079(b)). */
-  const manifests = useMemo<TeamManifest[]>(
-    () => (deliverables ?? [])
-      .map((d) => ({ teamId: d.teamId, paths: (d.files ?? []).map((f) => f.path).filter(Boolean) }))
-      .filter((m) => m.paths.length > 0),
-    [deliverables],
-  );
+  /**
+   * `deliverables` in the shape `reconcileWithManifest` wants (AA-079(b)).
+   *
+   * The corpus is built from `events` — the RAW ArenaEvents — and must stay that
+   * way. Passing frame events here would drop `payload.input.command`, where the
+   * shell heredoc that names a file lives, and recovery would quietly fall to
+   * zero without any test failing. See `corpusFromEvents`.
+   */
+  const manifests = useMemo<TeamManifest[]>(() => {
+    const src = deliverables ?? [];
+    if (src.length === 0) return [];
+    const corpora = corpusFromEvents(events as never);
+    return src
+      .map((d) => ({
+        teamId: d.teamId,
+        paths: (d.files ?? []).map((f) => f.path).filter(Boolean),
+        corpus: corpora.get(d.teamId) ?? '',
+      }))
+      .filter((m) => m.paths.length > 0);
+  }, [deliverables, events]);
 
   /**
    * Build the frame list for a BULK load, reconciling it against the manifest.

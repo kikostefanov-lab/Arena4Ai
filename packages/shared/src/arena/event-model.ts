@@ -290,6 +290,52 @@ export function resolveTelemetry(model: string, fileEvents: FrameEvent[]): TeamT
 export interface TeamManifest {
   teamId: string;
   paths: string[];
+  /**
+   * Everything this team's own stream said, concatenated — see `corpusFromEvents()`.
+   * Used to tell a file the AGENT wrote from one its PROGRAM wrote; recovery is
+   * restricted to paths that appear here.
+   *
+   * Omitted means "no corpus available", and then nothing is recovered for this
+   * team — an absent corpus is not evidence that a file was authored.
+   */
+  corpus?: string;
+}
+
+/**
+ * Per-team searchable text drawn from the raw event stream.
+ *
+ * ⚠ BUILD THIS FROM RAW ArenaEvents. NOT FrameEvents, NOT a filtered subset.
+ * If you "simplify" this to take FrameEvents, recovery silently drops to zero and
+ * every synthetic-fixture test still passes. Two independent reasons:
+ *   1. A TOOL_CALL FrameEvent carries only the tool NAME. The shell heredoc that
+ *      actually names the file — `cat > enneagram_sel_framework.py <<'PY'` — lives
+ *      in `payload.input.command`, which the frame shape drops entirely.
+ *      (Measured: 4e29e1b3/team-b wrote all three of its authored files that way.)
+ *   2. Callers that pre-filter to file/tool/error events drop REASONING, which is
+ *      exactly where codex's `+++ b/<path>` diff headers live — all 13 of the paths
+ *      ebb45f36/team-b depends on.
+ *
+ * Deliberately targeted rather than `JSON.stringify(payload)`: it takes the fields
+ * that can NAME a file and leaves out file CONTENT, which would balloon the string
+ * and can contain paths the agent never wrote (an import line, a README listing).
+ * Precision matters more than recall here — a false positive re-admits exactly the
+ * invented blocks this exists to prevent.
+ */
+export function corpusFromEvents(events: ArenaEvent[]): Map<string, string> {
+  const parts = new Map<string, string[]>();
+  for (const ev of events) {
+    if (!ev.teamId) continue;
+    const p = (ev.payload ?? {}) as Record<string, unknown>;
+    const input = (p.input ?? {}) as Record<string, unknown>;
+    const bits = [p.text, p.path, p.tool, input.command, input.file_path, input.path, input.filePath];
+    const line = bits.filter((b): b is string => typeof b === 'string' && b.length > 0).join(' ');
+    if (!line) continue;
+    const bucket = parts.get(ev.teamId);
+    if (bucket) bucket.push(line); else parts.set(ev.teamId, [line]);
+  }
+  const out = new Map<string, string>();
+  for (const [teamId, lines] of parts) out.set(teamId, lines.join('\n'));
+  return out;
 }
 
 export interface ReconcileResult {
@@ -298,6 +344,11 @@ export interface ReconcileResult {
   recovered: Map<string, number>;
   /** Per team, how many manifest paths were skipped as vendored/build output. */
   skipped: Map<string, number>;
+  /**
+   * Per team, how many manifest paths were skipped because the team's own stream
+   * never names them — its program wrote them at runtime, not the agent.
+   */
+  unattributed: Map<string, number>;
 }
 
 /**
@@ -354,7 +405,8 @@ export function reconcileWithManifest(
 ): ReconcileResult {
   const recovered = new Map<string, number>();
   const skipped = new Map<string, number>();
-  if (manifests.length === 0) return { events, recovered, skipped };
+  const unattributed = new Map<string, number>();
+  if (manifests.length === 0) return { events, recovered, skipped, unattributed };
 
   const spanEnd = events.length ? events[events.length - 1].t : 0;
   // Built lazily: a complete stream must return the SAME array reference, so a
@@ -362,15 +414,50 @@ export function reconcileWithManifest(
   // poll. Reconciliation is a no-op far more often than not.
   let out: FrameEvent[] | null = null;
 
-  for (const { teamId, paths } of manifests) {
+  for (const { teamId, paths, corpus } of manifests) {
     if (!paths.length) continue;
     const ownFiles = events.filter((e) => e.teamId === teamId && e.kind === 'file');
     const seen = new Set(ownFiles.map((e) => e.path).filter((p): p is string => !!p));
     const candidates = paths.filter((p) => p && !seen.has(p));
     // Vendored files are dropped BEFORE recovery, not drawn and then explained.
-    const missing = candidates.filter((p) => !isVendoredPath(p));
-    const vendored = candidates.length - missing.length;
+    const notVendored = candidates.filter((p) => !isVendoredPath(p));
+    const vendored = candidates.length - notVendored.length;
     if (vendored > 0) skipped.set(teamId, vendored);
+
+    // ── THE AUTHORSHIP GUARD ────────────────────────────────────────────────
+    //
+    // A file the AGENT wrote has its name somewhere in the agent's own stream: in
+    // the tool input, in the `cat > file` command, or in its narration. A file its
+    // PROGRAM wrote at runtime NEVER does, because nobody typed that name. So
+    // recovery is restricted to paths the stream actually mentions.
+    //
+    // MEASURED, on the two competitions that forced this: 27c03ead/team-a wrote
+    // `main.py`, ran it, and `main.py` wrote 30 lesson plans into
+    // `generated_plans/`; 4e29e1b3/team-a generated 39 files the same way. Without
+    // this guard those become blocks attributed to the agent, and the floor shows
+    // whoever happened to write a GENERATOR towering over whoever wrote their files
+    // directly — the same false picture as an under-reported city, pointing the
+    // other way. `isVendoredPath` cannot catch them: `generated_plans/` and
+    // `generated/` are ordinary project directories with no fixed name to match.
+    //
+    // KNOWN LIMIT — WRITING IS NOT THE ONLY THING THAT NAMES A FILE. INSPECTING
+    // does too, and the corpus cannot tell the two apart. On 27c03ead/team-a this
+    // skips 27 of the 30 generated files; the other three survive because the agent
+    // later ran
+    //     grep -c "..." generated_plans/Ms_Rivera_MATH-4-U3-L01_standard.txt
+    // and two similar checks, naming files in a VERIFICATION command it never wrote
+    // them with. Measured residual 3 of 30 — a 90% reduction, not elimination, and
+    // the test for that competition pins 3 rather than 0 for exactly this reason.
+    // Closing the gap means distinguishing a read from a write in the corpus, which
+    // is a feature rather than a guard, and is deliberately not attempted here.
+    //
+    // The error in the other direction — a file the agent genuinely wrote but never
+    // named anywhere is skipped — IS THE ONE TO PREFER: a block we cannot attribute
+    // to the agent is one we should not draw. Neither error is silent; both are
+    // counted below.
+    const missing = notVendored.filter((p) => (corpus ?? '').includes(p));
+    const unnamed = notVendored.length - missing.length;
+    if (unnamed > 0) unattributed.set(teamId, unnamed);
     if (!missing.length) continue;
 
     recovered.set(teamId, missing.length);
@@ -398,7 +485,7 @@ export function reconcileWithManifest(
     });
   }
 
-  if (!out) return { events, recovered, skipped };
+  if (!out) return { events, recovered, skipped, unattributed };
   out.sort((a, b) => a.t - b.t);
-  return { events: out, recovered, skipped };
+  return { events: out, recovered, skipped, unattributed };
 }

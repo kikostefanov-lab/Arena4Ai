@@ -12,6 +12,7 @@ import {
   UNKNOWN_PROVIDER_CAPABILITY,
   reconcileWithManifest,
   isVendoredPath,
+  corpusFromEvents,
 } from './event-model.js';
 import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
 import { createWorld, applyEvent, targetHeight, foldFileStats, telemetryFromStats } from './world.js';
@@ -582,11 +583,13 @@ describe('reconcileWithManifest', () => {
     t, teamId, kind: 'file', path, text: path, legacy: false,
     ...(contract ? { op: 'create' as const, opSource: 'marker' as const } : {}),
   });
+  /** A corpus naming every path — the "agent wrote all of these" case. */
+  const namesAll = (...paths: string[]) => paths.join(' ');
 
   it('adds only the paths the stream never reported', () => {
     const events = [fileEv(100, 'b', 'a.js'), fileEv(200, 'b', 'b.js')];
     const { events: out, recovered } = reconcileWithManifest(events, [
-      { teamId: 'b', paths: ['a.js', 'b.js', 'c.js', 'd.js'] },
+      { teamId: 'b', paths: ['a.js', 'b.js', 'c.js', 'd.js'], corpus: namesAll('a.js','b.js','c.js','d.js') },
     ]);
     expect(recovered.get('b')).toBe(2);
     const paths = out.filter((e) => e.kind === 'file').map((e) => e.path).sort();
@@ -596,7 +599,7 @@ describe('reconcileWithManifest', () => {
   it('is a no-op when the stream already matches the manifest', () => {
     const events = [fileEv(100, 'b', 'a.js')];
     const { events: out, recovered } = reconcileWithManifest(events, [
-      { teamId: 'b', paths: ['a.js'] },
+      { teamId: 'b', paths: ['a.js'], corpus: namesAll('a.js') },
     ]);
     expect(recovered.size).toBe(0);
     expect(out).toBe(events); // same reference — nothing copied, nothing changed
@@ -604,7 +607,7 @@ describe('reconcileWithManifest', () => {
 
   it('marks recovered events and leaves op/opSource ABSENT', () => {
     const { events: out } = reconcileWithManifest([fileEv(100, 'b', 'a.js')], [
-      { teamId: 'b', paths: ['a.js', 'c.js'] },
+      { teamId: 'b', paths: ['a.js', 'c.js'], corpus: namesAll('a.js','c.js') },
     ]);
     const rec = out.find((e) => e.path === 'c.js')!;
     expect(rec.recovered).toBe(true);
@@ -615,7 +618,7 @@ describe('reconcileWithManifest', () => {
   it('places recovered files inside the team’s own working window', () => {
     const { events: out } = reconcileWithManifest(
       [fileEv(1000, 'b', 'a.js'), fileEv(2000, 'b', 'b.js')],
-      [{ teamId: 'b', paths: ['a.js', 'b.js', 'c.js'] }],
+      [{ teamId: 'b', paths: ['a.js', 'b.js', 'c.js'], corpus: namesAll('a.js','b.js','c.js') }],
     );
     const rec = out.find((e) => e.path === 'c.js')!;
     expect(rec.t).toBeGreaterThanOrEqual(1000);
@@ -625,7 +628,7 @@ describe('reconcileWithManifest', () => {
   it('does not touch a team that is not in the manifest', () => {
     const events = [fileEv(100, 'a', 'x.js'), fileEv(200, 'b', 'y.js')];
     const { events: out } = reconcileWithManifest(events, [
-      { teamId: 'b', paths: ['y.js', 'z.js'] },
+      { teamId: 'b', paths: ['y.js', 'z.js'], corpus: namesAll('y.js','z.js') },
     ]);
     expect(out.filter((e) => e.teamId === 'a')).toHaveLength(1);
     expect(out.filter((e) => e.teamId === 'b')).toHaveLength(2);
@@ -633,7 +636,7 @@ describe('reconcileWithManifest', () => {
 
   it('downgrades an incomplete team to inferred, with the RIGHT reason', () => {
     const { events: out } = reconcileWithManifest([fileEv(100, 'b', 'a.js')], [
-      { teamId: 'b', paths: ['a.js', 'c.js'] },
+      { teamId: 'b', paths: ['a.js', 'c.js'], corpus: namesAll('a.js','c.js') },
     ]);
     const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
     for (const e of out) foldFileStats(stats, e);
@@ -654,7 +657,8 @@ describe('reconcileWithManifest', () => {
       [{ teamId: 'b', paths: [
         'server/index.mjs', 'server/app.mjs',
         'server/node_modules/express/index.js', 'dist/bundle.js', '.next/static/x.js',
-      ] }],
+      ], corpus: namesAll('server/index.mjs','server/app.mjs',
+        'server/node_modules/express/index.js','dist/bundle.js','.next/static/x.js') }],
     );
     expect(recovered.get('b')).toBe(1);          // only server/app.mjs
     expect(skipped.get('b')).toBe(3);
@@ -673,5 +677,132 @@ describe('reconcileWithManifest', () => {
     const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
     foldFileStats(stats, fileEv(100, 'b', 'a.js'));
     expect(telemetryFromStats('codex', stats).editDepth).toBe('measured');
+  });
+});
+
+// ─── AA-079(b): the authorship guard, against real competitions ──────────────
+//
+// Paths and corpus shapes below are taken from the live database. The guard's
+// whole job is to tell a file the AGENT wrote from one its PROGRAM wrote, and the
+// only honest way to pin that is against runs where we know which is which.
+
+describe('reconcileWithManifest — authorship guard', () => {
+  const seen = (t: number, teamId: string, path: string): FrameEvent =>
+    ({ t, teamId, kind: 'file', path, text: path, legacy: false,
+       op: 'create', opSource: 'marker' });
+
+  /** 27c03ead/team-a: wrote main.py, ran it, main.py wrote generated_plans/. */
+  const AUTHORED_27 = [
+    'sample_curriculum/ela_grade2_unit1.json', 'sample_curriculum/math_grade4_unit3.json',
+    'teacher_profiles/profile_ms_johnson.json', 'teacher_profiles/profile_mr_chen.json',
+    'teacher_profiles/profile_ms_rivera.json', 'main.py', 'README.md',
+  ];
+  /** The three the agent later named in a grep -c verification command. */
+  const INSPECTED_27 = [
+    'generated_plans/Ms_Rivera_MATH-4-U3-L01_standard.txt',
+    'generated_plans/Ms_Rivera_MATH-4-U3-L01_shortened_period.txt',
+    'generated_plans/Ms_Rivera_MATH-4-U3-L01_full_adaptation.txt',
+  ];
+  const GENERATED_27 = [
+    ...INSPECTED_27,
+    ...Array.from({ length: 27 }, (_, i) => `generated_plans/plan_${i}.txt`),
+  ];
+
+  it('27c03ead/a: recovers 3, NOT 0 — inspecting a file also names it', () => {
+    // The agent ran:
+    //   grep -c "..." generated_plans/Ms_Rivera_MATH-4-U3-L01_standard.txt
+    // and two similar checks, so three files it never WROTE appear in its stream
+    // anyway. This is the known ceiling of the corpus heuristic, and the test
+    // pins the number the data actually produces rather than an aspirational 0.
+    const corpus = [...AUTHORED_27, ...INSPECTED_27].join(' ');
+    const events = AUTHORED_27.map((p, i) => seen(1000 + i * 100, 'a', p));
+
+    const { recovered, unattributed } = reconcileWithManifest(events, [
+      { teamId: 'a', paths: [...AUTHORED_27, ...GENERATED_27], corpus },
+    ]);
+
+    expect(recovered.get('a')).toBe(3);       // not 30, and not 0
+    expect(unattributed.get('a')).toBe(27);
+  });
+
+  it('4e29e1b3/a: recovers 0 of 39 program-generated files', () => {
+    const authored = [
+      'enneagram_sel_framework.py', 'teacher_guide.md', 'README.md',
+      'templates/a.md', 'templates/b.md', 'templates/c.md', 'templates/d.md',
+      'sample_lessons/one.md', 'sample_lessons/two.md', 'sample_lessons/three.md',
+    ];
+    const generated = Array.from({ length: 39 }, (_, i) => `generated/out_${i}.md`);
+    const events = authored.map((p, i) => seen(1000 + i * 100, 'a', p));
+
+    const { recovered, unattributed } = reconcileWithManifest(events, [
+      { teamId: 'a', paths: [...authored, ...generated], corpus: authored.join(' ') },
+    ]);
+
+    expect(recovered.get('a')).toBeUndefined(); // nothing recovered at all
+    expect(unattributed.get('a')).toBe(39);
+  });
+
+  it('REGRESSION — ebb45f36/b still recovers all 13: the guard does not weaken the codex case', () => {
+    // The four codex DID report as events, and the thirteen it did not. The
+    // thirteen are recoverable because their paths are in the stream as
+    // `+++ b/<abs path>` diff headers — which is why the corpus must be built
+    // from RAW events, REASONING included.
+    const reported = ['app/styles.css', 'README.md', 'server/extract.mjs', 'app/app.js'];
+    const dropped = [
+      '.env.example', '.gitignore', 'app/icon.svg', 'app/index.html', 'manifest.json',
+      'package.json', 'server/auth.mjs', 'server/deepgram.mjs', 'server/dtools.mjs',
+      'server/googleSheets.mjs', 'server/index.mjs', 'service-worker.js', 'setup-guide.md',
+    ];
+    const WORKDIR = '/private/var/folders/8q/T/arena-team-b-Sy9nCY';
+    const corpus = [
+      ...reported,
+      ...dropped.map((p) => `+++ b/${WORKDIR}/${p}`),   // the real line shape
+    ].join('\n');
+    const events = reported.map((p, i) => seen(600000 + i * 1000, 'b', p));
+
+    const { recovered, unattributed, skipped } = reconcileWithManifest(events, [
+      { teamId: 'b', paths: [...reported, ...dropped], corpus },
+    ]);
+
+    expect(recovered.get('b')).toBe(13);
+    expect(unattributed.get('b')).toBeUndefined();
+    expect(skipped.get('b')).toBeUndefined();
+  });
+
+  it('no corpus recovers NOTHING — absence is not evidence of authorship', () => {
+    const { recovered, unattributed } = reconcileWithManifest(
+      [seen(100, 'b', 'a.js')],
+      [{ teamId: 'b', paths: ['a.js', 'b.js'] }],   // corpus omitted
+    );
+    expect(recovered.size).toBe(0);
+    expect(unattributed.get('b')).toBe(1);
+  });
+});
+
+describe('corpusFromEvents', () => {
+  const ev = (teamId: string, payload: unknown) =>
+    ({ eventId: 'e', competitionId: 'c', teamId, timestamp: '', type: 'TOOL_CALL',
+       payload, metadata: {} }) as never;
+
+  it('captures the heredoc command a FrameEvent would drop', () => {
+    // 4e29e1b3/team-b wrote all three authored files this way. The filename lives
+    // ONLY in payload.input.command — a TOOL_CALL FrameEvent keeps just the tool
+    // name, so building the corpus from frames loses it entirely.
+    const corpus = corpusFromEvents([
+      ev('b', { tool: 'bash', input: { command: "cat > enneagram_sel_framework.py <<'PY'" } }),
+    ]);
+    expect(corpus.get('b')).toContain('enneagram_sel_framework.py');
+  });
+
+  it('captures text, path and file_path, and separates teams', () => {
+    const corpus = corpusFromEvents([
+      ev('a', { text: 'writing app.py' }),
+      ev('a', { path: 'server/index.mjs' }),
+      ev('b', { input: { file_path: '/tmp/x/only-b.ts' } }),
+    ]);
+    expect(corpus.get('a')).toContain('app.py');
+    expect(corpus.get('a')).toContain('server/index.mjs');
+    expect(corpus.get('a')).not.toContain('only-b.ts');
+    expect(corpus.get('b')).toContain('only-b.ts');
   });
 });
