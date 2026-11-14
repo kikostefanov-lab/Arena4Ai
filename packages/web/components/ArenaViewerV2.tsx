@@ -5,6 +5,7 @@ import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor, reconcileWithM
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
+import type { Arena3D } from '../lib/arena3d/scene';
 import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
 
 /**
@@ -60,6 +61,12 @@ interface ArenaViewerV2Props {
    * yet, and a partial run is legitimately partial.
    */
   deliverables?: Array<{ teamId: string; files?: Array<{ path: string }> }>;
+  /**
+   * Draw the world as the 3D "Neon District" scene instead of the isometric
+   * canvas. Same world, same clock, same honesty notes — only the picture
+   * changes. Falls back to the isometric canvas if WebGL is unavailable.
+   */
+  view3d?: boolean;
 }
 
 // ── HUD subcomponents ───────────────────────────────────────────
@@ -279,8 +286,13 @@ const HUD_INSETS = { top: 18, right: 24, bottom: 34, left: 24 };
 const SPEEDS = [1, 3, 8] as const;
 
 export default function ArenaViewerV2({
-  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables,
+  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables, view3d,
 }: ArenaViewerV2Props) {
+  const [glFailed, setGlFailed] = useState(false);
+  const use3d = !!view3d && !glFailed;
+  const sceneRef = useRef<Arena3D | null>(null);
+  const lastFrameRef = useRef(0);
+  const [sceneReady, setSceneReady] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<IsoArenaRenderer | null>(null);
@@ -399,6 +411,11 @@ export default function ArenaViewerV2({
       const h = Math.max(240, Math.round(r.height));
       if (sizeRef.current.w === w && sizeRef.current.h === h && sizeRef.current.dpr === dpr) return;
       sizeRef.current = { w, h, dpr };
+      if (use3d) {
+        // three owns the WebGL backing store.
+        sceneRef.current?.resize(w, h, dpr);
+        return;
+      }
       canvas.width = Math.round(w * dpr);
       canvas.height = Math.round(h * dpr);
     };
@@ -407,7 +424,50 @@ export default function ArenaViewerV2({
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     return () => ro.disconnect();
-  }, []);
+  }, [use3d]);
+
+  // ── The 3D scene, when asked for ──────────────────────────────
+  //
+  // Loaded with a dynamic import so three.js stays out of the bundle for anyone
+  // who never opens the 3D view, and out of the server render entirely.
+  useEffect(() => {
+    if (!use3d) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let dead = false;
+    let scene: Arena3D | null = null;
+    (async () => {
+      try {
+        const mod = await import('../lib/arena3d/scene');
+        if (dead) return;
+        scene = new mod.Arena3D(canvas, {
+          teams: teams.map((t) => ({ id: t.id, model: t.model, color: getModelColor(t.model) })),
+          reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+        });
+        const { w, h, dpr } = sizeRef.current;
+        scene.resize(w, h, dpr);
+        scene.onFreeCam = () => setOrbit(false);
+        const r = rendererRef.current;
+        if (!r) throw new Error('arena world not ready');
+        await scene.load(r.world);
+        if (dead) return;
+        sceneRef.current = scene;
+        setSceneReady(true);
+      } catch (err) {
+        // No WebGL, a lost context, or a missing model: the isometric canvas
+        // shows the same world, so fall back rather than leave a blank box.
+        console.error('[arena3d] falling back to the isometric view:', err);
+        if (!dead) setGlFailed(true);
+      }
+    })();
+    return () => {
+      dead = true;
+      setSceneReady(false);
+      sceneRef.current = null;
+      scene?.dispose();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [use3d, teamsKey]);
 
   // ── Feed the stream ───────────────────────────────────────────
   const ingest = useCallback(() => {
@@ -533,8 +593,9 @@ export default function ArenaViewerV2({
       const r = rendererRef.current;
       const canvas = canvasRef.current;
       if (r && canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
+        // A WebGL canvas has no 2D context; the 3D branch never asks for one.
+        const ctx = use3d ? null : canvas.getContext('2d');
+        if (use3d || ctx) {
           ingest();
 
           if (isLive) {
@@ -565,11 +626,23 @@ export default function ArenaViewerV2({
             r.camera.tyaw = -0.62 + Math.sin(performance.now() / 9000) * 0.14;
           }
 
-          const { w, h, dpr } = sizeRef.current;
-          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-          r.attach(ctx as unknown as Ctx2D);
-          r.setViewport({ width: w, height: h, dpr, insets: HUD_INSETS });
-          r.draw();
+          const nowMs = performance.now();
+          const dtSec = Math.min(0.05, (nowMs - (lastFrameRef.current || nowMs)) / 1000);
+          lastFrameRef.current = nowMs;
+          if (use3d) {
+            const scene = sceneRef.current;
+            if (scene) {
+              scene.director = orbit;
+              scene.sync(r.world, dtSec);
+              scene.render();
+            }
+          } else if (ctx) {
+            const { w, h, dpr } = sizeRef.current;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            r.attach(ctx as unknown as Ctx2D);
+            r.setViewport({ width: w, height: h, dpr, insets: HUD_INSETS });
+            r.draw();
+          }
 
           // HUD text is throttled to ~4Hz. It is prose for a human to read;
           // re-rendering React at 60Hz to update it would spend the frame
@@ -596,7 +669,7 @@ export default function ArenaViewerV2({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams]);
+  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams, use3d]);
 
   const notes = rendererRef.current?.honestyNotes ?? [];
 
@@ -618,14 +691,42 @@ export default function ArenaViewerV2({
 
       <div ref={boxRef} style={{ position: 'relative', width: '100%', flex: 1, minHeight: 240 }}>
         <canvas
+          // A canvas can only ever hand out one kind of context, so switching
+          // between the 2D and WebGL pictures needs a fresh element.
+          key={use3d ? 'gl' : '2d'}
           ref={canvasRef}
           width={FALLBACK_W}
           height={FALLBACK_H}
+          aria-label={use3d ? '3D arena: each block is a file a team wrote' : 'Isometric arena'}
           style={{
             width: '100%', height: '100%', display: 'block',
             borderRadius: 6, background: '#03060b',
+            touchAction: use3d ? 'none' : undefined, cursor: use3d ? 'grab' : undefined,
           }}
         />
+        {use3d && (
+          // The isometric renderer paints its legend onto the canvas so the
+          // picture cannot travel without it. This overlay is the 3D
+          // equivalent: it sits inside the frame a screenshot captures.
+          <div style={{
+            position: 'absolute', left: 14, bottom: 12, pointerEvents: 'none',
+            fontFamily: MONOSPACE_FONT, fontSize: 10, lineHeight: 1.6, letterSpacing: 0.6,
+            color: '#8fc7d8', background: 'rgba(2,6,14,0.72)', border: '1px solid #0a2235',
+            borderRadius: 4, padding: '6px 10px', maxWidth: 'min(70%, 460px)',
+          }}>
+            <div>EACH BLOCK IS A FILE · HEIGHT IS ITS EDIT COUNT</div>
+            <div>SOLID EDGE measured · DASHED inferred · HOLLOW provider cannot report edits</div>
+            {notes.length > 0 && <div style={{ color: '#ffd700' }}>⚠ {notes.length} telemetry caveat{notes.length > 1 ? 's' : ''} below</div>}
+          </div>
+        )}
+        {use3d && !sceneReady && (
+          <div style={{
+            position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none',
+            fontFamily: MONOSPACE_FONT, fontSize: 11, letterSpacing: 3, color: '#4a8fa8', textTransform: 'uppercase',
+          }}>
+            Loading 3D arena…
+          </div>
+        )}
         <WinnerBanner
           visible={phase === 'reveal' && !!winnerId}
           winner={teams.find((t) => t.id === winnerId)}
@@ -685,8 +786,13 @@ export default function ArenaViewerV2({
             following live
           </span>
         )}
+        {use3d && (
+          <button type="button" onClick={() => { sceneRef.current?.nextShot(); setOrbit(true); }} style={ctrlStyle(false)}>
+            Next shot
+          </button>
+        )}
         <button type="button" onClick={() => setOrbit((o) => !o)} style={ctrlStyle(orbit)}>
-          Cam
+          {use3d ? (orbit ? 'Director cam' : 'Free cam') : 'Cam'}
         </button>
       </div>
 
@@ -698,7 +804,7 @@ export default function ArenaViewerV2({
       */}
       {notes.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          {notes.map((n) => (
+          {[...new Set(notes)].map((n) => (
             <div key={n} style={{
               fontFamily: BODY_FONT, fontSize: '0.62rem', color: '#ffd700',
               border: '1px solid rgba(255,215,0,0.3)', background: 'rgba(255,215,0,0.05)',
