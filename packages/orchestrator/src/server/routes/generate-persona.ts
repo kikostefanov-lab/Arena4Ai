@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { spawn } from 'node:child_process';
-import { claudeEnv } from '../../utils/claude-env.js';
+import { helperClaudeArgs, helperClaudeEnv } from '../../utils/claude-helper.js';
+import { resolveStageModel } from '../../adapters/model-registry.js';
 import { extractJson } from '../../utils/extract-json.js';
 
 export const generatePersonaRouter = Router();
@@ -69,8 +70,8 @@ Respond with ONLY valid JSON. No markdown, no explanation.`;
     const output = await new Promise<string>((resolve, reject) => {
       const child = spawn(
         claudeBin,
-        ['-p', '-'],
-        { stdio: ['pipe', 'pipe', 'pipe'], env: claudeEnv() },
+        helperClaudeArgs({ model: resolveStageModel() }),
+        { stdio: ['pipe', 'pipe', 'pipe'], env: helperClaudeEnv() },
       );
       child.stdin!.write(prompt);
       child.stdin!.end();
