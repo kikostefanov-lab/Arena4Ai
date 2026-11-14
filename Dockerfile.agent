@@ -3,4 +3,11 @@ FROM node:20-slim
 # Install all three agent CLIs globally
 RUN npm install -g @anthropic-ai/claude-code @openai/codex @google/gemini-cli
 
+# AUTHENTICATION: this image holds no credentials, and a login done on the host
+# (files under ~/.claude, ~/.codex, ~/.gemini, or the macOS keychain) is NOT
+# visible here. Credentials reach the container only as environment variables
+# forwarded by the orchestrator (SandboxManager -> sandboxEnv()): e.g.
+# ANTHROPIC_API_KEY / CLAUDE_CODE_OAUTH_TOKEN, OPENAI_API_KEY, GEMINI_API_KEY.
+# Do not bake keys into this image.
+
 WORKDIR /workspace

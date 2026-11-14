@@ -114,3 +114,96 @@ describe('SandboxManager.spawnInContainer', () => {
     expect(args.slice(-4)).toEqual(['claude', '--print', '-', '--verbose']);
   });
 });
+
+describe('SandboxManager.spawnInContainer stdin', () => {
+  beforeEach(() => {
+    spawnMock.mockReset();
+    spawnMock.mockImplementation(() => fakeChild());
+  });
+
+  it('keeps container stdin open (-i) and pipes it when the adapter feeds a prompt on stdin', async () => {
+    const mgr = await freshManager();
+    mgr.spawnInContainer('team-a', '/tmp/wd', 'claude', ['--print', '-'], {}, { stdin: true });
+    const args = lastDockerArgs();
+    const iIdx = args.indexOf('-i');
+    expect(iIdx).toBeGreaterThan(-1);
+    // -i is a `docker run` option, so it must precede the image name.
+    expect(iIdx).toBeLessThan(args.indexOf('arena-agent:latest'));
+    const opts = spawnMock.mock.calls.at(-1)![2] as { stdio: string[] };
+    expect(opts.stdio[0]).toBe('pipe');
+  });
+
+  it('does not open stdin by default (argv-prompt CLIs would otherwise wait on it)', async () => {
+    const mgr = await freshManager();
+    mgr.spawnInContainer('team-a', '/tmp/wd', 'codex', ['exec', 'p'], {});
+    expect(lastDockerArgs()).not.toContain('-i');
+    const opts = spawnMock.mock.calls.at(-1)![2] as { stdio: string[] };
+    expect(opts.stdio[0]).toBe('ignore');
+  });
+});
+
+describe('SandboxManager.verify', () => {
+  function verifyChild() {
+    const child = new EventEmitter() as EventEmitter & { stderr: EventEmitter };
+    child.stderr = new EventEmitter();
+    return child;
+  }
+
+  beforeEach(() => spawnMock.mockReset());
+
+  it('rejects with a clear error (no unhandled throw) when the docker binary is missing', async () => {
+    const child = verifyChild();
+    spawnMock.mockImplementation(() => {
+      queueMicrotask(() => child.emit('error', Object.assign(new Error('spawn docker ENOENT'), { code: 'ENOENT' })));
+      return child;
+    });
+    const mgr = await freshManager();
+    const { SandboxUnavailableError } = await import('../sandbox-manager.js');
+    const err = await mgr.verify().catch((e) => e);
+    expect(err).toBeInstanceOf(SandboxUnavailableError);
+    expect(err.reason).toBe('docker-missing');
+    expect(err.message).toMatch(/docker/i);
+    expect(err.message).toMatch(/ARENA_SKIP_SANDBOX/);
+  });
+
+  it('names the image and the build command when the image is missing', async () => {
+    const child = verifyChild();
+    spawnMock.mockImplementation(() => {
+      queueMicrotask(() => {
+        child.stderr.emit('data', Buffer.from('Error: No such image: arena-agent:latest'));
+        child.emit('close', 1);
+      });
+      return child;
+    });
+    const mgr = await freshManager();
+    const err = await mgr.verify().catch((e) => e);
+    expect(err.reason).toBe('image-missing');
+    expect(err.message).toContain('arena-agent:latest');
+    expect(err.message).toContain('docker build -f Dockerfile.agent');
+  });
+
+  it('reports an unreachable daemon distinctly from a missing image', async () => {
+    const child = verifyChild();
+    spawnMock.mockImplementation(() => {
+      queueMicrotask(() => {
+        child.stderr.emit('data', Buffer.from('Cannot connect to the Docker daemon at unix:///var/run/docker.sock'));
+        child.emit('close', 1);
+      });
+      return child;
+    });
+    const mgr = await freshManager();
+    const err = await mgr.verify().catch((e) => e);
+    expect(err.reason).toBe('daemon-unavailable');
+    expect(err.message).toMatch(/daemon/i);
+  });
+
+  it('resolves when the image exists', async () => {
+    const child = verifyChild();
+    spawnMock.mockImplementation(() => {
+      queueMicrotask(() => child.emit('close', 0));
+      return child;
+    });
+    const mgr = await freshManager();
+    await expect(mgr.verify()).resolves.toBeUndefined();
+  });
+});
