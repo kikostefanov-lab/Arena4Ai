@@ -24,6 +24,24 @@ export const TERMINAL_STATES = new Set([
   CompetitionState.CANCELLED,
 ]);
 
+/**
+ * States in which a competition has been judged and has a stored result. Stats
+ * (leaderboard, analytics) must count all of them: running the Forge moves a
+ * COMPLETE competition on to FORGING / FORGE_COMPLETE, and it must not vanish.
+ */
+export const FINISHED_STATES: ReadonlySet<CompetitionState> = new Set([
+  CompetitionState.SCORED,
+  CompetitionState.SYNTHESIZING,
+  CompetitionState.COMPLETE,
+  CompetitionState.FORGING,
+  CompetitionState.FORGE_COMPLETE,
+]);
+
+/** True when `state` (a raw DB string) is a finished-competition state. */
+export function isFinishedState(state: string): boolean {
+  return FINISHED_STATES.has(state as CompetitionState);
+}
+
 export const VALID_TRANSITIONS: Record<CompetitionState, CompetitionState[]> = {
   [CompetitionState.DRAFT]: [CompetitionState.CONFIGURED],
   [CompetitionState.CONFIGURED]: [CompetitionState.LAUNCHING],

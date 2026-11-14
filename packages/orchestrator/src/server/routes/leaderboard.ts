@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { isFinishedState } from '@arena/shared';
 import { repo } from '../repo.js';
 
 export const leaderboardRouter = Router();
@@ -19,14 +20,15 @@ export interface LeaderboardEntry extends ModelStats {
 
 interface Scorecard {
   teamId: string;
-  totalScore?: number;
+  /** Aggregated 0-1 score across judges (see ScoreCard in @arena/shared). */
+  finalScore?: number;
   [key: string]: unknown;
 }
 
 leaderboardRouter.get('/', async (_req: Request, res: Response) => {
   // Fetch all completed competitions and their results
   const competitions = await repo.list(500);
-  const completedComps = competitions.filter((c) => c.state === 'COMPLETE' || c.state === 'SCORED');
+  const completedComps = competitions.filter((c) => isFinishedState(c.state));
 
   if (completedComps.length === 0) {
     res.json([]);
@@ -63,8 +65,8 @@ leaderboardRouter.get('/', async (_req: Request, res: Response) => {
     for (const team of teams) {
       const modelPrefix = team.model.split(':')[0].toLowerCase();
       const scorecard = scorecards.find((s) => s.teamId === team.id);
-      const totalScore = typeof scorecard?.totalScore === 'number' ? scorecard.totalScore : 0;
-      teamInfoMap.set(team.id, { model: modelPrefix, score: totalScore });
+      const finalScore = typeof scorecard?.finalScore === 'number' ? scorecard.finalScore : 0;
+      teamInfoMap.set(team.id, { model: modelPrefix, score: finalScore });
     }
 
     // Determine winner/loser/tie
