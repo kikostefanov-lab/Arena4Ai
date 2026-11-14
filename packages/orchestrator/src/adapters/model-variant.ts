@@ -1,3 +1,5 @@
+import { isCliDefaultModel } from '@arena/shared';
+
 /**
  * Model variants are user-supplied — the Agent Builder deliberately allows a
  * freeform model id ("allowCustom") so a self-hoster can name a model the
@@ -21,6 +23,8 @@ export function isSafeModelVariant(variant: string): boolean {
  * competition — the CLI just runs with its own default model.
  */
 export function safeModelVariant(variant: string | undefined): string | undefined {
+  // CLI_DEFAULT_MODEL: pass no model flag, so the CLI runs its own default.
+  if (isCliDefaultModel(variant)) return undefined;
   if (!variant) return undefined;
   if (isSafeModelVariant(variant)) return variant;
   console.warn(`[arena] ignoring unsafe model variant: ${JSON.stringify(variant)}`);

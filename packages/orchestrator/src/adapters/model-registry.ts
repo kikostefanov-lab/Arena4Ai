@@ -1,3 +1,5 @@
+import { CLI_DEFAULT_MODEL } from '@arena/shared';
+
 export interface ModelPreset {
   id: string;
   label: string;
@@ -18,19 +20,24 @@ export interface ProviderConfig {
 }
 
 export interface ModelsResponse {
-  providers: ProviderConfig[];
+  providers: (ProviderConfig & {
+    /** Where `presets` came from: the installed CLI, or the static fallback. */
+    catalog?: { source: 'cli' | 'static'; fetchedAt: string; error?: string };
+  })[];
 }
 
 /**
- * Known model ids per provider.
+ * Static model data per provider.
  *
- * These are read by the agent seeder, the /models endpoint and the Armory UI,
- * so a stale id here reaches a self-hoster as a runtime failure on their very
- * first competition. When a provider CLI ships new models, update this table —
- * it is the single source of truth, and `briefs`/seeds derive from it.
+ * This is NOT the list a picker shows: `model-catalog.ts` asks each installed
+ * CLI which models it offers right now, and only falls back to these presets
+ * when the CLI cannot be asked. Every provider defaults to CLI_DEFAULT_MODEL
+ * (no model flag at all), because a CLI's own default is the one model id that
+ * cannot go stale. Hardcoded codex/gemini ids went stale twice in a year, so
+ * none are kept here: their lists come from the CLI.
  *
- * Verified against: claude-api skill (Anthropic ids), codex-cli 0.144.1,
- * gemini-cli 0.38.2.
+ * Claude ids stay because Claude has no list command; its aliases
+ * (CLAUDE_MODEL_ALIASES) always resolve to the latest model of each family.
  */
 const MODEL_REGISTRY: ProviderConfig[] = [
   {
@@ -41,7 +48,8 @@ const MODEL_REGISTRY: ProviderConfig[] = [
     installHint: 'npm i -g @anthropic-ai/claude-code, then run `claude` once to sign in',
     allowCustom: true,
     presets: [
-      { id: 'claude-opus-5', label: 'Opus 5', default: true },
+      { id: CLI_DEFAULT_MODEL, label: 'CLI default', default: true },
+      { id: 'claude-opus-5', label: 'Opus 5' },
       { id: 'claude-sonnet-5', label: 'Sonnet 5' },
       { id: 'claude-opus-4-8', label: 'Opus 4.8' },
       { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
@@ -54,11 +62,7 @@ const MODEL_REGISTRY: ProviderConfig[] = [
     bin: 'codex',
     installHint: 'npm i -g @openai/codex, then run `codex login`',
     allowCustom: true,
-    presets: [
-      { id: 'gpt-5.3-codex', label: 'GPT-5.3 Codex', default: true },
-      { id: 'gpt-5.1-codex-max', label: 'GPT-5.1 Codex Max' },
-      { id: 'gpt-5.1-codex-mini', label: 'GPT-5.1 Codex Mini' },
-    ],
+    presets: [{ id: CLI_DEFAULT_MODEL, label: 'CLI default', default: true }],
   },
   {
     id: 'gemini',
@@ -67,13 +71,15 @@ const MODEL_REGISTRY: ProviderConfig[] = [
     bin: 'gemini',
     installHint: 'npm i -g @google/gemini-cli, then run `gemini` once to sign in',
     allowCustom: true,
-    presets: [
-      { id: 'gemini-3-flash', label: 'Gemini 3 Flash', default: true },
-      { id: 'gemini-3-pro', label: 'Gemini 3 Pro' },
-      { id: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
-    ],
+    presets: [{ id: CLI_DEFAULT_MODEL, label: 'CLI default', default: true }],
   },
 ];
+
+/**
+ * `claude --model <alias>` resolves to the latest model of that family, so
+ * these never go stale. Listed in `claude --help` (fable, opus, sonnet) plus haiku.
+ */
+export const CLAUDE_MODEL_ALIASES = ['opus', 'sonnet', 'haiku', 'fable'] as const;
 
 /**
  * Model the judge / synthesis / presentation stages are pinned to.
@@ -140,8 +146,9 @@ export function resolveStageModel(): string {
 /**
  * Resolve the model a judge run should be pinned to.
  *
- * `provider` defaults to 'claude' so existing callers are unchanged. For any
- * other provider the pin comes from that provider's own registry default —
+ * `provider` defaults to 'claude' so existing callers are unchanged. Codex and
+ * Gemini judges run on their CLI's default (CLI_DEFAULT_MODEL, no model flag)
+ * unless an override names a model: a hardcoded id for them goes stale, and
  * pinning a codex judge to `claude-opus-5` would simply be rejected by the CLI.
  *
  * The env overrides still win, and are deliberately provider-agnostic: they

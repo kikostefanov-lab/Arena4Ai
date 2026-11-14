@@ -20,8 +20,8 @@ import { createAgentProfilesRouter } from './routes/agent-profiles.js';
 import { createPersonasRouter } from './routes/personas.js';
 import { createAgentsRouter } from './routes/agents.js';
 import { generatePersonaRouter } from './routes/generate-persona.js';
-import { seedPersonasAgents } from '../db/seed-personas-agents.js';
-import { getModelRegistry } from '../adapters/model-registry.js';
+import { seedPersonasAgents, repairStaleSystemAgents } from '../db/seed-personas-agents.js';
+import { getLiveModelRegistry } from '../adapters/model-catalog.js';
 import { requireApiKeyForAll } from './middleware/auth.js';
 import { isAllowedWsOrigin } from './network.js';
 
@@ -119,12 +119,15 @@ export function createApp(): Application {
   const agentRepo = new AgentRepository(db);
 
   // Seed system personas + agents on startup (async, non-blocking)
-  void seedPersonasAgents(personaRepo, agentRepo).catch((err) =>
-    console.warn('[seed] Failed to seed personas/agents:', err),
-  );
+  void seedPersonasAgents(personaRepo, agentRepo)
+    .then(() => repairStaleSystemAgents(agentRepo))
+    .catch((err) => console.warn('[seed] Failed to seed personas/agents:', err));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
-  app.get('/models', (_req, res) => res.json(getModelRegistry()));
+  // Presets come from the installed CLIs (cached), so pickers follow new models.
+  app.get('/models', async (_req, res, next) => {
+    try { res.json(await getLiveModelRegistry()); } catch (err) { next(err); }
+  });
   // Tighter limits for the two most expensive routes in the product. These MUST
   // be registered before the /competitions router: Express matches layers in
   // registration order, so a router mounted first answers the path and any

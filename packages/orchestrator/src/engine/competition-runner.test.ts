@@ -57,7 +57,11 @@ vi.mock('../judging/ai-judge.js', () => ({
 // CLIs happen to be installed on the machine running the tests.
 vi.mock('../utils/cli-preflight.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/cli-preflight.js')>();
-  return { ...actual, findMissingClis: vi.fn().mockResolvedValue([]) };
+  return {
+    ...actual,
+    findMissingClis: vi.fn().mockResolvedValue([]),
+    findUnavailableModels: vi.fn().mockResolvedValue([]),
+  };
 });
 
 // Mock score-aggregator
@@ -133,7 +137,10 @@ vi.mock('../adapters/gemini/gemini-adapter.js', () => ({
 
 import { CompetitionRunner } from './competition-runner.js';
 import { aiJudge } from '../judging/ai-judge.js';
-import { findMissingClis } from '../utils/cli-preflight.js';
+import { findMissingClis, findUnavailableModels } from '../utils/cli-preflight.js';
+import { ClaudeAdapter } from '../adapters/claude/claude-adapter.js';
+import { aggregate } from '../judging/score-aggregator.js';
+import { generateAllPresentations } from '../presentation/presentation-generator.js';
 
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -345,5 +352,90 @@ describe('CompetitionRunner failure visibility', () => {
 
     await expect(runner.run()).rejects.toThrow(/"gemini" not found on PATH/);
     expect(events.some(e => e.type === 'ERROR' && e.payload['stage'] === 'preflight')).toBe(true);
+  });
+});
+
+
+// ── Agent crashes and unavailable models ─────────────────────────────────────
+
+/** A FakeAdapter whose CLI exited non-zero before writing anything. */
+function crashedAdapter(teamId: string): FakeAdapter {
+  const a = new FakeAdapter(teamId);
+  (a as unknown as { failure: unknown }).failure = {
+    exitCode: 1,
+    message: "Codex exited with code 1: The 'codex-standard' model is not supported",
+    detail: '',
+  };
+  a.collectDeliverables.mockResolvedValue({ teamId, files: [], collectedAt: new Date().toISOString() });
+  return a;
+}
+
+describe('CompetitionRunner agent failures', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(findMissingClis).mockResolvedValue([]);
+    vi.mocked(findUnavailableModels).mockResolvedValue([]);
+    vi.mocked(aiJudge).mockResolvedValue(OK_JUDGE_RESULT as never);
+  });
+
+  it('leaves a crashed team unjudged, says why on its scorecard, and records no stats', async () => {
+    vi.mocked(ClaudeAdapter).mockImplementation(((teamId: string) =>
+      teamId === 'team-b' ? crashedAdapter(teamId) : new FakeAdapter(teamId)) as never);
+    vi.mocked(aggregate).mockReturnValueOnce([
+      { teamId: 'team-a', rank: 1, finalScore: 0.85, judgeResults: [] },
+    ]);
+    const incrementStats = vi.fn().mockResolvedValue(undefined);
+    const repo = {
+      get: vi.fn().mockResolvedValue(null),
+      getByProviderAndPersonaName: vi.fn().mockResolvedValue(null),
+      incrementStats,
+    } as unknown as AgentRepository;
+    const runner = new CompetitionRunner(
+      testBrief,
+      testTeams.map((t, i) => ({ ...t, agentId: `agent-${i}` })),
+      { skipSandbox: true, printResults: false, agentRepo: repo },
+    );
+
+    const result = await runner.run();
+
+    // Only team-a's work went to the judge and the presenters.
+    expect(vi.mocked(aiJudge).mock.calls.map((c) => (c[1] as Deliverable).teamId)).toEqual(['team-a']);
+    expect(vi.mocked(generateAllPresentations).mock.calls.at(-1)![1].map((d: Deliverable) => d.teamId)).toEqual(['team-a']);
+    const failed = result.scorecards.find((c) => c.teamId === 'team-b')!;
+    expect(failed).toMatchObject({ rank: 2, finalScore: 0, judgeResults: [] });
+    expect(failed.agentFailure?.message).toContain('codex-standard');
+    expect(incrementStats).not.toHaveBeenCalled();
+
+    vi.mocked(ClaudeAdapter).mockImplementation(((teamId: string) => new FakeAdapter(teamId)) as never);
+  });
+
+  it('fails the competition, naming each cause, when every agent crashed', async () => {
+    vi.mocked(ClaudeAdapter).mockImplementation(((teamId: string) => crashedAdapter(teamId)) as never);
+    const runner = makeTestRunner();
+    const states: string[] = [];
+    runner.on('stateChange', (s: string) => states.push(s));
+    runner.on('error', () => {});
+
+    await expect(runner.run()).rejects.toThrow(/Every agent CLI failed[\s\S]*team-a: Codex exited with code 1/);
+    expect(states.at(-1)).toBe(CompetitionState.FAILED);
+    expect(aiJudge).not.toHaveBeenCalled();
+
+    vi.mocked(ClaudeAdapter).mockImplementation(((teamId: string) => new FakeAdapter(teamId)) as never);
+  });
+
+  it('refuses to launch a team whose model the CLI does not offer', async () => {
+    vi.mocked(findUnavailableModels).mockResolvedValueOnce([{
+      teamId: 'team-b', label: 'claude:speedrunner', provider: 'claude', modelVariant: 'claude-nope',
+      bin: 'claude', available: 'opus, sonnet',
+    }]);
+    const runner = makeTestRunner();
+    const events: { type: string; payload: Record<string, unknown> }[] = [];
+    runner.on('arenaEvent', (e) => events.push(e));
+    runner.on('error', () => {});
+
+    await expect(runner.run()).rejects.toThrow(/model "claude-nope" is not offered by the installed claude CLI/);
+    const err = events.find((e) => e.type === 'ERROR');
+    expect(err?.payload).toMatchObject({ stage: 'preflight', kind: 'model-unavailable', model: 'claude-nope' });
+    expect(vi.mocked(ClaudeAdapter)).not.toHaveBeenCalled();
   });
 });

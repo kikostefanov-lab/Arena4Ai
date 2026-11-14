@@ -4,6 +4,7 @@ import { helperClaudeArgs, helperEnv } from '../utils/claude-helper.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, truncateFiles, JUDGE_CONTEXT } from '../utils/brief-context.js';
+import { isCliDefaultModel } from '@arena/shared';
 import { resolveJudgeModel, getProviderConfig } from '../adapters/model-registry.js';
 
 export const JUDGE_IDS = {
@@ -108,11 +109,13 @@ export function buildJudgeInvocation(
   prompt: string,
 ): JudgeInvocation {
   const modelFlag = getProviderConfig(provider)?.modelFlag ?? '--model';
+  // CLI_DEFAULT_MODEL means "no model flag": the CLI picks its own default.
+  const modelArgs = isCliDefaultModel(model) ? [] : [modelFlag, model];
   switch (provider) {
     case 'codex':
       // -s read-only: the judge may not modify the workspace it is scoring.
       return {
-        args: ['exec', '--skip-git-repo-check', '-s', 'read-only', modelFlag, model, prompt],
+        args: ['exec', '--skip-git-repo-check', '-s', 'read-only', ...modelArgs, prompt],
         promptVia: 'argv',
         answerStream: 'stdout',
       };
@@ -120,7 +123,7 @@ export function buildJudgeInvocation(
       // --approval-mode plan is gemini's read-only mode; --yolo would grant a
       // judge tool access it has no need for.
       return {
-        args: ['-p', prompt, modelFlag, model, '--approval-mode', 'plan'],
+        args: ['-p', prompt, ...modelArgs, '--approval-mode', 'plan'],
         promptVia: 'argv',
         answerStream: 'stdout',
       };

@@ -23,8 +23,9 @@ Set `NEXT_PUBLIC_WS_URL=ws://localhost:3000` in `packages/web/.env.local`.
 ### Running
 
 ```bash
-# API server (port 3000)
-DATABASE_URL=postgresql://localhost/arena \
+# API server (port 3000). Without Docker, ARENA_SKIP_SANDBOX=true is required or every
+# web-launched match fails with "Docker is not installed".
+DATABASE_URL=postgresql://localhost/arena ARENA_SKIP_SANDBOX=true \
   npx tsx packages/orchestrator/src/cli.ts serve --port 3000
 
 # Web UI (port 3001) — separate terminal
@@ -42,14 +43,14 @@ npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
 
 # With specific model variants
 DATABASE_URL=postgresql://localhost/arena npx tsx packages/orchestrator/src/cli.ts run briefs/fizzbuzz-cli.yml \
-  --team-a claude:architect --model-a claude-opus-5 \
-  --team-b codex:speedrunner --model-b gpt-5.1-codex-max \
+  --team-a claude:architect --model-a opus \
+  --team-b codex:speedrunner \
   --skip-sandbox --time-limit 120000
 
 # Round-robin tournament (all pairs compete)
 npx tsx packages/orchestrator/src/cli.ts tournament run briefs/fizzbuzz-cli.yml \
   --teams claude:architect,claude:speedrunner,codex:standard \
-  --models claude-opus-5,claude-sonnet-5,gpt-5.3-codex \
+  --models opus,sonnet,cli-default \
   --skip-sandbox
 
 # Re-evaluate completed competitions (stages: judge | presentation | synthesis | all)
@@ -162,15 +163,26 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 
 Rate limiting: 10/min on `POST /competitions`; 5/min on `POST /competitions/:id/forge` and `POST /competitions/:id/synthesis`; 20/min on `POST /generate-brief`.
 
-### Model registry, variants & pinning
-`packages/orchestrator/src/adapters/model-registry.ts` is the **single source of truth** for
-model ids — `seed-personas-agents.ts` derives its ids from it via `requireDefaultModel()`, so
-never hardcode a model id anywhere else. Add new models by editing this file.
+### Model catalog, variants & pinning
+Model ids go stale every time a provider ships, so **the installed CLIs are the source of truth**,
+not a hand-kept list. `packages/orchestrator/src/adapters/model-catalog.ts` asks each CLI what it
+offers (cached 10 min; `GET /models` serves it to every picker):
+- **Codex**: `codex debug models` (JSON; listed models in the CLI's priority order)
+- **Gemini**: `gemini --list-models` (gemini-cli 0.68 prints it to stderr; colours are stripped)
+- **Claude**: no list command; offers the aliases `opus` / `sonnet` / `haiku` / `fable`, which
+  always resolve to the latest model of that family, plus the few full ids in `model-registry.ts`
+When a probe fails, the static presets in `model-registry.ts` are used and nothing is rejected.
 
-Presets per provider:
-- **Claude**: `claude-opus-5` (default), `claude-sonnet-5`, `claude-opus-4-8`, `claude-haiku-4-5` — never date-suffix an Anthropic id
-- **Codex**: `gpt-5.3-codex` (default), `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`
-- **Gemini**: `gemini-3-flash` (default), `gemini-3-pro`, `gemini-3.1-pro`
+**`cli-default`** (`CLI_DEFAULT_MODEL` in `@arena/shared`) means "pass no model flag". It is the
+default for every provider and what system agents are seeded with, because the CLI's own default
+cannot go stale. Never hardcode a codex/gemini id anywhere. On startup (server and CLI `run`),
+`repairStaleSystemAgents()` moves any SYSTEM agent whose model the CLI does not list back to
+`cli-default`; user-created agents are left alone.
+
+**Pre-launch model check** — after the CLI preflight, `findUnavailableModels()` refuses to start a
+team whose model its CLI does not list (`ERROR` event, `stage: 'preflight'`,
+`kind: 'model-unavailable'`), naming the alternatives. Full Claude ids can't be verified offline,
+so they pass and any failure surfaces as an agent crash (below).
 
 Each provider entry also carries `bin` + `installHint`, used by the CLI preflight check.
 
@@ -180,7 +192,7 @@ explicit `team.modelVariant` (CLI flag) > `agent.modelVariant` (DB) > undefined 
 CLI: `--model-a`…`--model-d` for `run`, `--models` comma-list for `tournament`. The
 AgentBuilder UI offers a preset dropdown + freeform custom id.
 
-**Judge pinning** — `DEFAULT_JUDGE_MODEL` (`claude-opus-5`) and `DEFAULT_ADVERSARIAL_JUDGE_MODEL`
+**Judge pinning** — the judges are the one place a full id is deliberate: `DEFAULT_JUDGE_MODEL` (`claude-opus-5`) and `DEFAULT_ADVERSARIAL_JUDGE_MODEL`
 (`claude-sonnet-5`) pin the judge so scores stay comparable across time, and so
 `--adversarial-judge` is a genuinely different model rather than the same model with a
 different prompt. Override per-run with `ARENA_JUDGE_MODEL` / `ARENA_ADVERSARIAL_JUDGE_MODEL`
@@ -190,6 +202,15 @@ different prompt. Override per-run with `ARENA_JUDGE_MODEL` / `ARENA_ADVERSARIAL
 brief intake/generation) passes `--model resolveStageModel()` (`DEFAULT_STAGE_MODEL`,
 override with `ARENA_STAGE_MODEL`). New LLM-calling stages must do the same — an unpinned
 stage inherits whatever the CLI defaults to that week.
+
+### Agent crashes
+An agent CLI that exits non-zero before the deadline (bad model, expired login, rate limit,
+untrusted folder) sets `adapter.failure` and emits an `ERROR` event with `stage: 'agent'` and the
+CLI's own message (`summarizeAgentError()`; Claude's stream-json errors are read from stdout).
+If it produced no files, the team is **not judged**: its scorecard carries `agentFailure`, ranks
+last at 0, and the UI shows "did not compete" / DNC. Agent stats and quality signals are skipped
+for that match. If every agent crashed, the competition ends `FAILED`. Never infer a crash from a
+zero score; branch on `agentFailure`.
 
 ### Judging pipeline
 1. **AI cross-judge** (`ai-judge.ts`) — PRIMARY scorer. Claude reads actual deliverables and scores against rubric criteria.
@@ -400,9 +421,11 @@ remain but the live page no longer draws with them; treat this list as history.
 
 Where things stand after 2026-11-14 (see `CHANGELOG.md` for the detail):
 - `main` has the 3D arena (`v2.0.0`) and the harness hardening (#17). Nothing is in flight.
-- **First thing to do:** run one real two-team competition end to end (CLI and web UI) on the
-  hardened build. Nothing since #17 has exercised a live run, the deadline shutdown against real
-  CLIs, or a helper stage from a plain terminal.
+- **Done 2026-11-14:** real end-to-end runs (CLI and web) on the hardened build. They led to the
+  live model catalog and agent-crash reporting on `feat/live-model-catalog` (see CHANGELOG).
+- **Next:** mark a team whose CLI stalled on provider errors (e.g. Gemini 503s until the deadline)
+  as failed rather than judging its empty workdir; offer a one-click fix in the Armory for user
+  agents on retired ids.
 - **Then, in rough priority:** show a draw in the UI and the reel (a tie is stored with no
   `winnerId` and currently renders as a blank winner; the match page's loser calculation and the
   Forge source picker still fall back to the first team); the WebSocket replay gap
@@ -421,5 +444,8 @@ Where things stand after 2026-11-14 (see `CHANGELOG.md` for the detail):
    normalizer the structured markers it currently lacks (codex-cli 0.144.x likewise has
    `codex exec --json`). Not yet wired up.
 2. WebSocket seq counter is approximate (local, not DB serial)
-3. A drawn match (scores within the aggregator's tolerance) is stored with no `winnerId`; the
+3. Gemini's API can return 503 "high demand" for long stretches; gemini-cli retries with backoff
+   until Arena's deadline kills it, so the team is judged on an empty workdir. It is not marked
+   `agentFailure` because the CLI never exited on its own.
+4. A drawn match (scores within the aggregator's tolerance) is stored with no `winnerId`; the
    tied teams are the scorecards with `rank === 1`. The UI and the reel do not label a draw yet.

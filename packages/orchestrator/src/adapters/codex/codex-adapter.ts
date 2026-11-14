@@ -95,6 +95,7 @@ export class CodexAdapter extends BaseAdapter {
 
       const errRl = createInterface({ input: child.stderr! });
       errRl.on('line', (line) => {
+        this.noteStderr(line);
         const event = normalizer.addLine(line);
         if (event) this.emitArenaEvent(event);
       });
@@ -102,8 +103,7 @@ export class CodexAdapter extends BaseAdapter {
       child.on('close', (code) => {
         errRl.close();
         this.process = null;
-        if (code === 0 || code === null) resolve();
-        else reject(new Error(`Codex process exited with code ${code}`));
+        this.settleExit(code, 'Codex', resolve);
       });
 
       child.on('error', (err) => {

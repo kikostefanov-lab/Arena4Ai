@@ -115,7 +115,13 @@ program
           const { CompetitionRepository } = await import('./db/repository.js');
           const { AgentRepository } = await import('./db/agent-repository.js');
           const repo = new CompetitionRepository(db);
-          (runner as any).agentRepo = new AgentRepository(db);
+          const agentRepo = new AgentRepository(db);
+          (runner as any).agentRepo = agentRepo;
+          // Same startup repair the server does: a seeded agent on a retired id
+          // would otherwise fail the pre-launch model check.
+          const { repairStaleSystemAgents } = await import('./db/seed-personas-agents.js');
+          await repairStaleSystemAgents(agentRepo).catch((err) =>
+            console.warn('[arena] could not check stored agent models:', (err as Error).message));
           await repo.create(runner.competitionId, brief, teams);
 
           runner.on('stateChange', (state) => {

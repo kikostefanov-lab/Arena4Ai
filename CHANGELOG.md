@@ -2,6 +2,49 @@
 
 Newest first. Each entry says what changed, why, how it was verified, and what was left open.
 
+## 2026-11-14 — live model catalog and honest agent failures (branch `feat/live-model-catalog`)
+
+The first real end-to-end run after #17 found that stale model ids broke Codex and Gemini, and
+that a broken agent was recorded as a fair 0% loss.
+
+**What was wrong**
+- Existing databases kept the seeded ids `codex-standard`, `gemini-2-flash` and
+  `claude-sonnet-4-6`: seeding only inserts missing rows. The registry's replacements
+  (`gpt-5.3-codex`, `gemini-3-*`) were not offered by the installed CLIs either, and the Gemini
+  adapter fell back to `gemini-3-flash` when no model was set.
+- An agent CLI that exited with an error left no trace. The Codex normalizer dropped the error
+  line, and the non-zero exit only rejected a promise nobody read. The judge then scored the
+  empty workdir as 0%, and agent stats counted the loss.
+- gemini-cli 0.68 refuses to run headless in an untrusted folder (exit 55), so every Gemini
+  competitor failed immediately.
+
+**What changed**
+- `adapters/model-catalog.ts` reads each CLI's model list (`codex debug models`,
+  `gemini --list-models`, Claude aliases), cached, with a static fallback. `GET /models`, the
+  Armory picker and the New Battle cards use it.
+- `cli-default` (no model flag) is the default for every provider and for seeded agents. Stale
+  system agents are repaired on startup (server and CLI `run`).
+- A pre-launch check refuses a team whose model its CLI does not list, naming the alternatives.
+- Adapters record a non-zero exit as `failure`, with the CLI's own message as an `ERROR` event
+  (`stage: 'agent'`). A crashed team with no files is not judged: it gets `agentFailure` on its
+  scorecard and shows as "did not compete" / DNC. Stats and quality signals skip that match. If
+  every agent crashed, the competition is `FAILED`.
+- Gemini competitors run with `GEMINI_CLI_TRUST_WORKSPACE=true`.
+- The FAILED banner shows the stored reason. The model proxy caches for 60 s instead of an hour.
+
+**Verification**
+- Typecheck passes (orchestrator, web). Tests: 582 orchestrator (16 skipped), 84 shared.
+- Real runs on codex-cli 0.164, gemini-cli 0.68, Claude Code 2.1.325. Codex on `cli-default`
+  scored 87.7%. A Claude team on a made-up id was reported as "did not compete", with Claude's own
+  message. A user agent on `codex-standard` was refused before launch. Gemini launched from the
+  web UI after the trust fix. The deadline left no agent processes in any run.
+
+**Left open**
+- Gemini's API returned 503 "high demand" for the whole Gemini run. The CLI retries until the
+  deadline, so that team is judged on an empty workdir rather than marked as failed.
+- User agents still on retired ids (5 here) are refused at launch, not repaired.
+- Codex and Gemini judges now run on the CLI default unless `ARENA_JUDGE_MODEL` is set.
+
 ## 2026-11-14 — harness hardening (#17, `bd8d527`)
 
 Ten security and correctness findings from a code review, each re-checked against current code

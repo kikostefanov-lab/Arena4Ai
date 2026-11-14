@@ -1,5 +1,7 @@
 import { spawn } from 'node:child_process';
+import { isCliDefaultModel } from '@arena/shared';
 import { getProviderConfig } from '../adapters/model-registry.js';
+import { getProviderCatalog, judgeModel, describeAvailable, type ProviderCatalog } from '../adapters/model-catalog.js';
 
 /**
  * Provider CLI availability checks.
@@ -61,5 +63,57 @@ export function formatMissingCliError(missing: MissingCli[]): string {
     `Cannot start competition: ${missing.length === 1 ? 'a required agent CLI is' : 'required agent CLIs are'} not installed.`,
     ...lines,
     'Arena drives the agent CLIs you already have installed — either install the above, or pick teams that use a provider you do have.',
+  ].join('\n');
+}
+
+export interface TeamModelRequest {
+  teamId: string;
+  /** e.g. `codex:standard`, used in the message. */
+  label: string;
+  provider: string;
+  /** Resolved variant; undefined / CLI_DEFAULT_MODEL = the CLI's own default. */
+  modelVariant?: string;
+}
+
+export interface UnavailableModel extends TeamModelRequest {
+  bin: string;
+  /** Ids the CLI does offer (may be truncated). */
+  available: string;
+}
+
+/**
+ * Check every team's model against the models its CLI says it offers. Only
+ * a definite 'unknown' is reported: when the list could not be read, or for a
+ * full Claude id (Claude has no list command), the run goes ahead and any
+ * failure is reported by the adapter when the agent exits.
+ */
+export async function findUnavailableModels(
+  teams: TeamModelRequest[],
+  overrides: Record<string, string | undefined> = {},
+  getCatalog: (provider: string, bin: string) => Promise<ProviderCatalog> =
+    (provider, bin) => getProviderCatalog(provider, { bin }),
+): Promise<UnavailableModel[]> {
+  const catalogs = new Map<string, Promise<ProviderCatalog>>();
+  const out: UnavailableModel[] = [];
+  for (const team of teams) {
+    // The CLI's own default is always runnable; don't spawn a probe for it.
+    if (isCliDefaultModel(team.modelVariant)) continue;
+    const bin = providerBin(team.provider, overrides);
+    if (!catalogs.has(team.provider)) catalogs.set(team.provider, getCatalog(team.provider, bin));
+    const catalog = await catalogs.get(team.provider)!;
+    if (judgeModel(catalog, team.modelVariant) !== 'unknown') continue;
+    out.push({ ...team, bin, available: describeAvailable(catalog) });
+  }
+  return out;
+}
+
+/** Human-readable, actionable message naming each team, its model and the alternatives. */
+export function formatUnavailableModelError(bad: UnavailableModel[]): string {
+  const lines = bad.map((m) =>
+    `  • ${m.label}: model "${m.modelVariant}" is not offered by the installed ${m.bin} CLI. Available: ${m.available}.`);
+  return [
+    `Cannot start competition: ${bad.length === 1 ? 'a team asks for a model' : 'teams ask for models'} the agent CLI does not offer.`,
+    ...lines,
+    'Pick a listed model for that agent in the Armory, or set it to "CLI default" so it follows whatever the CLI ships.',
   ].join('\n');
 }

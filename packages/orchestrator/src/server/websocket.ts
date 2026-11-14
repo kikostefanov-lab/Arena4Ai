@@ -10,6 +10,7 @@ type RawScorecard = {
   teamId: string;
   finalScore: number;
   rank: number;
+  agentFailure?: { message: string; exitCode: number };
   judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
 };
 
@@ -46,6 +47,8 @@ function normalizeResult(
         commentary: s.commentary ?? '',
       })) ?? [],
       rank: sc.rank,
+      // A team whose agent CLI crashed was not judged; the UI says so.
+      ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
     })),
     ...(opts?.summary ? { summary: opts.summary } : {}),
     ...(opts?.synthesis ? { synthesis: opts.synthesis } : {}),
