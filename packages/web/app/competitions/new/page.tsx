@@ -471,7 +471,7 @@ function NewCompetitionForm() {
     if (!fromId) return;
     fetch(`/api/competitions/${fromId}`)
       .then(r => r.ok ? r.json() : null)
-      .then((data: { brief?: { title?: string; problem?: string; format?: string; timeLimitMs?: number; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; deliverableType?: DeliverableType; domainHint?: string }; teams?: { model?: string }[] } | null) => {
+      .then((data: { brief?: { title?: string; problem?: string; format?: string; timeLimitMs?: number; constraints?: string[]; deliverables?: string[]; expectedOutput?: string; rubric?: { criteria: RubricCriterion[] }; deliverableType?: DeliverableType; domainHint?: string }; teams?: { model?: string }[] } | null) => {
         if (!data?.brief) return;
         const b = data.brief;
         if (b.title) setTitle(b.title);
@@ -480,6 +480,8 @@ function NewCompetitionForm() {
         if (b.timeLimitMs) setTimeLimitMins(Math.round(b.timeLimitMs / 60000));
         if (b.constraints?.length) setConstraints(b.constraints.join('\n'));
         if (b.deliverables?.length) setDeliverables(b.deliverables.join('\n'));
+        // Keep the automated scorer's oracle: dropping it degrades the fallback to a length heuristic
+        if (typeof b.expectedOutput === 'string') setExpectedOutput(b.expectedOutput);
         if (b.rubric?.criteria?.length) setCriteria(b.rubric.criteria);
         if (b.deliverableType) setDeliverableType(b.deliverableType);
         if (b.domainHint && VALID_DOMAIN_HINTS.includes(b.domainHint as DomainHint)) {
@@ -504,7 +506,7 @@ function NewCompetitionForm() {
     const isEdit = searchParams.get('mode') === 'edit';
     fetch('/api/briefs')
       .then(r => r.ok ? r.json() : [])
-      .then((items: Array<{ id: string; brief?: Record<string, any>; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; rubric?: { criteria: RubricCriterion[] }; tags?: string[]; deliverableType?: DeliverableType; domainHint?: string }>) => {
+      .then((items: Array<{ id: string; brief?: Record<string, any>; title?: string; format?: string; timeLimitMs?: number; problem?: string; constraints?: string[]; deliverables?: string[]; expectedOutput?: string; rubric?: { criteria: RubricCriterion[] }; tags?: string[]; deliverableType?: DeliverableType; domainHint?: string }>) => {
         const item = items.find((b) => b.id === briefSlug);
         if (!item) return;
         // Support both new shape (data nested in .brief) and legacy flat shape
@@ -515,6 +517,7 @@ function NewCompetitionForm() {
         if (b.problem) setProblem(b.problem as string);
         if (Array.isArray(b.constraints) && b.constraints.length) setConstraints(b.constraints.join('\n'));
         if (Array.isArray(b.deliverables) && b.deliverables.length) setDeliverables(b.deliverables.join('\n'));
+        if (typeof b.expectedOutput === 'string') setExpectedOutput(b.expectedOutput);
         if (b.rubric?.criteria?.length) setCriteria(b.rubric.criteria as RubricCriterion[]);
         if (b.deliverableType) setDeliverableType(b.deliverableType as DeliverableType);
         if (b.domainHint && VALID_DOMAIN_HINTS.includes(b.domainHint as DomainHint)) {

@@ -85,8 +85,8 @@ describe('GET /leaderboard', () => {
         competitionId: 'comp-1',
         winnerId: 'team-a',
         scorecards: [
-          { teamId: 'team-a', totalScore: 80 },
-          { teamId: 'team-b', totalScore: 60 },
+          { teamId: 'team-a', finalScore: 0.8, judgeResults: [], rank: 1 },
+          { teamId: 'team-b', finalScore: 0.6, judgeResults: [], rank: 1 },
         ],
       },
     ]);
@@ -115,7 +115,7 @@ describe('GET /leaderboard', () => {
     expect(claudeEntry!.losses).toBe(0);
     expect(claudeEntry!.ties).toBe(0);
     expect(claudeEntry!.totalCompetitions).toBe(1);
-    expect(claudeEntry!.avgScore).toBe(80);
+    expect(claudeEntry!.avgScore).toBe(0.8);
     expect(claudeEntry!.winRate).toBe(1);
     expect(claudeEntry!.rank).toBe(1);
 
@@ -124,7 +124,7 @@ describe('GET /leaderboard', () => {
     expect(geminiEntry!.losses).toBe(1);
     expect(geminiEntry!.ties).toBe(0);
     expect(geminiEntry!.totalCompetitions).toBe(1);
-    expect(geminiEntry!.avgScore).toBe(60);
+    expect(geminiEntry!.avgScore).toBe(0.6);
     expect(geminiEntry!.winRate).toBe(0);
     expect(geminiEntry!.rank).toBe(2);
   });
@@ -146,8 +146,8 @@ describe('GET /leaderboard', () => {
         competitionId: 'comp-tie',
         winnerId: null,
         scorecards: [
-          { teamId: 'team-a', totalScore: 70 },
-          { teamId: 'team-b', totalScore: 70 },
+          { teamId: 'team-a', finalScore: 0.7, judgeResults: [], rank: 1 },
+          { teamId: 'team-b', finalScore: 0.7, judgeResults: [], rank: 1 },
         ],
       },
     ]);
@@ -189,12 +189,12 @@ describe('GET /leaderboard', () => {
       {
         competitionId: 'comp-1',
         winnerId: 'a1',
-        scorecards: [{ teamId: 'a1', totalScore: 90 }, { teamId: 'b1', totalScore: 50 }],
+        scorecards: [{ teamId: 'a1', finalScore: 0.9, judgeResults: [], rank: 1 }, { teamId: 'b1', finalScore: 0.5, judgeResults: [], rank: 1 }],
       },
       {
         competitionId: 'comp-2',
         winnerId: 'b2',
-        scorecards: [{ teamId: 'a2', totalScore: 40 }, { teamId: 'b2', totalScore: 80 }],
+        scorecards: [{ teamId: 'a2', finalScore: 0.4, judgeResults: [], rank: 1 }, { teamId: 'b2', finalScore: 0.8, judgeResults: [], rank: 1 }],
       },
     ]);
 
@@ -217,14 +217,40 @@ describe('GET /leaderboard', () => {
     expect(claudeEntry!.losses).toBe(1);
     expect(claudeEntry!.totalCompetitions).toBe(2);
     // avgScore = (90 + 40) / 2 = 65
-    expect(claudeEntry!.avgScore).toBe(65);
+    expect(claudeEntry!.avgScore).toBe(0.65);
     expect(claudeEntry!.winRate).toBe(0.5);
 
     expect(geminiEntry!.wins).toBe(1);
     expect(geminiEntry!.losses).toBe(1);
     expect(geminiEntry!.totalCompetitions).toBe(2);
     // avgScore = (50 + 80) / 2 = 65
-    expect(geminiEntry!.avgScore).toBe(65);
+    expect(geminiEntry!.avgScore).toBe(0.65);
     expect(geminiEntry!.winRate).toBe(0.5);
+  });
+
+  it.each(['SCORED', 'SYNTHESIZING', 'COMPLETE', 'FORGING', 'FORGE_COMPLETE'])(
+    'keeps a %s competition in the standings',
+    async (state) => {
+      mockList.mockResolvedValue([
+        { id: 'c', state, teams: [{ id: 'a', model: 'claude' }, { id: 'b', model: 'gemini' }] },
+      ]);
+      mockListResults.mockResolvedValue([
+        { competitionId: 'c', winnerId: 'a', scorecards: [
+          { teamId: 'a', finalScore: 0.9, judgeResults: [], rank: 1 },
+          { teamId: 'b', finalScore: 0.5, judgeResults: [], rank: 2 },
+        ] },
+      ]);
+      const res = await request(app).get('/leaderboard');
+      expect(res.body).toHaveLength(2);
+      expect(mockListResults).toHaveBeenCalledWith(['c']);
+    },
+  );
+
+  it.each(['RUNNING', 'FAILED', 'CANCELLED'])('excludes a %s competition', async (state) => {
+    mockList.mockResolvedValue([
+      { id: 'c', state, teams: [{ id: 'a', model: 'claude' }, { id: 'b', model: 'gemini' }] },
+    ]);
+    const res = await request(app).get('/leaderboard');
+    expect(res.body).toEqual([]);
   });
 });
