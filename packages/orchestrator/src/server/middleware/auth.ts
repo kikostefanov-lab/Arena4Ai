@@ -23,6 +23,19 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
   next();
 }
 
+/**
+ * Strict guard: when ARENA_API_KEY is set, EVERY request needs the key except
+ * `/health` (liveness probes) and OPTIONS (CORS preflight, which cannot carry
+ * credentials). When the key is unset, everything is open.
+ */
+export function requireApiKeyForAll(req: Request, res: Response, next: NextFunction): void {
+  if (req.method === 'OPTIONS' || req.path === '/health') {
+    next();
+    return;
+  }
+  requireApiKey(req, res, next);
+}
+
 /** Verbs that can change state, spend tokens, or start work on the host. */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 

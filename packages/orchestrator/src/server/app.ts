@@ -22,7 +22,7 @@ import { createAgentsRouter } from './routes/agents.js';
 import { generatePersonaRouter } from './routes/generate-persona.js';
 import { seedPersonasAgents } from '../db/seed-personas-agents.js';
 import { getModelRegistry } from '../adapters/model-registry.js';
-import { requireApiKeyForMutations } from './middleware/auth.js';
+import { requireApiKeyForAll } from './middleware/auth.js';
 
 const CORS = {
   origin: '*',
@@ -49,10 +49,11 @@ export function createApp(): Application {
     res.status(204).end();
   });
 
-  // Auth. Applied here, once, rather than per-router: a mutating route that
-  // forgets its own `requireApiKey` is an open door to the operator's machine.
-  // Read-only routes stay open — that is the documented contract.
-  app.use(requireApiKeyForMutations);
+  // Auth. Applied here, once, rather than per-router: a route that forgets its
+  // own `requireApiKey` is an open door to the operator's machine. With
+  // ARENA_API_KEY set, reads need the key too (deliverables and event logs can
+  // hold source code and prompts); only /health is exempt. Unset = all open.
+  app.use(requireApiKeyForAll);
 
   // Rate limiting: max 10 new competitions per minute per IP.
   //

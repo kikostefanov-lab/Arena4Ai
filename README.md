@@ -257,8 +257,27 @@ says which of the three it is.
 > `serve` also accepts a `--skip-sandbox` flag, but it is **not wired up** — it is ignored. Use
 > the `ARENA_SKIP_SANDBOX=true` environment variable.
 
-If you expose the orchestrator port beyond localhost, set `ARENA_API_KEY`; every request then
-needs `Authorization: Bearer <key>`. Leave it unset for local dev and auth is disabled.
+**Network exposure and auth: what is and is not protected.**
+
+- `serve` binds to `127.0.0.1` by default. To listen on other interfaces pass `--host 0.0.0.0`
+  (or set `ARENA_HOST`). Binding beyond loopback without `ARENA_API_KEY` prints a startup warning.
+- With `ARENA_API_KEY` **unset**, nothing is authenticated. That is the local-dev default and is
+  only safe on loopback.
+- With `ARENA_API_KEY` **set**, every orchestrator HTTP request (reads and writes) needs
+  `Authorization: Bearer <key>`, except `GET /health` and CORS `OPTIONS` preflights. The web
+  app's server-side proxy (`/api/*`) attaches the key itself.
+- The **WebSocket** stream (`/competitions/:id/stream`) does **not** take the key: the browser
+  connects to it directly and the key must never be sent to a browser. It only checks the
+  `Origin` header, allowing localhost origins (and any in `ARENA_ALLOWED_ORIGINS`). That stops
+  other websites from reading a stream through your browser; it does not stop a non-browser
+  client that can reach the port. Anyone who can reach an exposed orchestrator port and knows a
+  competition id can read its live event stream, so keep the port off untrusted networks
+  (firewall, VPN, or a reverse proxy that does its own auth).
+- The **web UI has no login**. Its `/api/*` proxy attaches the operator's key for whoever can
+  reach it, so anyone who can open the web UI can do what the key allows. Browser requests that
+  change state are rejected unless same-origin (`Sec-Fetch-Site` / `Origin` check; extra
+  origins via `ARENA_WEB_ALLOWED_ORIGINS`), which blocks cross-site forgery but not a direct
+  `curl` from someone who can reach the port. Put the web UI behind your own auth if you expose it.
 
 ## Features
 
@@ -390,8 +409,10 @@ DATABASE_URL=postgresql://localhost/arena \
 
 ## HTTP API
 
-Express, port 3000 by default. `Authorization: Bearer $ARENA_API_KEY` is required only if
-`ARENA_API_KEY` is set.
+Express, port 3000 by default, bound to `127.0.0.1`. If `ARENA_API_KEY` is set,
+`Authorization: Bearer $ARENA_API_KEY` is required on every route except `GET /health`; if it
+is unset, no route is authenticated. The WebSocket stream is the exception (see Network
+exposure above).
 
 **Competitions**
 
@@ -620,7 +641,10 @@ There is no `.env` loader in the orchestrator; it reads the process environment.
 | `ORCHESTRATOR_URL` | web | Where the Next.js proxy routes forward to. Default `http://localhost:3000`. |
 | `NEXT_PUBLIC_WS_URL` | web (browser) | WebSocket origin. Must be reachable by the browser directly — it is not proxied. |
 | `NEXT_PUBLIC_API_URL` | web (browser) | Optional direct API origin for client-side fetches. |
-| `ARENA_API_KEY` | both | If set, the orchestrator requires `Authorization: Bearer <key>`, and the web proxy sends it. Unset = auth disabled. |
+| `ARENA_API_KEY` | both | If set, the orchestrator requires `Authorization: Bearer <key>` on every route except `/health` (not the WebSocket), and the web proxy sends it. Unset = auth disabled. |
+| `ARENA_HOST` | orchestrator | Interface `serve` binds. Default `127.0.0.1`; `--host` overrides. |
+| `ARENA_ALLOWED_ORIGINS` | orchestrator | Comma-separated extra browser origins allowed to open the WebSocket (localhost always allowed; `*` allows all). |
+| `ARENA_WEB_ALLOWED_ORIGINS` | web | Comma-separated extra origins allowed to send mutating requests to `/api/*` (same-origin always allowed). |
 | `CLAUDE_BIN`, `CODEX_BIN`, `GEMINI_BIN` | orchestrator | Override the binary spawned per provider. |
 | `ARENA_AGENT_IMAGE` | orchestrator | Sandbox image name. Default `arena-agent:latest`. |
 | `ARENA_SKIP_SANDBOX` | orchestrator | `true` disables the Docker sandbox for HTTP-launched runs. Operator-only — never request-controlled. |

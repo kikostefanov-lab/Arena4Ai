@@ -154,10 +154,18 @@ describe('auth covers every mutating route, not just /competitions', () => {
     expect(res.status).toBe(401);
   });
 
-  it('leaves read-only routes open — that is the documented contract', async () => {
+  it('requires the key for reads too, but keeps /health open', async () => {
     expect((await request(app).get('/health')).status).toBe(200);
-    expect((await request(app).get('/briefs')).status).toBe(200);
-    expect((await request(app).get('/models')).status).toBe(200);
+    for (const path of ['/briefs', '/models', '/competitions', '/leaderboard', '/analytics/summary']) {
+      expect((await request(app).get(path)).status, path).toBe(401);
+    }
+  });
+
+  it('serves reads when the key is presented', async () => {
+    const res = await request(app).get('/briefs').set('Authorization', 'Bearer test-key');
+    expect(res.status).toBe(200);
+    const bad = await request(app).get('/briefs').set('Authorization', 'Bearer nope');
+    expect(bad.status).toBe(401);
   });
 
   it('still answers the CORS preflight without a key', async () => {
@@ -179,6 +187,14 @@ describe('auth stays off when no key is configured (dev mode)', () => {
     const app = createApp();
     const res = await request(app).post('/briefs').send({ brief: { title: 'A brief' } });
     expect(res.status).toBe(201);
+  });
+
+  it('leaves reads and /health open too', async () => {
+    delete process.env.ARENA_API_KEY;
+    const app = createApp();
+    expect((await request(app).get('/health')).status).toBe(200);
+    expect((await request(app).get('/briefs')).status).toBe(200);
+    expect((await request(app).get('/models')).status).toBe(200);
   });
 });
 

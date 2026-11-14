@@ -6,7 +6,7 @@ const ORCHESTRATOR = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000';
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const qs = searchParams.toString();
-  const res = await fetch(`${ORCHESTRATOR}/agent-profiles${qs ? `?${qs}` : ''}`, { cache: 'no-store' });
+  const res = await fetch(`${ORCHESTRATOR}/agent-profiles${qs ? `?${qs}` : ''}`, { cache: 'no-store', headers: orchestratorHeaders() });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }
