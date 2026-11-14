@@ -129,6 +129,28 @@ describe('GET /leaderboard', () => {
     expect(geminiEntry!.rank).toBe(2);
   });
 
+  it('in a three-team match with a tie for first, the third team lost rather than drew', async () => {
+    mockList.mockResolvedValue([
+      { id: 'c3', state: 'COMPLETE', teams: [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }, { id: 'c', model: 'gemini' }] },
+    ]);
+    mockListResults.mockResolvedValue([
+      {
+        competitionId: 'c3',
+        winnerId: null,
+        scorecards: [
+          { teamId: 'a', finalScore: 0.8, judgeResults: [], rank: 1 },
+          { teamId: 'b', finalScore: 0.8, judgeResults: [], rank: 1 },
+          { teamId: 'c', finalScore: 0.4, judgeResults: [], rank: 3 },
+        ],
+      },
+    ]);
+    const res = await request(app).get('/leaderboard');
+    const by = (m: string) => (res.body as Array<{ model: string; wins: number; losses: number; ties: number }>).find((e) => e.model === m)!;
+    expect(by('claude')).toMatchObject({ wins: 0, losses: 0, ties: 1 });
+    expect(by('codex')).toMatchObject({ wins: 0, losses: 0, ties: 1 });
+    expect(by('gemini')).toMatchObject({ wins: 0, losses: 1, ties: 0 });
+  });
+
   it('counts ties when winnerId is null', async () => {
     mockList.mockResolvedValue([
       {

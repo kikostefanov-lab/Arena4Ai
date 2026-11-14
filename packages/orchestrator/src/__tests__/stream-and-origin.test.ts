@@ -113,6 +113,33 @@ describe('judge environment for non-claude providers', () => {
   });
 });
 
+describe('agent process group', () => {
+  it.skipIf(process.platform === 'win32')('a background process the agent left behind dies when the agent exits', async () => {
+    const { mkdtempSync, readFileSync, existsSync } = await import('node:fs');
+    const { tmpdir } = await import('node:os');
+    const { join } = await import('node:path');
+    const dir = mkdtempSync(join(tmpdir(), 'arena-pg-'));
+    const pidFile = join(dir, 'bg.pid');
+    class Leaver extends BaseAdapter {
+      exited = new Promise<void>(() => {});
+      async startExecution(): Promise<void> {
+        // The leader starts a long-lived child with redirected stdio, then exits normally.
+        const child = spawn('sh', ['-c', `sleep 30 >/dev/null 2>&1 & echo $! > ${pidFile}; exit 0`], { detached: true, stdio: 'ignore' });
+        this.process = child;
+        this.exited = new Promise((r) => child.once('exit', () => { this.process = null; r(); }));
+      }
+    }
+    const a = new Leaver('team-a', dir, 'c1');
+    await a.startExecution();
+    await a.exited;
+    await new Promise((r) => setTimeout(r, 150));
+    expect(existsSync(pidFile)).toBe(true);
+    const bg = Number(readFileSync(pidFile, 'utf8').trim());
+    expect(() => process.kill(bg, 0)).toThrow();
+    await a.shutdown();
+  });
+});
+
 describe('shutdownAllAdapters', () => {
   it.skipIf(process.platform === 'win32')('stops every agent process this process started', async () => {
     class Stub extends BaseAdapter {

@@ -85,7 +85,25 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   protected readonly sandbox?: SandboxManager;
 
   protected promptText = '';
-  protected process: ChildProcess | null = null;
+  private child: ChildProcess | null = null;
+  /**
+   * The agent's CLI process. Assigning it also arranges for the agent's whole
+   * process group to be killed the moment the CLI itself exits: an agent can
+   * start a background server with redirected stdio and then exit normally, and
+   * the subclasses clear this field in their `close` handlers, so by the time
+   * `shutdown()` runs there would be nothing left to signal. Sweeping at exit
+   * (rather than remembering the group id for later) also avoids signalling a
+   * recycled pid.
+   */
+  protected get process(): ChildProcess | null { return this.child; }
+  protected set process(next: ChildProcess | null) {
+    this.child = next;
+    const pid = next?.pid;
+    if (!next || pid === undefined || process.platform === 'win32') return;
+    next.once('exit', () => {
+      try { process.kill(-pid, 'SIGKILL'); } catch { /* no surviving group members */ }
+    });
+  }
   protected executionDone: Promise<void> = Promise.resolve();
   /** Grace period between SIGTERM and SIGKILL in shutdown(). */
   shutdownGraceMs = Number(process.env.ARENA_SHUTDOWN_GRACE_MS) || DEFAULT_SHUTDOWN_GRACE_MS;

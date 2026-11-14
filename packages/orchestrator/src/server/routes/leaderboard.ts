@@ -22,6 +22,8 @@ interface Scorecard {
   teamId: string;
   /** Aggregated 0-1 score across judges (see ScoreCard in @arena/shared). */
   finalScore?: number;
+  /** 1 = first place; shared by tied teams. Absent on results stored before ranks. */
+  rank?: number;
   [key: string]: unknown;
 }
 
@@ -61,12 +63,13 @@ leaderboardRouter.get('/', async (_req: Request, res: Response) => {
     if (!Array.isArray(scorecards)) continue;
 
     // Build map of teamId → { model, score }
-    const teamInfoMap = new Map<string, { model: string; score: number }>();
+    const teamInfoMap = new Map<string, { model: string; score: number; rank?: number }>();
     for (const team of teams) {
       const modelPrefix = team.model.split(':')[0].toLowerCase();
       const scorecard = scorecards.find((s) => s.teamId === team.id);
       const finalScore = typeof scorecard?.finalScore === 'number' ? scorecard.finalScore : 0;
-      teamInfoMap.set(team.id, { model: modelPrefix, score: finalScore });
+      const rank = typeof scorecard?.rank === 'number' ? scorecard.rank : undefined;
+      teamInfoMap.set(team.id, { model: modelPrefix, score: finalScore, rank });
     }
 
     // Determine winner/loser/tie
@@ -82,8 +85,12 @@ leaderboardRouter.get('/', async (_req: Request, res: Response) => {
       entry.scoreTotal += info.score;
 
       if (!winnerId) {
-        // No winner declared → tie
-        entry.ties += 1;
+        // No sole winner. Only the teams sharing first place drew; in a three-
+        // or four-way match a team ranked below them lost. Results stored
+        // before ranks existed carry none, and those keep the old reading
+        // (everyone tied).
+        if (info.rank === undefined || info.rank === 1) entry.ties += 1;
+        else entry.losses += 1;
       } else if (teamId === winnerId) {
         entry.wins += 1;
       } else {
