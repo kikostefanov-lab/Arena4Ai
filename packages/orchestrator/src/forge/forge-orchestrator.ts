@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'crypto';
 import type { Brief, TeamPresentation, ForgeOutput, ForgeArtifact, ForgeArtifactType, ForgeOutputFormat, ForgeDomain, ForgeRun, ForgeSource } from '@arena/shared';
-import { claudeEnv } from '../utils/claude-env.js';
+import { helperClaudeArgs, helperClaudeEnv } from '../utils/claude-helper.js';
 import { resolveStageModel } from '../adapters/model-registry.js';
 
 function stripMarkdownFences(content: string, format: ForgeOutputFormat): string {
@@ -899,9 +899,9 @@ function runClaude(prompt: string, systemPrompt: string, timeoutMs = 120_000): P
     // means a self-hoster whose CLI lives elsewhere gets a working app with a
     // silently broken Forge. Pin the model so re-forging is reproducible.
     const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
-    const proc = spawn(claudeBin, ['-p', '-', '--model', resolveStageModel()], {
+    const proc = spawn(claudeBin, helperClaudeArgs({ model: resolveStageModel() }), {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: claudeEnv(),
+      env: helperClaudeEnv(),
     });
 
     let stdout = '';

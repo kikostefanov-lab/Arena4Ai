@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
 import { claudeEnv } from '../utils/claude-env.js';
+import { helperClaudeArgs, helperClaudeEnv } from '../utils/claude-helper.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, truncateFiles, JUDGE_CONTEXT } from '../utils/brief-context.js';
@@ -127,7 +128,7 @@ export function buildJudgeInvocation(
     case 'claude':
     default:
       return {
-        args: ['--print', '-', '--output-format', 'text', modelFlag, model, '--dangerously-skip-permissions'],
+        args: helperClaudeArgs({ model }),
         promptVia: 'stdin',
         answerStream: 'stdout',
       };
@@ -366,7 +367,7 @@ export async function aiJudge(
         claudeBin,
         invocation.args,
         {
-          env: claudeEnv(),
+          env: provider === 'claude' ? helperClaudeEnv() : claudeEnv(),
           stdio: [invocation.promptVia === 'stdin' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
         },
       );
