@@ -1,4 +1,5 @@
 import type { ScoreCard, Brief } from '@arena/shared';
+import { resolveOutcome } from './outcome.js';
 
 const RESET = '\x1b[0m';
 const BOLD = '\x1b[1m';
@@ -58,9 +59,12 @@ export function printResults(brief: Brief, scorecards: ScoreCard[]): void {
     console.log();
   }
 
-  const winner = sorted[0];
+  const { winnerId, tiedTeamIds } = resolveOutcome(scorecards);
+  const winner = sorted.find((c) => c.teamId === winnerId);
   if (winner) {
     console.log(`${BOLD}${YELLOW}  Winner: ${winner.teamId} with ${(winner.finalScore * 100).toFixed(1)}%${RESET}`);
+  } else if (tiedTeamIds.length > 1) {
+    console.log(`${BOLD}${YELLOW}  Draw: ${tiedTeamIds.join(' = ')}${RESET}`);
   }
   console.log(`${BOLD}${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}`);
   console.log();
@@ -75,6 +79,6 @@ export function formatResultsJson(brief: Brief, scorecards: ScoreCard[]): object
     briefId: brief.id,
     title: brief.title,
     scorecards: [...scorecards].sort((a, b) => a.rank - b.rank),
-    winner: scorecards.find((c) => c.rank === 1)?.teamId ?? null,
+    winner: resolveOutcome(scorecards).winnerId,
   };
 }

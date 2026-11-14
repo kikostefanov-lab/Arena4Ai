@@ -29,6 +29,7 @@ import { scoreDeliverable } from '../judging/rubric-scorer.js';
 import { aiJudge, JUDGE_IDS, type AiJudgeResult } from '../judging/ai-judge.js';
 import { findMissingClis, formatMissingCliError } from '../utils/cli-preflight.js';
 import { aggregate } from '../judging/score-aggregator.js';
+import { resolveOutcome } from '../judging/outcome.js';
 import { printResults } from '../judging/results-reporter.js';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
@@ -79,7 +80,10 @@ export interface TeamDeliverable {
 export interface CompetitionResult {
   competition: Competition;
   scorecards: ScoreCard[];
+  /** Sole rank-one team; null when nobody won outright (a draw, or no scorecards). */
   winner: string | null;
+  /** Rank-one teams when two or more are tied within the aggregator's tolerance. */
+  tiedTeamIds?: string[];
   presentations: TeamPresentation[];      // human-readable per-team findings
   synthesis: SynthesisResult | null;      // synthesized hybrid solution
   deliverables: TeamDeliverable[];
@@ -501,21 +505,24 @@ export class CompetitionRunner extends EventEmitter {
       }
 
       const scorecards = aggregate(judgeResults);
+      // A tie within the aggregator's tolerance is a draw — never pick the first
+      // rank-one team as if it had won.
+      const { winnerId, tiedTeamIds } = resolveOutcome(scorecards);
 
       // ── SCORED ───────────────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);
 
       // Fire-and-forget stats update — does not block competition flow
       if (this.agentRepo) {
-        const winnerId = scorecards.find(sc => sc.rank === 1)?.teamId ?? null;
         void Promise.all(
           teams
             .filter(t => t.agentId)
             .map(team => {
               const scorecard = scorecards.find(s => s.teamId === team.id);
-              const won = scorecard?.teamId === winnerId;
+              const won = winnerId !== null && scorecard?.teamId === winnerId;
+              const drew = tiedTeamIds.includes(team.id);
               const score = scorecard?.finalScore ?? 0;
-              return this.agentRepo!.incrementStats(team.agentId!, { won, score }).catch(() => {});
+              return this.agentRepo!.incrementStats(team.agentId!, { won, drew, score }).catch(() => {});
             }),
         );
       }
@@ -566,7 +573,8 @@ export class CompetitionRunner extends EventEmitter {
       const result: CompetitionResult = {
         competition: { ...this.competition },
         scorecards,
-        winner: scorecards.find((c) => c.rank === 1)?.teamId ?? null,
+        winner: winnerId,
+        ...(tiedTeamIds.length > 0 ? { tiedTeamIds } : {}),
         presentations,
         synthesis,
         deliverables: teamDeliverables,

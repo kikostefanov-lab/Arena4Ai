@@ -132,6 +132,38 @@ describe('aiJudge failure reporting', () => {
   });
 });
 
+describe('aiJudge incomplete output', () => {
+  const twoCriteria = {
+    criteria: [
+      { id: 'correctness', description: 'Correct', weight: 0.5, maxScore: 10 },
+      { id: 'clarity', description: 'Clear', weight: 0.5, maxScore: 10 },
+    ],
+  };
+
+  it('treats a response that omits a criterion as bad-output naming the missing id', async () => {
+    const bin = fakeClaude(
+      'claude-partial',
+      '{"scores":[{"criterionId":"correctness","score":10,"commentary":"great"}]}',
+    );
+    const result = await aiJudge({ ...brief, rubric: twoCriteria }, deliverable, twoCriteria, { judgeId: 'ai-claude', claudeBin: bin });
+    expect(result.failure?.kind).toBe('bad-output');
+    expect(result.failure?.message).toContain('clarity');
+    expect(result.failure?.message).not.toContain('correctness');
+    // Never a silently half-scored 0.5.
+    expect(result.overallScore).toBe(0);
+  });
+
+  it('accepts a response that covers every criterion', async () => {
+    const bin = fakeClaude(
+      'claude-complete',
+      '{"scores":[{"criterionId":"correctness","score":10},{"criterionId":"clarity","score":8}]}',
+    );
+    const result = await aiJudge({ ...brief, rubric: twoCriteria }, deliverable, twoCriteria, { judgeId: 'ai-claude', claudeBin: bin });
+    expect(result.failure).toBeUndefined();
+    expect(result.overallScore).toBeCloseTo(0.9, 5);
+  });
+});
+
 describe('aiJudge model pinning (AA-014)', () => {
   it('passes --model with the pinned judge model', async () => {
     const bin = fakeClaude(

@@ -16,9 +16,7 @@ import { synthesizeDeliverables } from '../../synthesis/merge-engine.js';
 import type { TeamDeliverable } from '../../db/schema.js';
 import { buildDeliverableFilename, buildForgeFilename } from '../../utils/naming.js';
 import type { AgentRepository } from '../../db/agent-repository.js';
-import { aiJudge, JUDGE_IDS } from '../../judging/ai-judge.js';
-import { computeOverallScore } from '../../judging/score-aggregator.js';
-import type { JudgeResult } from '@arena/shared';
+import { rejudge } from '../../judging/rejudge.js';
 
 export function createCompetitionsRouter(agentRepo?: AgentRepository): Router {
   const competitionsRouter = Router();
@@ -470,49 +468,35 @@ competitionsRouter.post('/:id/re-judge', requireApiKey, async (req: Request, res
   const brief = comp.brief as Brief;
 
   try {
-    // Archive current results
-    await repo.archiveResult(id, 'judge');
-
-    // Run standard judge for each team
-    const standardResults: JudgeResult[] = await Promise.all(
-      deliverables.map((d) => aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiClaude })),
-    );
-
-    // Optionally run adversarial judge
-    let adversarialResults: JudgeResult[] = [];
-    if (adversarial) {
-      adversarialResults = await Promise.all(
-        deliverables.map((d) => aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiAdversarial })),
-      );
+    const outcome = await rejudge(brief, deliverables, { adversarial });
+    if (!outcome.ok) {
+      // Leave stored results untouched: a failed judge's zero scores must never
+      // replace valid ones.
+      console.error(`[arena] re-judge for ${id} refused: ${outcome.message}`);
+      res.status(502).json({
+        error: 'Re-judge failed; existing results were not changed',
+        details: outcome.message,
+        failures: outcome.failures.map((f) => ({
+          teamId: f.teamId, judgeId: f.judgeId, kind: f.kind, message: f.message,
+        })),
+      });
+      return;
     }
 
-    // Build scorecards: average scores across all judges per team
-    const scorecards = deliverables.map((d) => {
-      const teamJudgeResults: JudgeResult[] = [
-        ...standardResults.filter((r) => r.teamId === d.teamId),
-        ...adversarialResults.filter((r) => r.teamId === d.teamId),
-      ];
-
-      const overallScores = teamJudgeResults.map((jr) => computeOverallScore(jr.scores, brief.rubric));
-      const finalScore = overallScores.length > 0
-        ? overallScores.reduce((a, b) => a + b, 0) / overallScores.length
-        : 0;
-
-      return { teamId: d.teamId, finalScore, judgeResults: teamJudgeResults };
-    });
-
-    scorecards.sort((a, b) => b.finalScore - a.finalScore);
-    const winnerId = scorecards[0]?.teamId ?? null;
-
+    // Archive current results only now that we are about to overwrite them.
+    await repo.archiveResult(id, 'judge');
+    const { scorecards, winnerId, tiedTeamIds } = outcome;
     await repo.updateScorecards(id, scorecards, winnerId);
 
     res.json({
       ok: true,
       winnerId,
+      tiedTeamIds,
       adversarial,
       scorecards: scorecards.map((s) => ({
         teamId: s.teamId,
         finalScore: s.finalScore,
+        rank: s.rank,
         judgeCount: s.judgeResults.length,
       })),
     });

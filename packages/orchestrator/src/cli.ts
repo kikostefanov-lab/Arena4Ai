@@ -244,6 +244,7 @@ program
 
     console.log(`[arena] re-evaluating ${ids.length} competition(s), stages: ${stages.join(' → ')}`);
 
+    const failedIds: string[] = [];
     for (const id of ids) {
       const comp = await repo.getCompetition(id);
       const result = await repo.getResult(id);
@@ -280,18 +281,18 @@ program
         }
 
         if (stage === 'judge') {
-          const { aiJudge, JUDGE_IDS } = await import('./judging/ai-judge.js');
-          const { computeOverallScore } = await import('./judging/score-aggregator.js');
-          const scorecards = [];
-          for (const d of deliverables) {
-            const jr = await aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiClaude });
-            const finalScore = computeOverallScore(jr.scores, brief.rubric);
-            scorecards.push({ teamId: d.teamId, finalScore, judgeResults: [jr] });
+          const { rejudge } = await import('./judging/rejudge.js');
+          const outcome = await rejudge(brief, deliverables, { adversarial: false });
+          if (!outcome.ok) {
+            // Do not overwrite stored results with a failed judge's zero scores.
+            console.error(`[arena] ${id}: re-judge FAILED — existing results kept. ${outcome.message}`);
+            failedIds.push(id);
+            break;
           }
-          scorecards.sort((a, b) => b.finalScore - a.finalScore);
-          const winnerId = scorecards[0]?.teamId ?? null;
+          const { scorecards, winnerId, tiedTeamIds } = outcome;
           await repo.updateScorecards(id, scorecards, winnerId);
-          console.log(`[arena] ${id}: re-judged → winner: ${winnerId} (${scorecards.map(s => `${s.teamId}:${s.finalScore.toFixed(3)}`).join(', ')})`);
+          const verdict = winnerId ? `winner: ${winnerId}` : `draw: ${tiedTeamIds.join(' = ')}`;
+          console.log(`[arena] ${id}: re-judged → ${verdict} (${scorecards.map(s => `${s.teamId}:${s.finalScore.toFixed(3)}`).join(', ')})`);
         }
 
         if (stage === 'synthesis') {
@@ -307,6 +308,10 @@ program
       }
     }
 
+    if (failedIds.length > 0) {
+      console.error(`[arena] re-evaluation finished with ${failedIds.length} judge failure(s); results unchanged for: ${failedIds.join(', ')}`);
+      process.exit(1);
+    }
     console.log(`[arena] re-evaluation complete`);
     process.exit(0);
   });
