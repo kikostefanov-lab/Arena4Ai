@@ -17,6 +17,7 @@ import type { TeamDeliverable } from '../../db/schema.js';
 import { buildDeliverableFilename, buildForgeFilename } from '../../utils/naming.js';
 import type { AgentRepository } from '../../db/agent-repository.js';
 import { rejudge } from '../../judging/rejudge.js';
+import { issueStreamTicket, STREAM_TICKET_TTL_MS } from '../stream-ticket.js';
 
 export function createCompetitionsRouter(agentRepo?: AgentRepository): Router {
   const competitionsRouter = Router();
@@ -144,6 +145,11 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
   });
 
   runner.run().catch((err: Error) => {
+    // A cancel is the operator's own action, not a failure worth an error line.
+    if (err.name === 'CompetitionCancelledError') {
+      console.log(`[arena] competition ${competitionId} cancelled`);
+      return;
+    }
     console.error(`[arena] competition ${competitionId} failed: ${err.message}`);
   });
 
@@ -169,6 +175,15 @@ competitionsRouter.get('/:id', async (req: Request, res: Response) => {
     repo.getResult(id),
   ]);
   res.json({ id: comp.id, state: comp.state, brief: comp.brief, teams: comp.teams, startedAt: comp.startedAt, notes: comp.notes ?? null, eventCount, result });
+});
+
+// GET /competitions/:id/stream-ticket — short-lived pass for the WebSocket stream.
+// Behind the API key like every other route, so only a caller that already
+// holds the key (the web app's server) can mint one. See stream-ticket.ts.
+competitionsRouter.get('/:id/stream-ticket', (req: Request, res: Response) => {
+  const key = process.env.ARENA_API_KEY;
+  if (!key) { res.json({ ticket: null, expiresInMs: null }); return; }
+  res.json({ ticket: issueStreamTicket(String(req.params.id), key), expiresInMs: STREAM_TICKET_TTL_MS });
 });
 
 // GET /competitions/:id/events — full event history for replay/analysis

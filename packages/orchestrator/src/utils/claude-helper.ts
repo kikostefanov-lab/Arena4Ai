@@ -85,7 +85,29 @@ export function helperClaudeEnv(source: NodeJS.ProcessEnv = process.env): NodeJS
   const prefixes = [...ALLOW_PREFIXES];
   if (truthy(source['CLAUDE_CODE_USE_BEDROCK'])) prefixes.push('AWS_');
   if (truthy(source['CLAUDE_CODE_USE_VERTEX'])) prefixes.push('GOOGLE_', 'CLOUD_ML_REGION');
+  return filterEnv(source, prefixes);
+}
 
+/** Vendor namespaces for the non-claude judge CLIs (same families the sandbox forwards). */
+const OTHER_PROVIDER_PREFIXES: Record<'codex' | 'gemini', readonly string[]> = {
+  codex: ['OPENAI_', 'CODEX_', 'AZURE_OPENAI_', 'LC_'],
+  gemini: ['GEMINI_', 'GOOGLE_', 'GCLOUD_', 'CLOUDSDK_', 'LC_'],
+};
+
+/**
+ * Allowlisted environment for ANY helper CLI, by provider. The judge can run on
+ * codex or gemini as well as claude, and those read untrusted deliverables too:
+ * each gets the process basics plus its own vendor's namespace and nothing else.
+ */
+export function helperEnv(
+  provider: 'claude' | 'codex' | 'gemini',
+  source: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  if (provider === 'claude') return helperClaudeEnv(source);
+  return filterEnv(source, OTHER_PROVIDER_PREFIXES[provider]);
+}
+
+function filterEnv(source: NodeJS.ProcessEnv, prefixes: readonly string[]): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined) continue;

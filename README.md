@@ -266,13 +266,17 @@ says which of the three it is.
 - With `ARENA_API_KEY` **set**, every orchestrator HTTP request (reads and writes) needs
   `Authorization: Bearer <key>`, except `GET /health` and CORS `OPTIONS` preflights. The web
   app's server-side proxy (`/api/*`) attaches the key itself.
-- The **WebSocket** stream (`/competitions/:id/stream`) does **not** take the key: the browser
-  connects to it directly and the key must never be sent to a browser. It only checks the
-  `Origin` header, allowing localhost origins (and any in `ARENA_ALLOWED_ORIGINS`). That stops
-  other websites from reading a stream through your browser; it does not stop a non-browser
-  client that can reach the port. Anyone who can reach an exposed orchestrator port and knows a
-  competition id can read its live event stream, so keep the port off untrusted networks
-  (firewall, VPN, or a reverse proxy that does its own auth).
+- The **WebSocket** stream (`/competitions/:id/stream`) needs proof too once a key is set:
+  either `Authorization: Bearer <key>` on the upgrade (scripts and tools), or `?ticket=...`, a
+  pass valid for one competition for 60 seconds, issued by the authenticated
+  `GET /competitions/:id/stream-ticket`. The web app's server fetches the ticket and hands only
+  that to the browser, so the key itself never reaches a browser. The stream also checks the
+  `Origin` header, allowing localhost origins and any in `ARENA_ALLOWED_ORIGINS`.
+- Browser requests to the HTTP API from any other origin are refused (403); the API no longer
+  answers `Access-Control-Allow-Origin: *`. Requests with no `Origin` header (the web app's
+  server, curl, scripts) are unaffected.
+- The **web UI has no login**. Anyone who can reach port 3001 can do what the server's key
+  allows, so keep it off untrusted networks (firewall, VPN, or a reverse proxy with its own auth).
 - The **web UI has no login**. Its `/api/*` proxy attaches the operator's key for whoever can
   reach it, so anyone who can open the web UI can do what the key allows. Browser requests that
   change state are rejected unless same-origin (`Sec-Fetch-Site` / `Origin` check; extra
@@ -641,7 +645,7 @@ There is no `.env` loader in the orchestrator; it reads the process environment.
 | `ORCHESTRATOR_URL` | web | Where the Next.js proxy routes forward to. Default `http://localhost:3000`. |
 | `NEXT_PUBLIC_WS_URL` | web (browser) | WebSocket origin. Must be reachable by the browser directly — it is not proxied. |
 | `NEXT_PUBLIC_API_URL` | web (browser) | Optional direct API origin for client-side fetches. |
-| `ARENA_API_KEY` | both | If set, the orchestrator requires `Authorization: Bearer <key>` on every route except `/health` (not the WebSocket), and the web proxy sends it. Unset = auth disabled. |
+| `ARENA_API_KEY` | both | If set, the orchestrator requires `Authorization: Bearer <key>` on every route except `/health`, and the WebSocket stream requires the key or a stream ticket; the web proxy handles both. Unset = auth disabled. |
 | `ARENA_HOST` | orchestrator | Interface `serve` binds. Default `127.0.0.1`; `--host` overrides. |
 | `ARENA_ALLOWED_ORIGINS` | orchestrator | Comma-separated extra browser origins allowed to open the WebSocket (localhost always allowed; `*` allows all). |
 | `ARENA_WEB_ALLOWED_ORIGINS` | web | Comma-separated extra origins allowed to send mutating requests to `/api/*` (same-origin always allowed). |

@@ -62,12 +62,33 @@ DATABASE_URL=postgresql://localhost/arena \
   npx tsx packages/orchestrator/src/cli.ts seed-quality-signals
 ```
 
-### Auth
-`ARENA_API_KEY` (see `.env.example`) gates every mutating orchestrator request
-(`POST`/`PUT`/`PATCH`/`DELETE`) behind `Authorization: Bearer <key>`; unset = auth disabled.
-The web app's proxy routes attach it server-side via `orchestratorHeaders()` from
-`packages/web/lib/orchestrator.ts` — always use that helper (and `orchestratorUrl()`) in
-`app/api/` routes; a hand-rolled `fetch` header starts returning 401 as soon as a key is set.
+### Auth and network exposure
+- `serve` binds to `127.0.0.1`; `--host` / `ARENA_HOST` widens it (with a startup warning if no key is set).
+- `ARENA_API_KEY` unset = nothing is authenticated (local dev). Set = EVERY orchestrator route
+  needs `Authorization: Bearer <key>` except `/health`, reads included.
+- The web app's proxy routes attach the key server-side via `orchestratorHeaders()` from
+  `packages/web/lib/orchestrator.ts`. Always use that helper (and `orchestratorUrl()`) in
+  `app/api/` routes, GETs too: a route without it returns 401 as soon as a key is set, and a
+  test fails if one forgets.
+- The WebSocket stream needs the key or a 60-second ticket (`server/stream-ticket.ts`,
+  `GET /competitions/:id/stream-ticket`). The browser gets tickets through
+  `packages/web/lib/stream-url.ts`; never send the key to a browser.
+- Browser origins: the API refuses any `Origin` that is not loopback or in
+  `ARENA_ALLOWED_ORIGINS`; `packages/web/middleware.ts` refuses cross-site writes to `/api/*`.
+
+### Helper stages run tool-less
+Every HELPER spawn of an agent CLI (judge, presentations, synthesis, forge, commentary, brief
+intake/generation, persona generation) reads untrusted deliverables, so it must build its args
+with `helperClaudeArgs()` and its env with `helperClaudeEnv()` / `helperEnv(provider)` from
+`packages/orchestrator/src/utils/claude-helper.ts`: no tools, no MCP, an allowlisted
+environment. Never pass `--dangerously-skip-permissions` to a helper. Competitor agents
+(`src/adapters/`) keep broad permissions by design.
+
+### Agent processes
+Agents are spawned `detached` (own process group). The runner shuts every adapter down at the
+deadline BEFORE collecting files, cancellation is terminal (`CompetitionCancelledError`), and
+`cli.ts` installs SIGINT/SIGTERM handlers that call `shutdownAllAdapters()`. Any new entry
+point that runs competitions must do the same, or Ctrl-C will leave agents running.
 
 ## Tests
 
@@ -350,8 +371,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 - Per-team event buffer capped at ~600 for performance; TOOL_CALL/FILE_CREATE/ERROR events are always kept, only REASONING is trimmed
 - Accurate event type counts tracked separately in `eventCountsRef` (never trimmed) — used for summary bar icons (⚡/📄/🧠)
 
-### Live battle visualization — Arena v2 (TRON Broadcast)
-Default view on the competition detail page. Pure client-side Canvas 2D + React; phase is derived from existing competition state, so no backend changes are needed.
+### Live battle visualization
+The competition page has three views: `3D` (desktop default), `Iso` and `Log`. `ArenaViewerV2`
+is the HOST for both pictures: it drives `IsoArenaRenderer` from `@arena/shared` (clock, seek,
+ingest, honesty notes) and either lets it draw the isometric canvas or hands its `World` to the
+3D scene (`packages/video/src/arena3d/scene.ts`, see `packages/video/CLAUDE.md`). Every block is
+a file and height is the edit count; the 3D path must call `stepStructures(world)` each frame
+because it never calls the isometric `draw()`.
+
+The bullets below describe the earlier 2D gladiator arena (`lib/arena/*-v2.ts`). Those files
+remain but the live page no longer draws with them; treat this list as history.
 - `packages/web/components/ArenaViewerV2.tsx` — main component (Canvas + inline HUD: LaneHeader, MomentumMeter, PhaseChip, WinnerBanner)
 - `packages/web/lib/arena/gladiator-v2.ts` — GladiatorV2 class; public API: `setBase` / `setTerminal` / `flash` / `setEnergy` / `update` / `draw`
 - `packages/web/lib/arena/poses-v2.ts` — 8-pose library (idle, thinking, strike, power, hit, triumph, kneel, salute) + model visuals config
@@ -373,5 +402,5 @@ Default view on the competition detail page. Pure client-side Canvas 2D + React;
    normalizer the structured markers it currently lacks (codex-cli 0.144.x likewise has
    `codex exec --json`). Not yet wired up.
 2. WebSocket seq counter is approximate (local, not DB serial)
-3. Persona generation (`server/routes/generate-persona.ts`) is the one `claude` call that
-   still spawns without `--model resolveStageModel()`, so it inherits the CLI default.
+3. A drawn match (scores within the aggregator's tolerance) is stored with no `winnerId`; the
+   tied teams are the scorecards with `rank === 1`. The UI and the reel do not label a draw yet.

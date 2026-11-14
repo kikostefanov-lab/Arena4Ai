@@ -23,9 +23,9 @@ import { generatePersonaRouter } from './routes/generate-persona.js';
 import { seedPersonasAgents } from '../db/seed-personas-agents.js';
 import { getModelRegistry } from '../adapters/model-registry.js';
 import { requireApiKeyForAll } from './middleware/auth.js';
+import { isAllowedWsOrigin } from './network.js';
 
 const CORS = {
-  origin: '*',
   methods: 'GET, POST, PATCH, DELETE, OPTIONS',
   headers: 'Content-Type, Authorization',
 } as const;
@@ -34,8 +34,23 @@ export function createApp(): Application {
   const app = express();
   app.use(express.json({ limit: '1mb' }));
 
-  app.use((_req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', CORS.origin);
+  // Browser origins. This used to be `Access-Control-Allow-Origin: *`, which let
+  // any website open in the operator's browser read from, and with no key set
+  // write to, the local orchestrator. Now only an allowed origin (loopback, or
+  // ARENA_ALLOWED_ORIGINS) is echoed back, and a request that names any other
+  // origin is refused outright. Requests with no Origin header (the web app's
+  // server, curl, scripts) are unaffected: this is a browser control, and the
+  // API key remains the real gate.
+  app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && !isAllowedWsOrigin(origin)) {
+      res.status(403).json({ error: 'Origin not allowed' });
+      return;
+    }
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    }
     res.setHeader('Access-Control-Allow-Methods', CORS.methods);
     res.setHeader('Access-Control-Allow-Headers', CORS.headers);
     next();
@@ -43,9 +58,6 @@ export function createApp(): Application {
 
   // Handle preflight
   app.options('/*path', (_req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', CORS.origin);
-    res.setHeader('Access-Control-Allow-Methods', CORS.methods);
-    res.setHeader('Access-Control-Allow-Headers', CORS.headers);
     res.status(204).end();
   });
 

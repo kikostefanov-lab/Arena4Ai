@@ -171,8 +171,11 @@ tournamentsRouter.post('/', async (req: Request, res: Response) => {
       activeTournamentRunners.delete(tournamentId);
     })
     .catch((err: Error) => {
-      activeTournamentMeta.set(tournamentId, { currentMatch: null, error: err.message });
       activeTournamentRunners.delete(tournamentId);
+      // The cancel route has already recorded the outcome; do not relabel an
+      // operator's cancel as an error.
+      if (err.name === 'TournamentCancelledError') { activeTournamentMeta.delete(tournamentId); return; }
+      activeTournamentMeta.set(tournamentId, { currentMatch: null, error: err.message });
       repo.updateTournamentState(tournamentId, 'FAILED').catch(() => {
         // best-effort
       });
@@ -228,7 +231,8 @@ tournamentsRouter.post('/:id/cancel', async (req: Request, res: Response) => {
   }
   // Cancel the in-memory runner if it exists (may be gone after server restart)
   const runner = activeTournamentRunners.get(id);
-  if (runner) runner.cancel();
+  // cancel() now stops the active match and resolves once its agents are gone.
+  if (runner) await runner.cancel().catch(() => {});
   activeTournamentRunners.delete(id);
   activeTournamentMeta.delete(id);
   await repo.updateTournamentState(id, 'FAILED').catch(() => {});

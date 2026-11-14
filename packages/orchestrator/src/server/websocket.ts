@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import { repo } from './repo.js';
 import { runnerRegistry } from './runner-registry.js';
 import { isAllowedWsOrigin } from './network.js';
+import { isStreamAuthorized } from './stream-ticket.js';
 
 type RawScorecard = {
   teamId: string;
@@ -64,8 +65,15 @@ export function attachWebSocket(server: Server): void {
       return;
     }
     const url = req.url ?? '';
-    const match = url.match(/^\/competitions\/([^/]+)\/stream$/);
+    const match = url.match(/^\/competitions\/([^/?]+)\/stream(?:\?(.*))?$/);
     if (!match) {
+      socket.destroy();
+      return;
+    }
+    // The origin check above only stops other websites in a browser. When a key
+    // is set, reading the stream also needs the key or a ticket for this id.
+    if (!isStreamAuthorized(req, match[1], match[2] ?? '')) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }

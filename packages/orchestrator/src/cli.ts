@@ -7,6 +7,20 @@ import { CompetitionRunner } from './engine/competition-runner.js';
 import { TournamentRunner } from './engine/tournament-runner.js';
 import { CompetitionFormat } from '@arena/shared';
 import type { Team } from '@arena/shared';
+import { shutdownAllAdapters } from './adapters/base-adapter.js';
+
+// Agents run in their own process groups, so Ctrl-C does not reach them on its
+// own. Stop them before this process exits; a second signal exits immediately.
+let stopping = false;
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    const code = sig === 'SIGINT' ? 130 : 143;
+    if (stopping) process.exit(code);
+    stopping = true;
+    console.error(`\n[arena] ${sig} received: stopping agent processes…`);
+    void shutdownAllAdapters().finally(() => process.exit(code));
+  });
+}
 
 const program = new Command();
 

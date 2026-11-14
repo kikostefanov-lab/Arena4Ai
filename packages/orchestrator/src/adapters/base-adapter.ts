@@ -65,6 +65,19 @@ async function walkDir(
  *   'arenaEvent'  (event: ArenaEvent)  — whenever the model produces output
  *   'error'       (err: Error)         — unrecoverable adapter error
  */
+/**
+ * Every adapter that may still own a process. Agents are spawned `detached`
+ * (their own process group, so a shutdown reaches their children), which also
+ * means a terminal Ctrl-C no longer reaches them. Whoever owns the process
+ * lifetime (the CLI) must call `shutdownAllAdapters()` before exiting.
+ */
+const liveAdapters = new Set<BaseAdapter>();
+
+/** Stop every agent this process has started and wait for them to exit. */
+export async function shutdownAllAdapters(): Promise<void> {
+  await Promise.all([...liveAdapters].map((a) => a.shutdown().catch(() => {})));
+}
+
 export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   readonly teamId: string;
   protected readonly workdir: string;
@@ -83,6 +96,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     this.workdir = workdir;
     this.competitionId = competitionId;
     this.sandbox = sandbox;
+    liveAdapters.add(this);
   }
 
   injectBrief(brief: Brief, persona: string): Promise<void> {
@@ -151,7 +165,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       await this.sandbox.killContainer(this.teamId).catch(() => {});
     }
     const child = this.process;
-    if (!child) return;
+    if (!child) { liveAdapters.delete(this); return; }
 
     const hasExited = () => child.exitCode !== null || child.signalCode !== null;
     const exited = new Promise<void>((resolve) => {
@@ -175,6 +189,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     // The leader is gone; sweep any member of its group that outlived it.
     this.signalProcess(child, 'SIGKILL', true);
     this.process = null;
+    liveAdapters.delete(this);
   }
 
   /** Signal the process group when we own one (`detached` spawn), else just the child. */
