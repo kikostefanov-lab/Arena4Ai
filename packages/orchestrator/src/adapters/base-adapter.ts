@@ -9,6 +9,11 @@ import type { SandboxManager } from '../sandbox/sandbox-manager.js';
 const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
 
+/** Default time an agent gets to exit after SIGTERM before it is SIGKILLed. */
+const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
+/** How long to wait for the exit after SIGKILL before giving up. */
+const KILL_WAIT_MS = 2_000;
+
 const DELIVERABLE_GUIDE: Record<string, string> = {
   code:         'Produce runnable code files. The output should be executable.',
   document:     'Produce written documents (.md, .txt). Do NOT write code files unless explicitly required.',
@@ -69,6 +74,8 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   protected promptText = '';
   protected process: ChildProcess | null = null;
   protected executionDone: Promise<void> = Promise.resolve();
+  /** Grace period between SIGTERM and SIGKILL in shutdown(). */
+  shutdownGraceMs = Number(process.env.ARENA_SHUTDOWN_GRACE_MS) || DEFAULT_SHUTDOWN_GRACE_MS;
 
   constructor(teamId: string, workdir: string, competitionId: string, sandbox?: SandboxManager) {
     super();
@@ -129,13 +136,58 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     };
   }
 
+  /**
+   * Stop the agent and wait until it is really gone.
+   *
+   * SIGTERM first (to the whole process group when the child was spawned
+   * `detached`, so tools the agent started die with it), then SIGKILL after
+   * `shutdownGraceMs`. Resolves only once the process has exited (or, as a last
+   * resort, after a bounded wait following SIGKILL), so callers can collect
+   * files or delete the workdir without racing a live writer. Idempotent.
+   */
   async shutdown(): Promise<void> {
     if (this.sandbox) {
-      await this.sandbox.killContainer(this.teamId);
+      // Kills the container; the `docker run` client process is handled below.
+      await this.sandbox.killContainer(this.teamId).catch(() => {});
     }
-    if (this.process) {
-      this.process.kill('SIGTERM');
-      this.process = null;
+    const child = this.process;
+    if (!child) return;
+
+    const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+    const exited = new Promise<void>((resolve) => {
+      if (hasExited()) return resolve();
+      child.once('exit', () => resolve());
+      child.once('error', () => resolve());
+    });
+    const waitFor = (ms: number) =>
+      new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), ms);
+        void exited.then(() => { clearTimeout(timer); resolve(true); });
+      });
+
+    if (!hasExited()) {
+      this.signalProcess(child, 'SIGTERM');
+      if (!(await waitFor(this.shutdownGraceMs))) {
+        this.signalProcess(child, 'SIGKILL');
+        await waitFor(KILL_WAIT_MS);
+      }
+    }
+    // The leader is gone; sweep any member of its group that outlived it.
+    this.signalProcess(child, 'SIGKILL', true);
+    this.process = null;
+  }
+
+  /** Signal the process group when we own one (`detached` spawn), else just the child. */
+  private signalProcess(child: ChildProcess, signal: NodeJS.Signals, groupOnly = false): void {
+    const pid = child.pid;
+    if (pid !== undefined && process.platform !== 'win32') {
+      try {
+        process.kill(-pid, signal);
+        return;
+      } catch { /* not a group leader (or already gone) — fall through */ }
+    }
+    if (!groupOnly) {
+      try { child.kill(signal); } catch { /* already gone */ }
     }
   }
 
@@ -169,12 +221,13 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   }
 
   /**
-   * Clean up the temp workdir after the competition ends.
-   * No-op if sandbox is active (container teardown handles it).
-   * Safe to call even if workdir doesn't exist.
+   * Remove the host workdir after the competition ends. In sandbox mode this is
+   * still the directory that was bind-mounted into the container (the container
+   * itself is `--rm`), so it must be removed here too. Call after shutdown().
+   * Safe to call even if the workdir doesn't exist; best-effort (files written
+   * by a root-owned container may not be removable by the host user).
    */
   async cleanupWorkdir(): Promise<void> {
-    if (this.sandbox) return; // container teardown handles cleanup
     await rm(this.workdir, { recursive: true, force: true }).catch(() => {});
   }
 }

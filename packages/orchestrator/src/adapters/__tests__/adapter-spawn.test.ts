@@ -8,7 +8,7 @@ import { CompetitionFormat } from '@arena/shared';
 import type { Brief } from '@arena/shared';
 
 const { spawnCalls } = vi.hoisted(() => ({
-  spawnCalls: [] as Array<{ command: string; args: string[] }>,
+  spawnCalls: [] as Array<{ command: string; args: string[]; options?: { detached?: boolean } }>,
 }));
 
 vi.mock('node:child_process', async () => {
@@ -21,8 +21,8 @@ vi.mock('node:child_process', async () => {
     kill = vi.fn();
   }
   return {
-    spawn: (command: string, args: string[]) => {
-      spawnCalls.push({ command, args });
+    spawn: (command: string, args: string[], options?: { detached?: boolean }) => {
+      spawnCalls.push({ command, args, options });
       return new FakeChild();
     },
   };
@@ -86,6 +86,18 @@ describe('CodexAdapter spawn', () => {
     const { command, args } = spawnCalls[0];
     expect(args).not.toContain('-m');
     expect([command, ...args].join(' ')).not.toContain('touch /tmp/arena-pwned');
+  });
+});
+
+describe('agent process groups', () => {
+  it.skipIf(process.platform === 'win32')('spawns Codex and Gemini detached so shutdown() can signal the whole group', async () => {
+    spawnCalls.length = 0;
+    for (const A of [CodexAdapter, GeminiAdapter]) {
+      const a = new A('t', { workdir: '/tmp', competitionId: 'c' } as never);
+      await a.injectBrief(BRIEF, 'p');
+      await a.startExecution();
+    }
+    expect(spawnCalls.map((c) => c.options?.detached)).toEqual([true, true]);
   });
 });
 

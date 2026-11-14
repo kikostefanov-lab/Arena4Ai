@@ -80,6 +80,8 @@ export class ClaudeAdapter extends BaseAdapter {
             {
               cwd: this.workdir,
               stdio: ['pipe', 'pipe', 'pipe'],
+              // Own process group so shutdown() can signal the agent's children too.
+              detached: process.platform !== 'win32',
               env: claudeEnv(),
             },
           );

@@ -35,6 +35,14 @@ import { generateAllPresentations } from '../presentation/presentation-generator
 import { CommentaryAgent } from '../commentary/commentary-agent.js';
 import type { AgentRepository } from '../db/agent-repository.js';
 
+/** Thrown by run() once the competition has been cancelled. Terminal: no later stage runs. */
+export class CompetitionCancelledError extends Error {
+  constructor(message = 'Competition cancelled') {
+    super(message);
+    this.name = 'CompetitionCancelledError';
+  }
+}
+
 export interface RunOptions {
   /** Directory where JSONL event logs are written. Defaults to OS tmp dir. */
   logDir?: string;
@@ -95,6 +103,7 @@ export class CompetitionRunner extends EventEmitter {
   private readonly agentRepo?: AgentRepository;
   private _cancelled = false;
   private _cancelResolve?: () => void;
+  private _cancelPromise?: Promise<void>;
   private _activeAdapters: BaseAdapter[] = [];
   private _clock?: ClockManager;
 
@@ -131,18 +140,30 @@ export class CompetitionRunner extends EventEmitter {
     return this.competition.id;
   }
 
+  /** Throws once cancelled — call after every await so no stage outlives a cancel. */
+  private assertNotCancelled(): void {
+    if (this._cancelled) throw new CompetitionCancelledError();
+  }
+
   private advance(to: CompetitionState): void {
+    this.assertNotCancelled();
     this.competition.state = transition(this.competition.state, to);
     this.emit('stateChange', this.competition.state);
   }
 
   /** Cancel the running competition — shuts down all adapters and stops the clock. */
-  async cancel(): Promise<void> {
-    if (this._cancelled) return;
+  cancel(): Promise<void> {
+    // Idempotent: concurrent callers wait for the same shutdown.
+    this._cancelPromise ??= this._doCancel();
+    return this._cancelPromise;
+  }
+
+  private async _doCancel(): Promise<void> {
+    // Set synchronously: from here on advance() and every checkpoint in run() refuse to continue.
     this._cancelled = true;
     this._cancelResolve?.(); // unblock the run() Promise.race
     this._clock?.stop();
-    await Promise.all(this._activeAdapters.map(a => a.shutdown()));
+    await Promise.all(this._activeAdapters.map(a => a.shutdown().catch(() => {})));
     if (
       this.competition.state !== CompetitionState.COMPLETE &&
       this.competition.state !== CompetitionState.FAILED
@@ -365,9 +386,17 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.COLLECTING);
 
       clock.stop();
+
+      // The deadline must actually stop the agents: signal them and wait for exit
+      // BEFORE reading their files, so nothing is still writing during collection
+      // and no agent process outlives the run.
+      await Promise.all(adapters.map((a) => a.shutdown()));
+      this.assertNotCancelled();
+
       const deliverables: Deliverable[] = await Promise.all(
         adapters.map((a) => a.collectDeliverables()),
       );
+      this.assertNotCancelled();
 
       // ── PRESENTING ─────────────────────────────────────────────────────
       this.advance(CompetitionState.PRESENTING);
@@ -385,6 +414,8 @@ export class CompetitionRunner extends EventEmitter {
       } catch (err) {
         console.error('[arena] presentation generation failed:', (err as Error).message);
       }
+
+      this.assertNotCancelled();
 
       // Emit presentation events for live UI
       for (const pres of presentations) {
@@ -423,6 +454,7 @@ export class CompetitionRunner extends EventEmitter {
         deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief)),
       );
       const aiResults = await Promise.all(aiJudgePromises);
+      this.assertNotCancelled();
 
       // Use AI judge results; fall back to the automated scorer per-team.
       // Failure is read off the judge's explicit `failure` field — never inferred
