@@ -178,11 +178,12 @@ export class AgentRepository {
 
   async incrementStats(
     id: string,
-    result: { won: boolean; score: number },
+    result: { won: boolean; score: number; drew?: boolean },
   ): Promise<void> {
+    // A draw is neither a win nor a loss: it still counts toward total + avg score.
     await this.db.update(agents).set({
       statsWins:       sql`${agents.statsWins} + ${result.won ? 1 : 0}`,
-      statsLosses:     sql`${agents.statsLosses} + ${result.won ? 0 : 1}`,
+      statsLosses:     sql`${agents.statsLosses} + ${result.won || result.drew ? 0 : 1}`,
       statsTotal:      sql`${agents.statsTotal} + 1`,
       statsAvgScore:   sql`CASE WHEN ${agents.statsTotal} = 0 THEN ${result.score}
                           ELSE (COALESCE(${agents.statsAvgScore}::numeric, 0) * ${agents.statsTotal} + ${result.score})

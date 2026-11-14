@@ -269,6 +269,16 @@ export function normalizeJudgeScores(raw: unknown, rubric: Rubric): CriterionSco
 }
 
 /**
+ * Ids of rubric criteria that `scores` does not cover. `computeOverallScore`
+ * counts an absent criterion as zero, so any non-empty result here means the
+ * judge output is incomplete and must not be treated as a real scorecard.
+ */
+export function missingCriteria(scores: CriterionScore[], rubric: Rubric): string[] {
+  const scored = new Set(scores.map((s) => s.criterionId));
+  return rubric.criteria.map((c) => c.id).filter((id) => !scored.has(id));
+}
+
+/**
  * Build the judge prompt for a deliverable and rubric.
  * When judgeId includes 'adversarial', critical evaluation instructions are added.
  */
@@ -400,8 +410,18 @@ export async function aiJudge(
 
     const parsed = JSON.parse(extractJson(stdout)) as { scores?: unknown };
     const normalized = normalizeJudgeScores(parsed.scores, rubric);
-    if (normalized.length > 0) {
+    const missing = missingCriteria(normalized, rubric);
+    if (normalized.length > 0 && missing.length === 0) {
       scores = normalized;
+    } else if (normalized.length > 0) {
+      // A partial scorecard is not a lower score — the omitted weights would
+      // silently count as zero. Treat it as a judge failure so the caller falls
+      // back (or refuses to overwrite) instead of storing a half-scored result.
+      failure = {
+        kind: 'bad-output',
+        message: `AI judge unavailable: the response did not score every rubric criterion (missing: ${missing.join(', ')}).`,
+        detail: `scored ${normalized.length} of ${rubric.criteria.length} criteria`,
+      };
     } else {
       failure = classifyJudgeFailure(new Error('judge returned no scores'), '', claudeBin, model, provider);
     }
