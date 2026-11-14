@@ -9,6 +9,11 @@
  * visibly different (dashed edges / hollow ghost) rather than as a short solid
  * block that would read as "did less work".
  *
+ * It lives in @arena/video, not the web app, so the live arena and the sizzle
+ * reel draw with the same code: the app calls `sync()` every animation frame,
+ * the reel calls `drawFrame()`, which is a pure function of its arguments
+ * because Remotion renders frames out of order and in parallel.
+ *
  * The robots are authored in `tools/blender/build_gladiators.py` and loaded
  * from `/models/gladiators.glb` as a rigid joint hierarchy, posed by name.
  */
@@ -23,9 +28,38 @@ import { providerOf } from '@arena/shared';
 import type { World, Structure } from '@arena/shared';
 
 export interface Arena3DTeam { id: string; model: string; color: string }
-export interface Arena3DOptions { teams: Arena3DTeam[]; reducedMotion?: boolean; modelUrl?: string }
+export interface Arena3DOptions {
+  teams: Arena3DTeam[];
+  reducedMotion?: boolean;
+  modelUrl?: string;
+  /** Keep the WebGL buffer readable after a frame — needed when frames are screenshotted. */
+  preserveDrawingBuffer?: boolean;
+}
 
-type PoseName = 'idle' | 'thinking' | 'strike' | 'power' | 'hit' | 'triumph' | 'kneel' | 'salute';
+/** Everything `drawFrame()` needs that the world does not already say. */
+export interface Arena3DFrame {
+  /** Scene time in seconds; drives every ambient animation. */
+  t: number;
+  cam: { pos: [number, number, number]; look: [number, number, number]; fov: number };
+  /**
+   * World-milliseconds a reaction lasts. A reel compresses minutes into seconds,
+   * so "how long ago" has to be measured in the world's time, not the video's.
+   */
+  windowMs: number;
+  /** 0..1 strength of the verdict spotlight on the winner. */
+  reveal?: number;
+  banner?: { text: string; color: string };
+  /** Per-team staging: hold a pose, or lift the figure off the deck for an entrance. */
+  overrides?: Record<string, {
+    /** A held pose, or a blend between two so a staged move is still a pure function of the frame. */
+    pose?: PoseName | { from: PoseName; to: PoseName; mix: number };
+    lift?: number;
+    /** Facing, in radians about the vertical axis (0 faces the +z camera side). */
+    yaw?: number;
+  }>;
+}
+
+export type PoseName = 'idle' | 'thinking' | 'strike' | 'power' | 'hit' | 'triumph' | 'kneel' | 'salute';
 // [spineX, spineY, headX, shLx, shLz, elL, shRx, shRz, elR, hipLx, knL, hipRx, knR, bodyY, bodyZ]
 const POSES: Record<PoseName, number[]> = {
   idle:     [0.04, 0, 0, 0.15, 0.2, -0.4, 0.15, 0.2, -0.4, -0.16, 0.22, 0.14, 0.16, 0, 0],
@@ -46,7 +80,7 @@ interface Fighter {
   aura: THREE.Mesh; hipsY: number; cur: number[]; basePose: PoseName; flash: PoseName | null; flashT: number; thinkT: number;
   energy: number; light: THREE.PointLight; beams: THREE.ShaderMaterial[];
 }
-interface Block { group: THREE.Group; fill: THREE.MeshStandardMaterial; edge: THREE.LineBasicMaterial | THREE.LineDashedMaterial; depth: string; color: THREE.Color }
+interface Block { group: THREE.Group; cap: THREE.MeshBasicMaterial | null; fill: THREE.MeshStandardMaterial; edge: THREE.LineBasicMaterial | THREE.LineDashedMaterial; depth: string; color: THREE.Color }
 
 const P = 44; // city block period
 const FOG = new THREE.Color('#0a0518');
@@ -105,7 +139,7 @@ export class Arena3D {
 
   constructor(private canvas: HTMLCanvasElement, private opts: Arena3DOptions) {
     this.reduced = !!opts.reducedMotion;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: !!opts.preserveDrawingBuffer });
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.scene.fog = new THREE.FogExp2(FOG, 0.0019);
@@ -198,26 +232,8 @@ export class Arena3D {
   sync(world: World, dt: number): void {
     const now = (this.time.value += dt);
     this.layout(world);
-    const C = this.C;
 
-    // Blocks: one per structure, removed when a seek drops them.
-    for (const [key, b] of this.blocks) {
-      if (!world.structures.has(key)) { this.blockRoot.remove(b.group); this.blocks.delete(key); }
-    }
-    for (const [key, s] of world.structures) {
-      let b = this.blocks.get(key);
-      if (!b || b.depth !== s.depth) {
-        if (b) this.blockRoot.remove(b.group);
-        b = this.makeBlock(s, world);
-        this.blocks.set(key, b);
-      }
-      const h = Math.max(0.05, s.h) * C;
-      b.group.scale.set(C * 0.78, h, C * 0.78);
-      b.group.position.set(s.x * C, 3.86, s.z * C);
-      const hot = Math.min(1, s.flash), hit = Math.min(1, s.hit), gold = Math.min(1, s.gold);
-      b.edge.color.copy(b.color).multiplyScalar(s.depth === 'unavailable' ? 0.9 : 2.2).lerp(WHITE, hot * 0.8).lerp(ALERT, hit).lerp(GOLD, gold * 0.9);
-      b.fill.emissive.copy(b.color).multiplyScalar(0.1 + hot * 1.2).lerp(ALERT, hit * 0.8).lerp(GOLD, gold * 0.5);
-    }
+    this.syncBlocks(world);
 
     // Per-event choreography, from the world's own recent-activity window.
     if (world.t < this.lastT) this.lastT = world.t;       // scrubbed backwards: no effects
@@ -255,14 +271,134 @@ export class Arena3D {
       }
     }
 
-    for (const c of this.cars) {
-      c.pos += c.speed * c.dir * dt; if (c.pos > 520) c.pos = -520; if (c.pos < -520) c.pos = 520;
-      if (c.axis === 'x') c.m.position.set(c.pos, 0.6, c.lane); else c.m.position.set(c.lane, 0.6, c.pos);
-    }
+    this.placeCars(now);
     this.stepParticles(dt);
     this.jumbo.tex.offset.x = now * 0.03;
     this.mirror.visible = this.blocks.size <= 220;
     this.stepCamera(world, dt);
+  }
+
+  private syncBlocks(world: World): void {
+    const C = this.C;
+    // Blocks: one per structure, removed when a seek drops them.
+    for (const [key, b] of this.blocks) {
+      if (!world.structures.has(key)) { this.blockRoot.remove(b.group); this.blocks.delete(key); }
+    }
+    for (const [key, s] of world.structures) {
+      let b = this.blocks.get(key);
+      if (!b || b.depth !== s.depth) {
+        if (b) this.blockRoot.remove(b.group);
+        b = this.makeBlock(s, world);
+        this.blocks.set(key, b);
+      }
+      const h = Math.max(0.05, s.h) * C;
+      b.group.scale.set(C * 0.78, h, C * 0.78);
+      b.group.position.set(s.x * C, 3.86, s.z * C);
+      const hot = Math.min(1, s.flash), hit = Math.min(1, s.hit), gold = Math.min(1, s.gold);
+      b.edge.color.copy(b.color).multiplyScalar(s.depth === 'unavailable' ? 0.9 : 2.2).lerp(WHITE, hot * 0.8).lerp(ALERT, hit).lerp(GOLD, gold * 0.9);
+      b.fill.emissive.copy(b.color).multiplyScalar(0.03 + hot * 0.9).lerp(ALERT, hit * 0.8).lerp(GOLD, gold * 0.5);
+      b.cap?.color.copy(b.color).multiplyScalar(0.75 + hot * 1.6).lerp(ALERT, hit).lerp(GOLD, gold * 0.9);
+    }
+  }
+
+  /** Where the layout put things, for a host that stages its own camera. */
+  get metrics(): { cell: number; deckRadius: number; fighterX: number[] } {
+    return { cell: this.C, deckRadius: this.R, fighterX: this.fighters.map((f) => f.root.position.x) };
+  }
+
+  /**
+   * Draw one frame as a pure function of `(world, spec)`.
+   *
+   * No easing, no accumulation, no `Math.random()`: reactions are derived from
+   * how long ago each event happened in the world's own time, so frame N is
+   * identical however many frames were drawn before it and in whatever order.
+   * Particles are the one live effect with no pure form, and are left out.
+   */
+  drawFrame(world: World, o: Arena3DFrame): void {
+    this.time.value = o.t;
+    this.layout(world);
+    this.syncBlocks(world);
+    const win = Math.max(1, o.windowMs), recent = world.recent;
+    const judging = world.phase === 'judging';
+    this.phaseCol.set(0, 0, 0); if (judging) this.phaseCol.copy(JUDGE);
+    this.floorMat.uniforms.uPhase.value.copy(this.phaseCol);
+    this.groundMat.uniforms.uPhase.value.copy(this.phaseCol);
+
+    let pi = 0;
+    for (const p of this.pulses) p.z = -99;
+    for (let i = recent.length - 1; i >= 0 && pi < MAX_PULSES; i--) {
+      const r = recent[i], age = (world.t - r.t) / win;
+      if (age > 2.2) break;
+      if (age < 0 || r.kind === 'reasoning') continue;
+      const f = this.fighters.find((x) => x.id === r.teamId); if (!f) continue;
+      this.pulses[pi].set(f.root.position.x, 0, o.t - age * 0.7, 0);
+      this.pulseColors[pi].copy(r.kind === 'error' ? ALERT : f.color); pi++;
+    }
+
+    const winner = world.phase === 'reveal' ? this.fighters.find((f) => f.id === world.winnerId) : undefined;
+    const counts = this.fighters.map(() => 0);
+    this.fighters.forEach((f, fi) => {
+      const ov = o.overrides?.[f.id];
+      let last: { kind: string; t: number } | null = null, newest: string | null = null;
+      for (let i = recent.length - 1; i >= 0; i--) {
+        const r = recent[i]; if (world.t - r.t > win * 6) break;
+        if (r.teamId !== f.id || r.t > world.t) continue;
+        counts[fi]++; newest = newest ?? r.kind;
+        if (!last && r.kind !== 'reasoning' && world.t - r.t <= win) last = r;
+      }
+      f.energy = winner ? (f === winner ? 1 : 0) : Math.min(1, counts[fi] / 8);
+      const staged = ov?.pose;
+      const base: PoseName = typeof staged === 'string' ? staged : (winner ? (f === winner ? 'triumph' : 'kneel') : judging ? 'salute' : newest === 'reasoning' ? 'thinking' : 'idle');
+      let e = 0, flash: PoseName = 'idle';
+      if (staged && typeof staged !== 'string') {
+        const A0 = POSES[staged.from], B0 = POSES[staged.to], m = Math.min(1, Math.max(0, staged.mix));
+        for (let i = 0; i < f.cur.length; i++) f.cur[i] = A0[i] + (B0[i] - A0[i]) * m;
+      } else if (last && !staged && !winner) {
+        const a = (world.t - last.t) / win; e = a < 0.25 ? a / 0.25 : 1 - (a - 0.25) / 0.75; e = e * e * (3 - 2 * e);
+        flash = last.kind === 'file' ? 'strike' : last.kind === 'error' ? 'hit' : 'power';
+        f.flareC.copy(last.kind === 'error' ? ALERT : WHITE);
+      }
+      if (!staged || typeof staged === 'string') {
+        const A = POSES[base], B = POSES[flash];
+        for (let i = 0; i < f.cur.length; i++) f.cur[i] = A[i] + (B[i] - A[i]) * e;
+      }
+      if (ov?.yaw !== undefined) f.root.rotation.y = ov.yaw;
+      this.applyJoints(f, Math.sin(o.t * 1.7 + f.root.position.x) * 0.03);
+      f.root.position.y = 3.84 + (ov?.lift ?? 0);
+      if (f.disc) f.disc.rotation.z = o.t * (2 + f.energy * 4);
+      if (f.glow) f.glow.emissive.copy(f.base).lerp(f.flareC, e * 0.8);
+      const sc = 1 + f.energy * 0.55 + Math.sin(o.t * 4) * 0.03; f.aura.scale.set(sc, sc, 1);
+      (f.aura.material as THREE.MeshBasicMaterial).opacity = 0.35 + f.energy * 0.6;
+      f.light.intensity = 90 + f.energy * 260;
+      for (const bm of f.beams) bm.uniforms.uI.value = 0.12 + f.energy * 0.75;
+    });
+
+    let seam = 0;
+    if (this.fighters.length === 2) {
+      seam = (counts[0] - counts[1]) / (counts[0] + counts[1] + 3);
+      if (winner) seam = winner === this.fighters[0] ? 0.8 : -0.8; else if (judging || world.phase === 'freeze') seam = 0;
+    }
+    this.floorMat.uniforms.uSeam.value = seam * Math.abs(this.fighters[0]?.root.position.x ?? 0) * 0.5;
+
+    this.spot.visible = !!winner && (o.reveal ?? 0) > 0;
+    if (winner) { this.spot.position.x = winner.root.position.x; this.spot.material.uniforms.uC.value = winner.color; this.spot.material.uniforms.uI.value = o.reveal ?? 0; }
+    const names = this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ');
+    this.setJumbo(o.banner?.text ?? `LIVE  ·  ${names}`, o.banner?.color ?? '#00f0ff');
+    this.jumbo.tex.offset.x = o.t * 0.03;
+    this.placeCars(o.t);
+    this.pSize.fill(0); this.pGeo.attributes.size.needsUpdate = true;
+    this.mirror.visible = true;
+    this.camera.position.set(...o.cam.pos); this.look.set(...o.cam.look);
+    if (this.camera.fov !== o.cam.fov) { this.camera.fov = o.cam.fov; this.camera.updateProjectionMatrix(); }
+    this.camera.lookAt(this.look);
+    this.composer.render();
+  }
+
+  private placeCars(t: number): void {
+    for (const c of this.cars) {
+      const pos = ((((c.pos + c.speed * c.dir * t) + 520) % 1040) + 1040) % 1040 - 520;
+      if (c.axis === 'x') c.m.position.set(pos, 0.6, c.lane); else c.m.position.set(c.lane, 0.6, pos);
+    }
   }
 
   render(): void { this.composer.render(); }
@@ -349,12 +485,7 @@ export class Arena3D {
     if (f.thinkT > 0 && (f.thinkT -= dt) <= 0 && f.basePose === 'thinking') f.basePose = 'idle';
     const target = POSES[f.flash ?? f.basePose], c = f.cur, k = 1 - Math.exp(-dt * (f.flash ? 16 : 6));
     for (let i = 0; i < c.length; i++) c[i] += (target[i] - c[i]) * k;
-    const j = f.j, br = this.reduced ? 0 : Math.sin(now * 1.7 + f.root.position.x) * 0.03;
-    j.spine.rotation.set(c[0] + br, c[1], 0); j.head.rotation.x = c[2];
-    j.shL.rotation.set(c[3], 0, c[4]); j.elL.rotation.x = c[5];
-    j.shR.rotation.set(c[6], 0, -c[7]); j.elR.rotation.x = c[8];
-    j.hipL.rotation.x = c[9]; j.knL.rotation.x = c[10]; j.hipR.rotation.x = c[11]; j.knR.rotation.x = c[12];
-    j.hips.position.set(0, f.hipsY + c[13] + br * 2, c[14]);
+    this.applyJoints(f, this.reduced ? 0 : Math.sin(now * 1.7 + f.root.position.x) * 0.03);
     if (f.disc) f.disc.rotation.z += dt * (2 + f.energy * 10);
     if (f.flash && (f.flashT -= dt) <= 0) f.flash = null;
     f.flare = Math.max(0, f.flare - dt * 2.4);
@@ -363,6 +494,15 @@ export class Arena3D {
     (f.aura.material as THREE.MeshBasicMaterial).opacity = 0.35 + f.energy * 0.6;
     f.light.intensity = 90 + f.energy * 260;
     for (const bm of f.beams) bm.uniforms.uI.value += ((0.12 + f.energy * 0.75) - bm.uniforms.uI.value) * Math.min(1, dt * 4);
+  }
+
+  private applyJoints(f: Fighter, br: number): void {
+    const j = f.j, c = f.cur;
+    j.spine.rotation.set(c[0] + br, c[1], 0); j.head.rotation.x = c[2];
+    j.shL.rotation.set(c[3], 0, c[4]); j.elL.rotation.x = c[5];
+    j.shR.rotation.set(c[6], 0, -c[7]); j.elR.rotation.x = c[8];
+    j.hipL.rotation.x = c[9]; j.knL.rotation.x = c[10]; j.hipR.rotation.x = c[11]; j.knR.rotation.x = c[12];
+    j.hips.position.set(0, f.hipsY + c[13] + br * 2, c[14]);
   }
 
   private handOf(f: Fighter): THREE.Vector3 { return f.j.elR.localToWorld(new THREE.Vector3(0, -1.9, 0)); }
@@ -374,18 +514,25 @@ export class Arena3D {
     const ghost = s.depth === 'unavailable';
     // `unavailable` is a hollow ghost and `inferred` has dashed edges, so the
     // confidence of a block's height survives a screenshot.
-    const fill = new THREE.MeshStandardMaterial({ color: 0x0a0e16, metalness: 0.7, roughness: 0.35, emissive: color.clone().multiplyScalar(0.1), transparent: ghost, opacity: ghost ? 0.12 : 1, depthWrite: !ghost });
+    const fill = new THREE.MeshStandardMaterial({ color: 0x06080d, metalness: 0.4, roughness: 0.6, emissive: color.clone().multiplyScalar(0.03), transparent: ghost, opacity: ghost ? 0.12 : 1, depthWrite: !ghost });
     group.add(new THREE.Mesh(geo, fill));
     let edge: THREE.LineBasicMaterial | THREE.LineDashedMaterial;
     const lines = new THREE.LineSegments(Arena3D.blockEdges);
     if (s.depth === 'inferred') { edge = new THREE.LineDashedMaterial({ color, dashSize: 0.12, gapSize: 0.09, toneMapped: false }); lines.computeLineDistances(); }
     else edge = new THREE.LineBasicMaterial({ color, toneMapped: false });
     lines.material = edge; group.add(lines);
+    // A lit rooftop tile, so a block reads as one file from above and at a distance.
+    let cap: THREE.MeshBasicMaterial | null = null;
+    if (!ghost) {
+      cap = new THREE.MeshBasicMaterial({ color, toneMapped: false });
+      const tile = new THREE.Mesh(Arena3D.capGeo, cap); tile.position.y = 1.002; group.add(tile);
+    }
     this.blockRoot.add(group);
-    return { group, fill, edge, depth: s.depth, color };
+    return { group, cap, fill, edge, depth: s.depth, color };
   }
   private static blockGeo = (() => { const g = new THREE.BoxGeometry(1, 1, 1); g.translate(0, 0.5, 0); return g; })();
   private static blockEdges = new THREE.EdgesGeometry(Arena3D.blockGeo);
+  private static capGeo = (() => { const g = new THREE.PlaneGeometry(0.66, 0.66); g.rotateX(-Math.PI / 2); return g; })();
 
   // ───────────────────────────────────────────────────────────── camera
 
@@ -575,7 +722,7 @@ export class Arena3D {
     const plaza = new THREE.Mesh(new THREE.CylinderGeometry(R + 22, R + 24, 0.8, 96), metal); plaza.position.y = 0.4; this.arena.add(plaza);
     const deck = new THREE.Mesh(new THREE.CylinderGeometry(R, R + 4, 3, 96), metal); deck.position.y = 2.3; this.arena.add(deck);
     for (const r of [R + 10, R + 21]) { const t = new THREE.Mesh(new THREE.TorusGeometry(r, 0.14, 6, 128), this.glowMat(GRID, 1.3)); t.rotation.x = Math.PI / 2; t.position.y = 0.86; this.arena.add(t); }
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.4, 0.3, 8, 128), this.glowMat(GRID, 1.8)); rim.rotation.x = Math.PI / 2; rim.position.y = 3.85; this.arena.add(rim);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(R + 0.4, 0.2, 8, 128), this.glowMat(GRID, 1.05)); rim.rotation.x = Math.PI / 2; rim.position.y = 3.85; this.arena.add(rim);
 
     this.mirror = new Reflector(new THREE.CircleGeometry(R, 64), { textureWidth: 1024, textureHeight: 1024, color: 0x99aabb, clipBias: 0.003 });
     this.mirror.rotation.x = -Math.PI / 2; this.mirror.position.y = 3.81; this.arena.add(this.mirror);
@@ -640,9 +787,9 @@ export class Arena3D {
       const bm = new THREE.ShaderMaterial({
         transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { uC: { value: col }, uI: { value: 0.2 } },
         vertexShader: `varying float vY; void main(){ vY = uv.y; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-        fragmentShader: `varying float vY; uniform vec3 uC; uniform float uI; void main(){ float a = pow(1.-vY,1.6)*uI; gl_FragColor = vec4(uC*2.*a, a); }`,
+        fragmentShader: `varying float vY; uniform vec3 uC; uniform float uI; void main(){ float a = pow(1.-vY,1.6)*uI*0.55; gl_FragColor = vec4(uC*2.*a, a); }`,
       });
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.4, 320, 10, 1, true), bm); beam.position.set(x, 169.8, z); this.arena.add(beam);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.8, 320, 10, 1, true), bm); beam.position.set(x, 169.8, z); this.arena.add(beam);
       owner?.beams.push(bm);
     }
   }

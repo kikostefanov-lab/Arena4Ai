@@ -66,7 +66,10 @@ update this file to match.
 63s marketing sizzle reel in three aspect ratios.
 
 - `src/sizzle/Sizzle.tsx` — top-level composition, 9-scene `<Series>` with theme audio
-- `src/sizzle/scenes/` — `IntroBumper`, `TheQuestion`, `GladiatorReveal`, `TheBrief`, `BattleHighlights`, `TheVerdict`, `TheForge`, `ThreePillars`, `SizzleOutro`
+- `src/sizzle/scenes/` — in play order: `IntroBumper`, `TheQuestion`, `RobotReveal`, `TheBrief`, `ArenaDistrict`, `TheVerdict`, `TheForge`, `TheRecord`, `ThreePillars`, `SizzleOutro`. (`GladiatorReveal`, `BattleHighlights` and `ArenaCity` are the retired 2D/isometric versions, kept for reference.)
+- **3D scenes** (`RobotReveal`, `ArenaDistrict`) draw with `src/arena3d/scene.ts` — the SAME `Arena3D` class the web app's 3D view imports from `@arena/video/dist/arena3d/scene`. The app calls `sync()` per animation frame; the reel calls `drawFrame(world, spec)`, which must stay a pure function of its arguments (no easing, no accumulation, no `Math.random()`) because Remotion renders frames out of order. `src/sizzle/useArena3D.ts` mounts the scene and holds the render until the first frame is painted.
+- The 3D scenes need WebGL in headless Chromium: the render scripts pass `chromiumOptions: { gl: 'angle' }` (see `scripts/sizzle-gl.ts`), which also copies the robot model from `packages/web/public/models/` into this package's `public/models/` (gitignored) before bundling.
+- After editing `src/arena3d/scene.ts`, run `npm run build --workspace=packages/video` — the web app consumes the compiled `dist/`.
 - Three `<Composition>` variants in `Root.tsx`: `SizzleLandscape` (1920×1080), `SizzlePortrait` (1080×1920), `SizzleSquare` (1080×1080). Same scene graph — each scene uses `useVideoConfig()` to adapt layout.
 - Source material is the real `arena4ai-launch-strategy-001` competition (`78c7452f-...`): scenes 4 (brief builder), 6 (scores tab) and 7 (forge artifacts) overlay actual product screengrabs dimmed behind animated text.
 - Scenes 3 + 5 render gladiators via `VideoGladiator` in a canvas. **Critical:** the canvas must be `position: absolute, inset: 0` — inside an `<AbsoluteFill>` (which is `display: flex`), a flex-child canvas collapses to 0 height and the gladiators render off-screen. Use `useLayoutEffect` for the canvas draw to keep Remotion's snapshot timing deterministic.

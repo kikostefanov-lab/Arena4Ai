@@ -5,7 +5,7 @@ import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor, reconcileWithM
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
-import type { Arena3D } from '../lib/arena3d/scene';
+import type { Arena3D } from '@arena/video/dist/arena3d/scene';
 import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
 
 /**
@@ -438,7 +438,7 @@ export default function ArenaViewerV2({
     let scene: Arena3D | null = null;
     (async () => {
       try {
-        const mod = await import('../lib/arena3d/scene');
+        const mod = await import('@arena/video/dist/arena3d/scene');
         if (dead) return;
         scene = new mod.Arena3D(canvas, {
           teams: teams.map((t) => ({ id: t.id, model: t.model, color: getModelColor(t.model) })),

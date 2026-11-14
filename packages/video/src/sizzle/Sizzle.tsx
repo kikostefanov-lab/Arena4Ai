@@ -8,9 +8,9 @@ import { Series, Audio, AbsoluteFill, useVideoConfig, staticFile } from 'remotio
 import { BG_DARK } from '../tokens';
 import { IntroBumper } from './scenes/IntroBumper';
 import { TheQuestion } from './scenes/TheQuestion';
-import { GladiatorReveal } from './scenes/GladiatorReveal';
+import { RobotReveal } from './scenes/RobotReveal';
 import { TheBrief } from './scenes/TheBrief';
-import { ArenaCity } from './scenes/ArenaCity';
+import { ArenaDistrict } from './scenes/ArenaDistrict';
 import { TheVerdict } from './scenes/TheVerdict';
 import { TheRecord } from './scenes/TheRecord';
 import { TheForge } from './scenes/TheForge';
@@ -21,13 +21,15 @@ import { SizzleOutro } from './scenes/SizzleOutro';
 const SCENES = [
   { C: IntroBumper,      frames: 90  }, //   0–90   (0–3s)    intro bumper
   { C: TheQuestion,      frames: 120 }, //  90–210  (3–7s)    which model wins?
-  { C: GladiatorReveal,  frames: 210 }, // 240–450  (8–15s)   three gladiators in the ring
+  // v2: the two arena scenes are the 3D "Neon District" — the same scene code
+  // as the live app's 3D view (src/arena3d/scene.ts), drawn deterministically.
+  { C: RobotReveal,      frames: 210 }, //          three robots land on the deck
   { C: TheBrief,         frames: 210 }, // 450–660  (15–22s)  real brief, real criteria
   // AA-067: was BattleHighlights, a hand-rolled flat gladiator ring with no
   // information in it. This runs the SAME isometric renderer the live app uses,
   // over a real competition's real events — the site's claim and the reel's
   // footage are now the same code.
-  { C: ArenaCity,        frames: 300 }, // 660–960  (22–32s)  the cities build
+  { C: ArenaDistrict,    frames: 300 }, //          the cities build, in 3D
   { C: TheVerdict,       frames: 300 }, // 960–1260 (32–42s)  cross-judge + winner
   { C: TheForge,         frames: 240 }, //          artifacts fly past
   // The three-provider claim, evidenced across every competition rather than by
