@@ -396,6 +396,25 @@ remain but the live page no longer draws with them; treat this list as history.
 - **Critical:** the init effect is keyed on `teamsKey` (stable id|model|persona signature). Re-initializing on every parent render wipes terminal poses.
 - `packages/video/src/components/VideoGladiator.ts` mirrors this armor and pose library for reels — keep them in sync.
 
+## Next session
+
+Where things stand after 2026-11-14 (see `CHANGELOG.md` for the detail):
+- `main` has the 3D arena (`v2.0.0`) and the harness hardening (#17). Nothing is in flight.
+- **First thing to do:** run one real two-team competition end to end (CLI and web UI) on the
+  hardened build. Nothing since #17 has exercised a live run, the deadline shutdown against real
+  CLIs, or a helper stage from a plain terminal.
+- **Then, in rough priority:** show a draw in the UI and the reel (a tie is stored with no
+  `winnerId` and currently renders as a blank winner; the match page's loser calculation and the
+  Forge source picker still fall back to the first team); the WebSocket replay gap
+  (`server/websocket.ts` reads history before subscribing); awaiting tournament match-record
+  creation (`routes/tournaments.ts`); a cancelled state for tournaments; the sandbox-mode CLI
+  preflight that looks for agent binaries on the host.
+- **Open decisions for the owner:** whether the web UI gets a login before anyone exposes it;
+  how a sandboxed agent should authenticate beyond environment variables; whether to bump the
+  `0.1.0` package versions to match the tag.
+- **Unexplained:** two "POST returns 201" tests fail about once in fifteen full turbo runs.
+- Docker is not installed on the development machine, so sandbox changes are stub-tested only.
+
 ## Known Issues
 1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers).
    Fixable now: gemini-cli 0.38.x supports `-o stream-json`, which would give the Gemini
