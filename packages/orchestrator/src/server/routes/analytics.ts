@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { isFinishedState } from '@arena/shared';
 import { repo } from '../repo.js';
 import { computeWinRate, computeCompletionRate, computeAvgDurationMs } from '../../analytics/stats-aggregator.js';
 
@@ -6,7 +7,7 @@ export const analyticsRouter = Router();
 
 analyticsRouter.get('/summary', async (_req: Request, res: Response) => {
   const competitions = await repo.list(200);
-  const completedComps = competitions.filter((c) => c.state === 'COMPLETE');
+  const completedComps = competitions.filter((c) => isFinishedState(c.state));
 
   const validResults = await repo.listResults(completedComps.map((c) => c.id));
 
@@ -36,7 +37,7 @@ analyticsRouter.get('/summary', async (_req: Request, res: Response) => {
     }
     const entry = formatMap.get(format)!;
     entry.total += 1;
-    if (comp.state === 'COMPLETE') {
+    if (isFinishedState(comp.state)) {
       entry.completed += 1;
       if (comp.startedAt && comp.completedAt) {
         const duration =

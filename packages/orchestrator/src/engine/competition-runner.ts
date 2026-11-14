@@ -29,11 +29,20 @@ import { scoreDeliverable } from '../judging/rubric-scorer.js';
 import { aiJudge, JUDGE_IDS, type AiJudgeResult } from '../judging/ai-judge.js';
 import { findMissingClis, formatMissingCliError } from '../utils/cli-preflight.js';
 import { aggregate } from '../judging/score-aggregator.js';
+import { resolveOutcome } from '../judging/outcome.js';
 import { printResults } from '../judging/results-reporter.js';
 import type { SynthesisResult } from '../synthesis/merge-engine.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
 import { CommentaryAgent } from '../commentary/commentary-agent.js';
 import type { AgentRepository } from '../db/agent-repository.js';
+
+/** Thrown by run() once the competition has been cancelled. Terminal: no later stage runs. */
+export class CompetitionCancelledError extends Error {
+  constructor(message = 'Competition cancelled') {
+    super(message);
+    this.name = 'CompetitionCancelledError';
+  }
+}
 
 export interface RunOptions {
   /** Directory where JSONL event logs are written. Defaults to OS tmp dir. */
@@ -71,7 +80,10 @@ export interface TeamDeliverable {
 export interface CompetitionResult {
   competition: Competition;
   scorecards: ScoreCard[];
+  /** Sole rank-one team; null when nobody won outright (a draw, or no scorecards). */
   winner: string | null;
+  /** Rank-one teams when two or more are tied within the aggregator's tolerance. */
+  tiedTeamIds?: string[];
   presentations: TeamPresentation[];      // human-readable per-team findings
   synthesis: SynthesisResult | null;      // synthesized hybrid solution
   deliverables: TeamDeliverable[];
@@ -95,6 +107,7 @@ export class CompetitionRunner extends EventEmitter {
   private readonly agentRepo?: AgentRepository;
   private _cancelled = false;
   private _cancelResolve?: () => void;
+  private _cancelPromise?: Promise<void>;
   private _activeAdapters: BaseAdapter[] = [];
   private _clock?: ClockManager;
 
@@ -131,18 +144,30 @@ export class CompetitionRunner extends EventEmitter {
     return this.competition.id;
   }
 
+  /** Throws once cancelled — call after every await so no stage outlives a cancel. */
+  private assertNotCancelled(): void {
+    if (this._cancelled) throw new CompetitionCancelledError();
+  }
+
   private advance(to: CompetitionState): void {
+    this.assertNotCancelled();
     this.competition.state = transition(this.competition.state, to);
     this.emit('stateChange', this.competition.state);
   }
 
   /** Cancel the running competition — shuts down all adapters and stops the clock. */
-  async cancel(): Promise<void> {
-    if (this._cancelled) return;
+  cancel(): Promise<void> {
+    // Idempotent: concurrent callers wait for the same shutdown.
+    this._cancelPromise ??= this._doCancel();
+    return this._cancelPromise;
+  }
+
+  private async _doCancel(): Promise<void> {
+    // Set synchronously: from here on advance() and every checkpoint in run() refuse to continue.
     this._cancelled = true;
     this._cancelResolve?.(); // unblock the run() Promise.race
     this._clock?.stop();
-    await Promise.all(this._activeAdapters.map(a => a.shutdown()));
+    await Promise.all(this._activeAdapters.map(a => a.shutdown().catch(() => {})));
     if (
       this.competition.state !== CompetitionState.COMPLETE &&
       this.competition.state !== CompetitionState.FAILED
@@ -169,7 +194,6 @@ export class CompetitionRunner extends EventEmitter {
     let sandboxManager: SandboxManager | undefined;
     if (!this.options.skipSandbox) {
       sandboxManager = new SandboxManager();
-      await sandboxManager.verify();
     }
     const logger = new EventLogger(this.options.logDir, this.competition.id);
 
@@ -185,6 +209,31 @@ export class CompetitionRunner extends EventEmitter {
     try {
       // ── CONFIGURED ──────────────────────────────────────────────────────
       this.advance(CompetitionState.CONFIGURED);
+
+      // Sandbox preflight lives inside the guarded lifecycle so a missing
+      // docker binary / daemon / image ends in FAILED with an ERROR event,
+      // rather than throwing before the run has a state to fail from.
+      if (sandboxManager) {
+        try {
+          await sandboxManager.verify();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: teams[0]?.id ?? 'sandbox',
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: {
+              stage: 'sandbox',
+              reason: (err as { reason?: string }).reason,
+              message,
+            },
+            metadata: {},
+          });
+          throw err;
+        }
+      }
 
       // Preflight: a self-hoster will rarely have all three agent CLIs. Find out
       // BEFORE launching, and say which binary is missing and how to get it —
@@ -341,9 +390,17 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.COLLECTING);
 
       clock.stop();
+
+      // The deadline must actually stop the agents: signal them and wait for exit
+      // BEFORE reading their files, so nothing is still writing during collection
+      // and no agent process outlives the run.
+      await Promise.all(adapters.map((a) => a.shutdown()));
+      this.assertNotCancelled();
+
       const deliverables: Deliverable[] = await Promise.all(
         adapters.map((a) => a.collectDeliverables()),
       );
+      this.assertNotCancelled();
 
       // ── PRESENTING ─────────────────────────────────────────────────────
       this.advance(CompetitionState.PRESENTING);
@@ -361,6 +418,8 @@ export class CompetitionRunner extends EventEmitter {
       } catch (err) {
         console.error('[arena] presentation generation failed:', (err as Error).message);
       }
+
+      this.assertNotCancelled();
 
       // Emit presentation events for live UI
       for (const pres of presentations) {
@@ -399,6 +458,7 @@ export class CompetitionRunner extends EventEmitter {
         deliverables.map((d) => scoreDeliverable(JUDGE_IDS.automated, d, brief.rubric, brief)),
       );
       const aiResults = await Promise.all(aiJudgePromises);
+      this.assertNotCancelled();
 
       // Use AI judge results; fall back to the automated scorer per-team.
       // Failure is read off the judge's explicit `failure` field — never inferred
@@ -445,21 +505,24 @@ export class CompetitionRunner extends EventEmitter {
       }
 
       const scorecards = aggregate(judgeResults);
+      // A tie within the aggregator's tolerance is a draw — never pick the first
+      // rank-one team as if it had won.
+      const { winnerId, tiedTeamIds } = resolveOutcome(scorecards);
 
       // ── SCORED ───────────────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);
 
       // Fire-and-forget stats update — does not block competition flow
       if (this.agentRepo) {
-        const winnerId = scorecards.find(sc => sc.rank === 1)?.teamId ?? null;
         void Promise.all(
           teams
             .filter(t => t.agentId)
             .map(team => {
               const scorecard = scorecards.find(s => s.teamId === team.id);
-              const won = scorecard?.teamId === winnerId;
+              const won = winnerId !== null && scorecard?.teamId === winnerId;
+              const drew = tiedTeamIds.includes(team.id);
               const score = scorecard?.finalScore ?? 0;
-              return this.agentRepo!.incrementStats(team.agentId!, { won, score }).catch(() => {});
+              return this.agentRepo!.incrementStats(team.agentId!, { won, drew, score }).catch(() => {});
             }),
         );
       }
@@ -510,7 +573,8 @@ export class CompetitionRunner extends EventEmitter {
       const result: CompetitionResult = {
         competition: { ...this.competition },
         scorecards,
-        winner: scorecards.find((c) => c.rank === 1)?.teamId ?? null,
+        winner: winnerId,
+        ...(tiedTeamIds.length > 0 ? { tiedTeamIds } : {}),
         presentations,
         synthesis,
         deliverables: teamDeliverables,

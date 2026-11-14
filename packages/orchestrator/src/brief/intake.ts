@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { claudeEnv } from '../utils/claude-env.js';
+import { helperClaudeArgs, helperClaudeEnv } from '../utils/claude-helper.js';
 import { resolveStageModel } from '../adapters/model-registry.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildIntakePrompt, DOMAIN_TEMPLATES, type BriefDomain, type DeliverableType } from './domain-templates.js';
@@ -27,9 +27,9 @@ export async function runIntake(idea: string, claudeBin?: string): Promise<Intak
   const prompt = buildIntakePrompt(idea);
 
   const output = await new Promise<string>((resolve, reject) => {
-    const child = spawn(bin, ['-p', '-', '--model', resolveStageModel()], {
+    const child = spawn(bin, helperClaudeArgs({ model: resolveStageModel() }), {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: claudeEnv(),
+      env: helperClaudeEnv(),
     });
 
     child.stdin!.write(prompt);

@@ -44,7 +44,9 @@ export class CompetitionRepository {
   async updateState(id: string, state: CompetitionState): Promise<void> {
     const patch: Partial<typeof competitions.$inferInsert> = { state: state as string };
     if (state === CompetitionState.RUNNING) patch.startedAt = new Date();
-    if (state === CompetitionState.COMPLETE || state === CompetitionState.FORGE_COMPLETE) patch.completedAt = new Date();
+    // Only COMPLETE stamps completedAt: FORGE_COMPLETE is a later, human-triggered
+    // step and must not move the competition's completion time.
+    if (state === CompetitionState.COMPLETE) patch.completedAt = new Date();
     await this.db.update(competitions).set(patch).where(eq(competitions.id, id));
   }
 
@@ -196,6 +198,8 @@ export class CompetitionRepository {
     const deleted = await this.db.transaction(async (tx) => {
       await tx.delete(events).where(eq(events.competitionId, id));
       await tx.delete(results).where(eq(results.competitionId, id));
+      // results_history.competition_id has no ON DELETE CASCADE (migration 0010)
+      await tx.delete(resultsHistory).where(eq(resultsHistory.competitionId, id));
       return tx.delete(competitions).where(eq(competitions.id, id)).returning({ id: competitions.id });
     });
     return deleted.length > 0;

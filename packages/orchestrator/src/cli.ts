@@ -7,6 +7,20 @@ import { CompetitionRunner } from './engine/competition-runner.js';
 import { TournamentRunner } from './engine/tournament-runner.js';
 import { CompetitionFormat } from '@arena/shared';
 import type { Team } from '@arena/shared';
+import { shutdownAllAdapters } from './adapters/base-adapter.js';
+
+// Agents run in their own process groups, so Ctrl-C does not reach them on its
+// own. Stop them before this process exits; a second signal exits immediately.
+let stopping = false;
+for (const sig of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(sig, () => {
+    const code = sig === 'SIGINT' ? 130 : 143;
+    if (stopping) process.exit(code);
+    stopping = true;
+    console.error(`\n[arena] ${sig} received: stopping agent processes…`);
+    void shutdownAllAdapters().finally(() => process.exit(code));
+  });
+}
 
 const program = new Command();
 
@@ -190,13 +204,18 @@ program
   .command('serve')
   .description('Start the Arena HTTP API server')
   .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('--host <host>', 'Interface to bind (default 127.0.0.1; env ARENA_HOST). Use 0.0.0.0 to expose.')
   .option('--skip-sandbox', 'Skip Docker sandbox')
-  .action(async (opts: { port: string; skipSandbox?: boolean }) => {
+  .action(async (opts: { port: string; host?: string; skipSandbox?: boolean }) => {
     const { createServer } = await import('./server/app.js');
+    const { resolveHost, exposureWarning } = await import('./server/network.js');
     const server = createServer();
     const port = Number(opts.port);
-    server.listen(port, () => {
-      console.log(`[arena] server listening on http://localhost:${port}`);
+    const host = resolveHost(opts.host);
+    const warning = exposureWarning(host);
+    if (warning) console.warn(warning);
+    server.listen(port, host, () => {
+      console.log(`[arena] server listening on http://${host}:${port}`);
     });
   });
 
@@ -239,6 +258,7 @@ program
 
     console.log(`[arena] re-evaluating ${ids.length} competition(s), stages: ${stages.join(' → ')}`);
 
+    const failedIds: string[] = [];
     for (const id of ids) {
       const comp = await repo.getCompetition(id);
       const result = await repo.getResult(id);
@@ -275,18 +295,18 @@ program
         }
 
         if (stage === 'judge') {
-          const { aiJudge, JUDGE_IDS } = await import('./judging/ai-judge.js');
-          const { computeOverallScore } = await import('./judging/score-aggregator.js');
-          const scorecards = [];
-          for (const d of deliverables) {
-            const jr = await aiJudge(brief, d, brief.rubric, { judgeId: JUDGE_IDS.aiClaude });
-            const finalScore = computeOverallScore(jr.scores, brief.rubric);
-            scorecards.push({ teamId: d.teamId, finalScore, judgeResults: [jr] });
+          const { rejudge } = await import('./judging/rejudge.js');
+          const outcome = await rejudge(brief, deliverables, { adversarial: false });
+          if (!outcome.ok) {
+            // Do not overwrite stored results with a failed judge's zero scores.
+            console.error(`[arena] ${id}: re-judge FAILED — existing results kept. ${outcome.message}`);
+            failedIds.push(id);
+            break;
           }
-          scorecards.sort((a, b) => b.finalScore - a.finalScore);
-          const winnerId = scorecards[0]?.teamId ?? null;
+          const { scorecards, winnerId, tiedTeamIds } = outcome;
           await repo.updateScorecards(id, scorecards, winnerId);
-          console.log(`[arena] ${id}: re-judged → winner: ${winnerId} (${scorecards.map(s => `${s.teamId}:${s.finalScore.toFixed(3)}`).join(', ')})`);
+          const verdict = winnerId ? `winner: ${winnerId}` : `draw: ${tiedTeamIds.join(' = ')}`;
+          console.log(`[arena] ${id}: re-judged → ${verdict} (${scorecards.map(s => `${s.teamId}:${s.finalScore.toFixed(3)}`).join(', ')})`);
         }
 
         if (stage === 'synthesis') {
@@ -302,6 +322,10 @@ program
       }
     }
 
+    if (failedIds.length > 0) {
+      console.error(`[arena] re-evaluation finished with ${failedIds.length} judge failure(s); results unchanged for: ${failedIds.join(', ')}`);
+      process.exit(1);
+    }
     console.log(`[arena] re-evaluation complete`);
     process.exit(0);
   });

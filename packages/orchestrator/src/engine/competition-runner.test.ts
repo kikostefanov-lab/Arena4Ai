@@ -303,6 +303,37 @@ describe('CompetitionRunner failure visibility', () => {
     expect(judged.some((r: { judgeId: string }) => r.judgeId === 'ai-claude')).toBe(true);
   });
 
+  it('records a draw, not an arbitrary winner, when teams share rank one', async () => {
+    const { aggregate } = await import('../judging/score-aggregator.js');
+    vi.mocked(aggregate).mockReturnValueOnce([
+      { teamId: 'team-a', rank: 1, finalScore: 0.8, judgeResults: [] },
+      { teamId: 'team-b', rank: 1, finalScore: 0.802, judgeResults: [] },
+    ]);
+    const incrementStats = vi.fn().mockResolvedValue(undefined);
+    const agentRepo = {
+      get: vi.fn().mockResolvedValue(null),
+      incrementStats,
+    } as unknown as AgentRepository;
+    const teams = testTeams.map((t, i) => ({ ...t, agentId: `agent-${i}` }));
+    const runner = new CompetitionRunner(testBrief, teams, { skipSandbox: true, printResults: false, agentRepo });
+
+    const result = await runner.run();
+
+    expect(result.winner).toBeNull();
+    expect([...(result.tiedTeamIds ?? [])].sort()).toEqual(['team-a', 'team-b']);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(incrementStats).toHaveBeenCalledTimes(2);
+    for (const call of incrementStats.mock.calls) {
+      expect(call[1]).toMatchObject({ won: false, drew: true });
+    }
+  });
+
+  it('still names a sole winner when rank one is unique', async () => {
+    const result = await makeTestRunner().run();
+    expect(result.winner).toBe('team-a');
+    expect(result.tiedTeamIds ?? []).toEqual([]);
+  });
+
   it('refuses to launch with a clear message when a provider CLI is missing', async () => {
     vi.mocked(findMissingClis).mockResolvedValue([
       { provider: 'gemini', bin: 'gemini', hint: 'npm i -g @google/gemini-cli' },

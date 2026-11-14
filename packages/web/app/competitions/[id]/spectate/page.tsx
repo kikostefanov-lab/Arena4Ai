@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { streamUrl } from '../../../../lib/stream-url';
 import { useParams } from 'next/navigation';
 import { LANE_COLORS, getStateStyle, hexToRgb, MODEL_BADGE_COLORS } from '../../../../lib/design-tokens';
 import { classifyEvent } from '../../../../lib/EventRow';
@@ -327,8 +328,11 @@ export default function SpectatePage() {
       });
     }
 
-    function connect() {
-      ws = new WebSocket(`${wsUrl}/competitions/${id}/stream`);
+    async function connect() {
+      // A fresh ticket per (re)connect: they are short-lived by design.
+      const url = await streamUrl(wsUrl, String(id));
+      if (intentionalClose) return;
+      ws = new WebSocket(url);
       ws.onopen = () => {
         setConnected(true);
         retries = 0;

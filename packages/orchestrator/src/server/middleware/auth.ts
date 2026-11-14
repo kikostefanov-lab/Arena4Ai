@@ -1,4 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
+import { safeEqual } from '../stream-ticket.js';
 
 /**
  * Checks Authorization: Bearer <ARENA_API_KEY> on the request.
@@ -15,12 +16,25 @@ export function requireApiKey(req: Request, res: Response, next: NextFunction): 
   const header = req.headers.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
 
-  if (token !== apiKey) {
+  if (!safeEqual(token, apiKey)) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
 
   next();
+}
+
+/**
+ * Strict guard: when ARENA_API_KEY is set, EVERY request needs the key except
+ * `/health` (liveness probes) and OPTIONS (CORS preflight, which cannot carry
+ * credentials). When the key is unset, everything is open.
+ */
+export function requireApiKeyForAll(req: Request, res: Response, next: NextFunction): void {
+  if (req.method === 'OPTIONS' || req.path === '/health') {
+    next();
+    return;
+  }
+  requireApiKey(req, res, next);
 }
 
 /** Verbs that can change state, spend tokens, or start work on the host. */

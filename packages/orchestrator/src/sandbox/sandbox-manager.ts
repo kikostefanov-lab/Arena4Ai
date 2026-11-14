@@ -21,6 +21,23 @@ const AGENT_IMAGE = process.env.ARENA_AGENT_IMAGE ?? 'arena-agent:latest';
  */
 const SANDBOX_NETWORK = process.env.ARENA_SANDBOX_NETWORK ?? 'bridge';
 
+const NO_SANDBOX_HINT = 'run without the sandbox (CLI: --skip-sandbox; server: ARENA_SKIP_SANDBOX=true).';
+
+function daemonMessage(detail: string): string {
+  return `Docker is installed but its daemon is not reachable${detail ? ` (${detail})` : ''}. ` +
+    `Start Docker (e.g. open Docker Desktop), or ${NO_SANDBOX_HINT}`;
+}
+
+export type SandboxUnavailableReason = 'docker-missing' | 'daemon-unavailable' | 'image-missing';
+
+/** The sandbox cannot be used: carries a machine-readable reason and an actionable message. */
+export class SandboxUnavailableError extends Error {
+  constructor(readonly reason: SandboxUnavailableReason, message: string) {
+    super(message);
+    this.name = 'SandboxUnavailableError';
+  }
+}
+
 /**
  * SandboxManager provides Docker-based isolation for agent processes.
  *
@@ -33,16 +50,46 @@ export class SandboxManager {
   private readonly containerNames = new Map<string, string>();
 
   /**
-   * Verify the agent image is available locally.
-   * Throws a helpful error if not built yet.
+   * Verify docker is installed, its daemon is reachable, and the agent image
+   * exists. Rejects with a SandboxUnavailableError (never an unhandled
+   * `error` event) that names what is missing and how to fix it.
    */
   async verify(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn('docker', ['image', 'inspect', AGENT_IMAGE], { stdio: 'ignore' });
+      let stderr = '';
+      let settled = false;
+      let timer: NodeJS.Timeout | undefined;
+      const settle = (err?: SandboxUnavailableError) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        if (err) reject(err); else resolve();
+      };
+      const proc = spawn('docker', ['image', 'inspect', AGENT_IMAGE], { stdio: ['ignore', 'ignore', 'pipe'] });
+      timer = setTimeout(() => {
+        proc.kill();
+        settle(new SandboxUnavailableError('daemon-unavailable', daemonMessage('timed out waiting for docker to respond')));
+      }, 15_000);
+      timer.unref?.();
+      proc.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+      proc.on('error', (err: NodeJS.ErrnoException) => {
+        settle(new SandboxUnavailableError(
+          'docker-missing',
+          (err.code === 'ENOENT'
+            ? 'Docker is not installed or not on PATH (the "docker" binary was not found).'
+            : `Could not run docker: ${err.message}.`) + ` Install Docker, or ${NO_SANDBOX_HINT}`,
+        ));
+      });
       proc.on('close', (code) => {
-        if (code === 0) resolve();
-        else reject(new Error(
-          `arena-agent image not found. Build it first:\n  docker build -f Dockerfile.agent -t ${AGENT_IMAGE} .`
+        if (code === 0) return settle();
+        if (/cannot connect|is the docker daemon running|permission denied|error during connect/i.test(stderr)) {
+          return settle(new SandboxUnavailableError('daemon-unavailable', daemonMessage(stderr.trim().split('\n')[0] ?? '')));
+        }
+        settle(new SandboxUnavailableError(
+          'image-missing',
+          `Sandbox image "${AGENT_IMAGE}" not found. Build it first:\n` +
+          `  docker build -f Dockerfile.agent -t ${AGENT_IMAGE} .\n` +
+          `Or ${NO_SANDBOX_HINT}`,
         ));
       });
     });
@@ -58,6 +105,7 @@ export class SandboxManager {
     command: string,
     args: string[],
     env: NodeJS.ProcessEnv,
+    options: { stdin?: boolean } = {},
   ): ChildProcess {
     const containerName = `arena-${teamId}-${Date.now()}`;
     this.containerNames.set(teamId, containerName);
@@ -70,6 +118,9 @@ export class SandboxManager {
     const dockerArgs = [
       'run',
       '--rm',
+      // `docker run` closes the container's stdin unless -i is given, so an
+      // adapter that feeds its prompt on stdin would deliver it to nothing.
+      ...(options.stdin ? ['-i'] : []),
       '--name', containerName,
       '-v', `${workdir}:/workspace`,
       '-w', '/workspace',
@@ -83,7 +134,7 @@ export class SandboxManager {
     ];
 
     const child = spawn('docker', dockerArgs, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: [options.stdin ? 'pipe' : 'ignore', 'pipe', 'pipe'],
     });
 
     child.on('close', () => this.containerNames.delete(teamId));

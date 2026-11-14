@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { streamUrl } from '../../../lib/stream-url';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
 import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED } from '../../../lib/design-tokens';
@@ -2332,8 +2333,11 @@ export default function CompetitionPage() {
       });
     }
 
-    function connect() {
-      ws = new WebSocket(`${wsUrl}/competitions/${id}/stream`);
+    async function connect() {
+      // A fresh ticket per (re)connect: they are short-lived by design.
+      const url = await streamUrl(wsUrl, String(id));
+      if (intentionalClose) return;
+      ws = new WebSocket(url);
       ws.onopen = () => {
         setConnected(true);
         setSseError(null);

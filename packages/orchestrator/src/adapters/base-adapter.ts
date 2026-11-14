@@ -9,6 +9,11 @@ import type { SandboxManager } from '../sandbox/sandbox-manager.js';
 const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
 
+/** Default time an agent gets to exit after SIGTERM before it is SIGKILLed. */
+const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
+/** How long to wait for the exit after SIGKILL before giving up. */
+const KILL_WAIT_MS = 2_000;
+
 const DELIVERABLE_GUIDE: Record<string, string> = {
   code:         'Produce runnable code files. The output should be executable.',
   document:     'Produce written documents (.md, .txt). Do NOT write code files unless explicitly required.',
@@ -60,6 +65,19 @@ async function walkDir(
  *   'arenaEvent'  (event: ArenaEvent)  — whenever the model produces output
  *   'error'       (err: Error)         — unrecoverable adapter error
  */
+/**
+ * Every adapter that may still own a process. Agents are spawned `detached`
+ * (their own process group, so a shutdown reaches their children), which also
+ * means a terminal Ctrl-C no longer reaches them. Whoever owns the process
+ * lifetime (the CLI) must call `shutdownAllAdapters()` before exiting.
+ */
+const liveAdapters = new Set<BaseAdapter>();
+
+/** Stop every agent this process has started and wait for them to exit. */
+export async function shutdownAllAdapters(): Promise<void> {
+  await Promise.all([...liveAdapters].map((a) => a.shutdown().catch(() => {})));
+}
+
 export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   readonly teamId: string;
   protected readonly workdir: string;
@@ -67,8 +85,28 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   protected readonly sandbox?: SandboxManager;
 
   protected promptText = '';
-  protected process: ChildProcess | null = null;
+  private child: ChildProcess | null = null;
+  /**
+   * The agent's CLI process. Assigning it also arranges for the agent's whole
+   * process group to be killed the moment the CLI itself exits: an agent can
+   * start a background server with redirected stdio and then exit normally, and
+   * the subclasses clear this field in their `close` handlers, so by the time
+   * `shutdown()` runs there would be nothing left to signal. Sweeping at exit
+   * (rather than remembering the group id for later) also avoids signalling a
+   * recycled pid.
+   */
+  protected get process(): ChildProcess | null { return this.child; }
+  protected set process(next: ChildProcess | null) {
+    this.child = next;
+    const pid = next?.pid;
+    if (!next || pid === undefined || process.platform === 'win32') return;
+    next.once('exit', () => {
+      try { process.kill(-pid, 'SIGKILL'); } catch { /* no surviving group members */ }
+    });
+  }
   protected executionDone: Promise<void> = Promise.resolve();
+  /** Grace period between SIGTERM and SIGKILL in shutdown(). */
+  shutdownGraceMs = Number(process.env.ARENA_SHUTDOWN_GRACE_MS) || DEFAULT_SHUTDOWN_GRACE_MS;
 
   constructor(teamId: string, workdir: string, competitionId: string, sandbox?: SandboxManager) {
     super();
@@ -76,6 +114,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     this.workdir = workdir;
     this.competitionId = competitionId;
     this.sandbox = sandbox;
+    liveAdapters.add(this);
   }
 
   injectBrief(brief: Brief, persona: string): Promise<void> {
@@ -129,13 +168,59 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     };
   }
 
+  /**
+   * Stop the agent and wait until it is really gone.
+   *
+   * SIGTERM first (to the whole process group when the child was spawned
+   * `detached`, so tools the agent started die with it), then SIGKILL after
+   * `shutdownGraceMs`. Resolves only once the process has exited (or, as a last
+   * resort, after a bounded wait following SIGKILL), so callers can collect
+   * files or delete the workdir without racing a live writer. Idempotent.
+   */
   async shutdown(): Promise<void> {
     if (this.sandbox) {
-      await this.sandbox.killContainer(this.teamId);
+      // Kills the container; the `docker run` client process is handled below.
+      await this.sandbox.killContainer(this.teamId).catch(() => {});
     }
-    if (this.process) {
-      this.process.kill('SIGTERM');
-      this.process = null;
+    const child = this.process;
+    if (!child) { liveAdapters.delete(this); return; }
+
+    const hasExited = () => child.exitCode !== null || child.signalCode !== null;
+    const exited = new Promise<void>((resolve) => {
+      if (hasExited()) return resolve();
+      child.once('exit', () => resolve());
+      child.once('error', () => resolve());
+    });
+    const waitFor = (ms: number) =>
+      new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), ms);
+        void exited.then(() => { clearTimeout(timer); resolve(true); });
+      });
+
+    if (!hasExited()) {
+      this.signalProcess(child, 'SIGTERM');
+      if (!(await waitFor(this.shutdownGraceMs))) {
+        this.signalProcess(child, 'SIGKILL');
+        await waitFor(KILL_WAIT_MS);
+      }
+    }
+    // The leader is gone; sweep any member of its group that outlived it.
+    this.signalProcess(child, 'SIGKILL', true);
+    this.process = null;
+    liveAdapters.delete(this);
+  }
+
+  /** Signal the process group when we own one (`detached` spawn), else just the child. */
+  private signalProcess(child: ChildProcess, signal: NodeJS.Signals, groupOnly = false): void {
+    const pid = child.pid;
+    if (pid !== undefined && process.platform !== 'win32') {
+      try {
+        process.kill(-pid, signal);
+        return;
+      } catch { /* not a group leader (or already gone) — fall through */ }
+    }
+    if (!groupOnly) {
+      try { child.kill(signal); } catch { /* already gone */ }
     }
   }
 
@@ -169,12 +254,13 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   }
 
   /**
-   * Clean up the temp workdir after the competition ends.
-   * No-op if sandbox is active (container teardown handles it).
-   * Safe to call even if workdir doesn't exist.
+   * Remove the host workdir after the competition ends. In sandbox mode this is
+   * still the directory that was bind-mounted into the container (the container
+   * itself is `--rm`), so it must be removed here too. Call after shutdown().
+   * Safe to call even if the workdir doesn't exist; best-effort (files written
+   * by a root-owned container may not be removable by the host user).
    */
   async cleanupWorkdir(): Promise<void> {
-    if (this.sandbox) return; // container teardown handles cleanup
     await rm(this.workdir, { recursive: true, force: true }).catch(() => {});
   }
 }

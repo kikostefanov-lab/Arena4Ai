@@ -214,8 +214,29 @@ image yourself — nothing does it for you:**
 docker build -f Dockerfile.agent -t arena-agent:latest .
 ```
 
-Note that the image installs the three agent CLIs but has no credentials of its own; auth is
-whatever you pass through the environment.
+**Authentication inside the container.** The image installs the three agent CLIs but has no
+credentials of its own, and **a CLI login you did on the host does not carry over**: the container
+does not see your home directory (`~/.claude`, `~/.codex`, `~/.gemini`) or the macOS keychain.
+The only credentials a sandboxed agent gets are environment variables that the orchestrator
+forwards from its own environment, filtered per provider (see `sandboxEnv()` in
+`packages/orchestrator/src/utils/claude-env.ts`):
+
+| CLI | Forwarded variable families |
+|-----|-----------------------------|
+| `claude` | `ANTHROPIC_*`, `CLAUDE_*` (e.g. `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`); `AWS_*` / `GOOGLE_*` only when Bedrock / Vertex is switched on |
+| `codex` | `OPENAI_*`, `CODEX_*`, `AZURE_OPENAI_*` |
+| `gemini` | `GEMINI_*`, `GOOGLE_*`, `GCLOUD_*`, `CLOUDSDK_*` |
+
+So export an API key (or token) for each provider you intend to use *in the shell that starts the
+orchestrator*, or use `--skip-sandbox`. Which of those variables each CLI honours is up to the CLI
+and its version; this has not been verified end to end against a running container.
+
+The Claude agent receives its brief on stdin (`docker run -i`); Codex and Gemini receive theirs as
+a command-line argument.
+
+If Docker is not installed, its daemon is not running, or the image has not been built, the run
+fails immediately (state `FAILED`, with an `ERROR` event whose `stage` is `sandbox`) and the message
+says which of the three it is.
 
 **The important asymmetry:**
 
@@ -236,8 +257,31 @@ whatever you pass through the environment.
 > `serve` also accepts a `--skip-sandbox` flag, but it is **not wired up** — it is ignored. Use
 > the `ARENA_SKIP_SANDBOX=true` environment variable.
 
-If you expose the orchestrator port beyond localhost, set `ARENA_API_KEY`; every request then
-needs `Authorization: Bearer <key>`. Leave it unset for local dev and auth is disabled.
+**Network exposure and auth: what is and is not protected.**
+
+- `serve` binds to `127.0.0.1` by default. To listen on other interfaces pass `--host 0.0.0.0`
+  (or set `ARENA_HOST`). Binding beyond loopback without `ARENA_API_KEY` prints a startup warning.
+- With `ARENA_API_KEY` **unset**, nothing is authenticated. That is the local-dev default and is
+  only safe on loopback.
+- With `ARENA_API_KEY` **set**, every orchestrator HTTP request (reads and writes) needs
+  `Authorization: Bearer <key>`, except `GET /health` and CORS `OPTIONS` preflights. The web
+  app's server-side proxy (`/api/*`) attaches the key itself.
+- The **WebSocket** stream (`/competitions/:id/stream`) needs proof too once a key is set:
+  either `Authorization: Bearer <key>` on the upgrade (scripts and tools), or `?ticket=...`, a
+  pass valid for one competition for 60 seconds, issued by the authenticated
+  `GET /competitions/:id/stream-ticket`. The web app's server fetches the ticket and hands only
+  that to the browser, so the key itself never reaches a browser. The stream also checks the
+  `Origin` header, allowing localhost origins and any in `ARENA_ALLOWED_ORIGINS`.
+- Browser requests to the HTTP API from any other origin are refused (403); the API no longer
+  answers `Access-Control-Allow-Origin: *`. Requests with no `Origin` header (the web app's
+  server, curl, scripts) are unaffected.
+- The **web UI has no login**. Anyone who can reach port 3001 can do what the server's key
+  allows, so keep it off untrusted networks (firewall, VPN, or a reverse proxy with its own auth).
+- The **web UI has no login**. Its `/api/*` proxy attaches the operator's key for whoever can
+  reach it, so anyone who can open the web UI can do what the key allows. Browser requests that
+  change state are rejected unless same-origin (`Sec-Fetch-Site` / `Origin` check; extra
+  origins via `ARENA_WEB_ALLOWED_ORIGINS`), which blocks cross-site forgery but not a direct
+  `curl` from someone who can reach the port. Put the web UI behind your own auth if you expose it.
 
 ## Features
 
@@ -369,8 +413,10 @@ DATABASE_URL=postgresql://localhost/arena \
 
 ## HTTP API
 
-Express, port 3000 by default. `Authorization: Bearer $ARENA_API_KEY` is required only if
-`ARENA_API_KEY` is set.
+Express, port 3000 by default, bound to `127.0.0.1`. If `ARENA_API_KEY` is set,
+`Authorization: Bearer $ARENA_API_KEY` is required on every route except `GET /health`; if it
+is unset, no route is authenticated. The WebSocket stream is the exception (see Network
+exposure above).
 
 **Competitions**
 
@@ -599,7 +645,10 @@ There is no `.env` loader in the orchestrator; it reads the process environment.
 | `ORCHESTRATOR_URL` | web | Where the Next.js proxy routes forward to. Default `http://localhost:3000`. |
 | `NEXT_PUBLIC_WS_URL` | web (browser) | WebSocket origin. Must be reachable by the browser directly — it is not proxied. |
 | `NEXT_PUBLIC_API_URL` | web (browser) | Optional direct API origin for client-side fetches. |
-| `ARENA_API_KEY` | both | If set, the orchestrator requires `Authorization: Bearer <key>`, and the web proxy sends it. Unset = auth disabled. |
+| `ARENA_API_KEY` | both | If set, the orchestrator requires `Authorization: Bearer <key>` on every route except `/health`, and the WebSocket stream requires the key or a stream ticket; the web proxy handles both. Unset = auth disabled. |
+| `ARENA_HOST` | orchestrator | Interface `serve` binds. Default `127.0.0.1`; `--host` overrides. |
+| `ARENA_ALLOWED_ORIGINS` | orchestrator | Comma-separated extra browser origins allowed to open the WebSocket (localhost always allowed; `*` allows all). |
+| `ARENA_WEB_ALLOWED_ORIGINS` | web | Comma-separated extra origins allowed to send mutating requests to `/api/*` (same-origin always allowed). |
 | `CLAUDE_BIN`, `CODEX_BIN`, `GEMINI_BIN` | orchestrator | Override the binary spawned per provider. |
 | `ARENA_AGENT_IMAGE` | orchestrator | Sandbox image name. Default `arena-agent:latest`. |
 | `ARENA_SKIP_SANDBOX` | orchestrator | `true` disables the Docker sandbox for HTTP-launched runs. Operator-only — never request-controlled. |

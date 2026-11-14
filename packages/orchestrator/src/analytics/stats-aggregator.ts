@@ -1,3 +1,5 @@
+import { isFinishedState } from '@arena/shared';
+
 /** Row shape from the competitions table (only the fields we need). */
 interface CompetitionRow {
   id: string;
@@ -44,21 +46,21 @@ export function computeWinRate(
 }
 
 /**
- * Compute the fraction of competitions that reached COMPLETE state.
+ * Compute the fraction of competitions that finished (judged, incl. Forge states).
  */
 export function computeCompletionRate(competitions: CompetitionRow[]): number {
   if (competitions.length === 0) return 0;
-  const completed = competitions.filter((c) => c.state === 'COMPLETE').length;
+  const completed = competitions.filter((c) => isFinishedState(c.state)).length;
   return completed / competitions.length;
 }
 
 /**
- * Compute average duration in ms for COMPLETE competitions.
+ * Compute average duration in ms for finished competitions.
  * Returns null if no completed competitions exist.
  */
 export function computeAvgDurationMs(competitions: CompetitionRow[]): number | null {
   const completed = competitions.filter(
-    (c) => c.state === 'COMPLETE' && c.startedAt && c.completedAt,
+    (c) => isFinishedState(c.state) && c.startedAt && c.completedAt,
   );
   if (completed.length === 0) return null;
   const total = completed.reduce((sum, c) => {
