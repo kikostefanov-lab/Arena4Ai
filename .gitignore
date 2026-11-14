@@ -31,3 +31,6 @@ packages/video/out/
 
 # Robot model copied in at render time (the committed copy is packages/web/public/models)
 packages/video/public/models/
+
+# Local session handoff notes: private working context, not for the public repo
+HANDOFF.md
