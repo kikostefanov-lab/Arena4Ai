@@ -5,9 +5,59 @@ import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { EventType, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
 import type { SandboxManager } from '../sandbox/sandbox-manager.js';
+import { stripAnsi } from './normalizer-utils.js';
 
 const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
+
+/** stderr lines kept per agent for a crash report. */
+const STDERR_TAIL_LINES = 40;
+
+/**
+ * An agent CLI that exited non-zero on its own, before Arena stopped it — a bad
+ * model id, an expired login, a rate limit. Recorded so the run can report it
+ * and leave the team unscored, instead of judging an empty workdir as a 0% loss.
+ */
+export interface AgentFailure {
+  exitCode: number;
+  /** The CLI's own error message where it could be found, else a generic one. */
+  message: string;
+  /** Last stderr lines, for the event log. */
+  detail: string;
+}
+
+/**
+ * Pick the most useful line out of an agent CLI's stderr. Codex prints
+ * `ERROR: {"type":"error",...,"error":{"message":"..."}}`, the others print
+ * plain `Error: ...` lines; MCP/transport noise also says ERROR, so a line that
+ * starts with `ERROR:` wins over a looser match, and the last line is the
+ * fallback.
+ */
+export function summarizeAgentError(lines: string[]): string | undefined {
+  const fromJson = (text: string): string => {
+    const start = text.indexOf('{');
+    if (start < 0) return text;
+    try {
+      const obj = JSON.parse(text.slice(start)) as { message?: unknown; error?: { message?: unknown } | string };
+      const err = obj.error;
+      if (typeof err === 'string') return err;
+      if (err && typeof err.message === 'string') return err.message;
+      if (typeof obj.message === 'string') return obj.message;
+    } catch { /* not JSON */ }
+    return text;
+  };
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^ERROR:\s*(.+)$/.exec(lines[i]!);
+    if (m) return fromJson(m[1]!).trim();
+  }
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const m = /^(?:error|fatal)\b[:\s]\s*(.+)$/i.exec(lines[i]!);
+    if (m) return fromJson(m[1]!).trim();
+  }
+  // Nothing labelled as an error (gemini's "not running in a trusted directory"
+  // isn't): a CLI that exits non-zero usually says why on its last line.
+  return lines.at(-1);
+}
 
 /** Default time an agent gets to exit after SIGTERM before it is SIGKILLed. */
 const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
@@ -105,6 +155,15 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     });
   }
   protected executionDone: Promise<void> = Promise.resolve();
+  private stderrTail: string[] = [];
+  /** Set once shutdown() starts: an exit after that is ours, not a crash. */
+  private stopping = false;
+  private agentFailure: AgentFailure | null = null;
+
+  /** Non-null when the agent CLI exited with an error on its own. */
+  get failure(): AgentFailure | null {
+    return this.agentFailure;
+  }
   /** Grace period between SIGTERM and SIGKILL in shutdown(). */
   shutdownGraceMs = Number(process.env.ARENA_SHUTDOWN_GRACE_MS) || DEFAULT_SHUTDOWN_GRACE_MS;
 
@@ -178,6 +237,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
    * files or delete the workdir without racing a live writer. Idempotent.
    */
   async shutdown(): Promise<void> {
+    this.stopping = true;
     if (this.sandbox) {
       // Kills the container; the `docker run` client process is handled below.
       await this.sandbox.killContainer(this.teamId).catch(() => {});
@@ -224,7 +284,45 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     }
   }
 
-  /** Resolves when the CLI process exits cleanly (useful in tests and the competition race). */
+  /** Subclasses feed every stderr line here so a crash can be explained. */
+  protected noteStderr(line: string): void {
+    // CLIs colour their errors (gemini wraps its message in \x1b[31m…).
+    const clean = stripAnsi(line).trim();
+    if (!clean) return;
+    this.stderrTail.push(clean);
+    if (this.stderrTail.length > STDERR_TAIL_LINES) this.stderrTail.shift();
+  }
+
+  /**
+   * Handle the agent CLI's exit. A non-zero exit before shutdown() is recorded
+   * as `failure` and reported as an ERROR event (stage 'agent') naming the CLI's
+   * own message. `done` still resolves: the failure is data the runner reads,
+   * not a rejection nobody awaits.
+   */
+  protected settleExit(code: number | null, cliName: string, resolve: () => void): void {
+    if (code === 0 || code === null || this.stopping) {
+      resolve();
+      return;
+    }
+    const cause = summarizeAgentError(this.stderrTail);
+    const message = cause
+      ? `${cliName} exited with code ${code}: ${cause}`
+      : `${cliName} exited with code ${code} before producing a result`;
+    this.agentFailure = { exitCode: code, message, detail: this.stderrTail.join('\n').slice(-4000) };
+    this.emitArenaEvent({
+      eventId: randomUUID(),
+      competitionId: this.competitionId,
+      teamId: this.teamId,
+      timestamp: new Date().toISOString(),
+      type: EventType.ERROR,
+      payload: { stage: 'agent', error: message, exitCode: code, detail: this.agentFailure.detail },
+      metadata: {},
+    });
+    console.error(`[arena] ${this.teamId}: ${message}`);
+    resolve();
+  }
+
+  /** Resolves when the CLI process exits (useful in tests and the competition race). */
   get done(): Promise<void> {
     return this.executionDone;
   }

@@ -35,6 +35,12 @@ export function printResults(brief: Brief, scorecards: ScoreCard[]): void {
     const medal = card.rank === 1 ? '🥇' : card.rank === 2 ? '🥈' : '🥉';
     const pct = (card.finalScore * 100).toFixed(1);
     console.log(`${BOLD}${medal}  Rank #${card.rank} — ${card.teamId}${RESET}`);
+    if (card.agentFailure) {
+      // Not judged: a 0% here would read as a loss on merit.
+      console.log(`   Did not compete — ${card.agentFailure.message}`);
+      console.log();
+      continue;
+    }
     console.log(`   Final Score: ${GREEN}${pct}%${RESET}  ${bar(card.finalScore)}`);
 
     // Per-criterion breakdown from the first judge result (for brevity)

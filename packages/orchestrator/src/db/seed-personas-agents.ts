@@ -1,4 +1,5 @@
-import { requireDefaultModel } from '../adapters/model-registry.js';
+import { CLI_DEFAULT_MODEL } from '@arena/shared';
+import { getProviderCatalog, judgeModel, type ProviderCatalog } from '../adapters/model-catalog.js';
 import type { CreatePersonaInput } from './persona-repository.js';
 import type { CreateAgentInput } from './agent-repository.js';
 import type { PersonaRepository } from './persona-repository.js';
@@ -16,12 +17,13 @@ const SYSTEM_PERSONAS: CreatePersonaInput[] = [
   { id: 'persona-standard-gemini', name: 'standard-gemini', avatar: '✨', tags: ['versatile'],               description: 'General-purpose Gemini agent',                                 systemPrompt: 'You are a Gemini agent. Approach the problem creatively and deliver a comprehensive solution.', createdBy: 'system' },
 ];
 
-// Model ids are derived from the registry, never hardcoded here — a literal in
-// this file is how `codex-standard` and `gemini-2-flash` (neither of which is a
-// real model id) survived four months of provider releases.
-const CLAUDE_MODEL = requireDefaultModel('claude');
-const CODEX_MODEL = requireDefaultModel('codex');
-const GEMINI_MODEL = requireDefaultModel('gemini');
+// System agents run on each CLI's own default model (no model flag). Any
+// literal id here goes stale: `codex-standard` and `gemini-2-flash` (never real
+// ids) survived four months, and their registry-derived replacements were gone
+// from the installed CLIs within weeks.
+const CLAUDE_MODEL = CLI_DEFAULT_MODEL;
+const CODEX_MODEL = CLI_DEFAULT_MODEL;
+const GEMINI_MODEL = CLI_DEFAULT_MODEL;
 
 const SYSTEM_AGENTS: CreateAgentInput[] = [
   { id: 'agent-claude-architect',   name: 'architect',   provider: 'claude', modelVariant: CLAUDE_MODEL, personaId: 'persona-architect', createdBy: 'system' },
@@ -57,4 +59,39 @@ export async function seedPersonasAgents(
       await agentRepo.create(a);
     }
   }
+}
+
+/**
+ * Seeding only inserts missing rows, so an existing database keeps whatever
+ * model ids it was seeded with — which is how retired ids kept reaching the
+ * CLIs after the seed list itself was fixed. On startup, put every SYSTEM agent
+ * whose model the installed CLI does not offer back on the CLI default.
+ *
+ * User-created agents are left alone (the person chose that model); the
+ * pre-launch model check names them instead of letting them fail silently.
+ */
+export async function repairStaleSystemAgents(
+  agentRepo: Pick<AgentRepository, 'list' | 'update'>,
+  getCatalog: (provider: string) => Promise<ProviderCatalog> = (p) => getProviderCatalog(p),
+): Promise<Array<{ id: string; from: string }>> {
+  const { agents } = await agentRepo.list({});
+  const repaired: Array<{ id: string; from: string }> = [];
+  const catalogs = new Map<string, ProviderCatalog>();
+  for (const agent of agents) {
+    if (agent.createdBy !== 'system' || agent.modelVariant === CLI_DEFAULT_MODEL) continue;
+    let catalog = catalogs.get(agent.provider);
+    if (!catalog) {
+      catalog = await getCatalog(agent.provider);
+      catalogs.set(agent.provider, catalog);
+    }
+    // 'unverifiable' is not good enough for a system agent: it was seeded by us,
+    // and only an id the CLI positively lists is worth keeping over the default.
+    if (judgeModel(catalog, agent.modelVariant) === 'known') continue;
+    await agentRepo.update(agent.id, { modelVariant: CLI_DEFAULT_MODEL });
+    repaired.push({ id: agent.id, from: agent.modelVariant });
+  }
+  for (const r of repaired) {
+    console.log(`[seed] ${r.id}: model "${r.from}" is not offered by the installed CLI — now uses the CLI default`);
+  }
+  return repaired;
 }

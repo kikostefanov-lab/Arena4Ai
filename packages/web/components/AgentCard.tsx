@@ -1,6 +1,6 @@
 'use client';
 import { getModelColor, MODEL_BADGE_COLORS, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
-import type { Agent } from '@arena/shared';
+import { formatModelVariant, type Agent } from '@arena/shared';
 
 interface AgentCardProps {
   agent: Agent;
@@ -76,7 +76,7 @@ export function AgentCard({ agent, onEdit, onFork, onRetire }: AgentCardProps) {
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
             }}>
-              {agent.provider}{agent.modelVariant ? ` · ${agent.modelVariant}` : ''}
+              {agent.provider} · {formatModelVariant(agent.modelVariant)}
             </span>
             {/* Fork badge */}
             {agent.forkedFromId && (

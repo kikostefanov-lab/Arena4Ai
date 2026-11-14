@@ -29,7 +29,7 @@ interface CompetitionSummary {
   teams: Team[];
   winnerId: string | null;
   notes?: string | null;
-  scorecards?: Array<{ teamId: string; finalScore?: number }> | null;
+  scorecards?: Array<{ teamId: string; finalScore?: number; agentFailure?: { message: string } }> | null;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -745,9 +745,15 @@ export default function GalleryPage() {
                                   <div style={{ flex: 1, height: '5px', background: '#0a2235', borderRadius: '2px', overflow: 'hidden' }}>
                                     <div style={{ width: `${score * 100}%`, height: '100%', background: color, borderRadius: '2px', transition: 'width 0.3s ease' }} />
                                   </div>
-                                  <span style={{ fontSize: '0.7rem', color: '#7cc6db', fontWeight: 700, minWidth: '2.75rem', textAlign: 'right', letterSpacing: '0.5px' }}>
-                                    {Math.round(score * 100)}%
-                                  </span>
+                                  {sc.agentFailure ? (
+                                    <span title={`Not judged: ${sc.agentFailure.message}`} style={{ fontSize: '0.6rem', color: '#ff5566', fontWeight: 700, minWidth: '2.75rem', textAlign: 'right', letterSpacing: '0.5px' }}>
+                                      DNC
+                                    </span>
+                                  ) : (
+                                    <span style={{ fontSize: '0.7rem', color: '#7cc6db', fontWeight: 700, minWidth: '2.75rem', textAlign: 'right', letterSpacing: '0.5px' }}>
+                                      {Math.round(score * 100)}%
+                                    </span>
+                                  )}
                                 </div>
                               );
                             })}

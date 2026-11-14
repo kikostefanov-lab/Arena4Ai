@@ -6,7 +6,6 @@ import { normalizeLine } from './gemini-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
 import { safeModelVariant } from '../model-variant.js';
 import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
-import { getDefaultModel } from '../model-registry.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
 export interface GeminiAdapterOptions {
@@ -42,7 +41,8 @@ export class GeminiAdapter extends BaseAdapter {
   constructor(teamId: string, options: GeminiAdapterOptions) {
     super(teamId, options.workdir, options.competitionId, options.sandbox);
     this.geminiBin = options.geminiBin ?? 'gemini';
-    this.modelVariant = options.modelVariant ?? getDefaultModel('gemini');
+    // No fallback id: an unset variant means the CLI's own default model.
+    this.modelVariant = options.modelVariant;
   }
 
   // injectBrief, collectDeliverables, shutdown, done — inherited from BaseAdapter
@@ -83,7 +83,7 @@ export class GeminiAdapter extends BaseAdapter {
             this.workdir,
             this.geminiBin,
             args,
-            claudeEnv(),
+            geminiAgentEnv(),
           )
         : spawn(
             this.geminiBin,
@@ -93,7 +93,7 @@ export class GeminiAdapter extends BaseAdapter {
               stdio: ['ignore', 'pipe', 'pipe'],
               // Own process group so shutdown() can signal the agent's children too.
               detached: process.platform !== 'win32',
-              env: claudeEnv(),
+              env: geminiAgentEnv(),
             },
           );
 
@@ -109,6 +109,7 @@ export class GeminiAdapter extends BaseAdapter {
       errRl.on('line', (line) => {
         const clean = line.trim();
         if (!clean) return;
+        this.noteStderr(clean);
         // Only surface stderr lines that are genuine errors; drop startup noise silently.
         if (ERROR_LINE_RE.test(clean)) {
           this.emitArenaEvent(makeEvent(EventType.ERROR, { error: clean }, ctx));
@@ -119,8 +120,7 @@ export class GeminiAdapter extends BaseAdapter {
         rl.close();
         errRl.close();
         this.process = null;
-        if (code === 0 || code === null) resolve();
-        else reject(new Error(`Gemini process exited with code ${code}`));
+        this.settleExit(code, 'Gemini', resolve);
       });
 
       child.on('error', (err) => {
@@ -132,4 +132,15 @@ export class GeminiAdapter extends BaseAdapter {
       });
     });
   }
+}
+
+/**
+ * gemini-cli >= 0.68 refuses to run headless in an untrusted folder (exit 55,
+ * "not running in a trusted directory"). The competitor's workdir is a fresh
+ * temp folder Arena created for it, so trust it. An env var rather than
+ * `--skip-trust` because older CLIs ignore an unknown variable but reject an
+ * unknown flag.
+ */
+function geminiAgentEnv(): NodeJS.ProcessEnv {
+  return { ...claudeEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
 }

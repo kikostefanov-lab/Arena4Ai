@@ -32,7 +32,13 @@ interface ArenaEvent {
 }
 
 interface CriterionScore { criterionId: string; score: number; maxScore: number; commentary: string; }
-interface TeamResult { teamId: string; totalScore: number; criteriaScores: CriterionScore[]; }
+interface TeamResult {
+  teamId: string;
+  totalScore: number;
+  criteriaScores: CriterionScore[];
+  /** The agent CLI crashed before producing anything; the team was not judged. */
+  agentFailure?: { message: string; exitCode: number };
+}
 interface TeamDeliverable { teamId: string; files: { path: string; content: string }[]; }
 interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale: string; winningApproach?: string; losingApproach?: string; }
 interface SynthesisResult { synthesis: string; overallRationale?: string; perCriterion: SynthesisPerCriterion[]; }
@@ -677,7 +683,7 @@ function ScoreDrawer({
   }));
 
   const scoreSummary = teamDisplays
-    .map((d) => `${d.label} ${Math.round(d.result.totalScore * 100)}%`)
+    .map((d) => `${d.label} ${d.result.agentFailure ? 'did not compete' : `${Math.round(d.result.totalScore * 100)}%`}`)
     .join('  vs  ');
 
   const totalFileCount = (result.deliverables ?? []).reduce((sum, td) => sum + td.files.length, 0);
@@ -1012,9 +1018,15 @@ function ScoreDrawer({
                       <div style={{ fontSize: '0.65rem', color, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {label}
                       </div>
-                      <div style={{ fontSize: '1.1rem', fontWeight: 900, color: isWinner ? '#eab308' : '#c8eef8', fontFamily: 'monospace', marginTop: '0.1rem' }}>
-                        {Math.round(tr.totalScore * 100 * scoreProgress)}%
-                      </div>
+                      {tr.agentFailure ? (
+                        <div title={tr.agentFailure.message} style={{ fontSize: '0.7rem', fontWeight: 800, color: '#ff5566', letterSpacing: '1px', marginTop: '0.35rem' }}>
+                          DID NOT COMPETE
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '1.1rem', fontWeight: 900, color: isWinner ? '#eab308' : '#c8eef8', fontFamily: 'monospace', marginTop: '0.1rem' }}>
+                          {Math.round(tr.totalScore * 100 * scoreProgress)}%
+                        </div>
+                      )}
                     </div>
                   ))}
                   <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#3d7d94', letterSpacing: '1px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1022,9 +1034,20 @@ function ScoreDrawer({
                   </div>
                 </div>
 
+                {/* Agent failures: an unjudged team must not read as a 0% loss */}
+                {teamDisplays.filter(td => td.result.agentFailure).map(({ result: tr, label }) => (
+                  <div key={`fail-${tr.teamId}`} style={{
+                    padding: '0.6rem 1rem', borderBottom: '1px solid rgba(255,85,102,0.25)',
+                    background: 'rgba(255,85,102,0.06)', fontSize: '0.7rem', color: '#ff8899', lineHeight: 1.5,
+                  }}>
+                    <strong style={{ color: '#ff5566' }}>{label} was not judged.</strong>{' '}
+                    Its agent CLI failed before producing any files: {tr.agentFailure!.message}
+                  </div>
+                ))}
+
                 {/* Criterion rows */}
                 {(() => {
-                  const criteria = teamDisplays[0]?.result.criteriaScores ?? [];
+                  const criteria = teamDisplays.find(td => td.result.criteriaScores.length > 0)?.result.criteriaScores ?? [];
                   return criteria.map((cs) => {
                     const isOpen = selectedCriterionId === cs.criterionId;
                     const scoresForCrit = teamDisplays.map((td) => ({
@@ -1060,6 +1083,11 @@ function ScoreDrawer({
                           {scoresForCrit.map(({ result: tr, color, isWinner, cs: crit }) => {
                             const maxScore = crit?.maxScore ?? 10;
                             const pct = maxScore > 0 && crit ? (crit.score / maxScore) * 100 : 0;
+                            if (tr.agentFailure) {
+                              return (
+                                <div key={tr.teamId} title="Not judged: the agent CLI failed" style={{ textAlign: 'center', fontSize: '0.72rem', color: '#3d7d94' }}>—</div>
+                              );
+                            }
                             return (
                               <div key={tr.teamId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
                                 <div style={{ width: '50px', height: '4px', background: '#0a2235', borderRadius: '2px', overflow: 'hidden' }}>
@@ -2024,9 +2052,10 @@ const STATE_BANNERS: Partial<Record<CompetitionState | 'PAUSED', {
   CANCELLED:   { icon: '🚫', label: 'COMPETITION CANCELLED',   sub: 'This competition was stopped early.',              bg: 'rgba(136,150,171,0.08)',border: 'rgba(136,150,171,0.2)',color: '#4a8fa8' },
 };
 
-function StateBanner({ state, isPaused }: { state: CompetitionState; isPaused: boolean }) {
+function StateBanner({ state, isPaused, competitionId }: { state: CompetitionState; isPaused: boolean; competitionId: string }) {
   const key = isPaused ? 'PAUSED' : state;
   const cfg = STATE_BANNERS[key as keyof typeof STATE_BANNERS];
+  const failureReason = useFailureReason(competitionId, state === 'FAILED');
   if (!cfg) return null;
 
   return (
@@ -2042,11 +2071,36 @@ function StateBanner({ state, isPaused }: { state: CompetitionState; isPaused: b
       <span style={{ fontSize: '0.75rem', fontWeight: 700, color: cfg.color, letterSpacing: '2px' }}>
         {cfg.label}
       </span>
-      <span style={{ fontSize: '0.67rem', color: '#4a8fa8', fontStyle: 'italic' }}>
-        {cfg.sub}
+      <span style={{ fontSize: '0.67rem', color: failureReason ? '#ff8899' : '#4a8fa8', fontStyle: 'italic', whiteSpace: 'pre-line', maxWidth: '70ch' }}>
+        {failureReason ?? cfg.sub}
       </span>
     </div>
   );
+}
+
+/**
+ * The reason a competition FAILED, read from its stored ERROR events. Lane
+ * errors only appear for events seen live, so a reloaded failed match would
+ * otherwise say nothing more than "An error occurred".
+ */
+function useFailureReason(competitionId: string, failed: boolean): string | null {
+  const [reason, setReason] = useState<string | null>(null);
+  useEffect(() => {
+    if (!failed) { setReason(null); return; }
+    let cancelled = false;
+    fetch(`/api/competitions/${competitionId}/events`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((events: Array<{ type: string; payload?: Record<string, unknown> }>) => {
+        if (cancelled || !Array.isArray(events)) return;
+        const last = [...events].reverse().find((e) => e.type === 'ERROR');
+        const p = last?.payload ?? {};
+        const text = typeof p.message === 'string' ? p.message : typeof p.error === 'string' ? p.error : null;
+        setReason(text);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [competitionId, failed]);
+  return reason;
 }
 
 // ─── Commentary bar ───────────────────────────────────────────────────────────
@@ -2240,7 +2294,7 @@ export default function CompetitionPage() {
         if (data.result) {
           // DB result has `scorecards` + `winnerId`; frontend expects `teams` + `winnerId`
           const raw = data.result;
-          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
+          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
           const normalized: CompetitionResult = {
             winnerId: (raw.winnerId as string) ?? null,
             teams: scorecards.map((sc) => ({
@@ -2250,6 +2304,7 @@ export default function CompetitionPage() {
                 criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary ?? '',
               })) ?? [],
               rank: sc.rank,
+              ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
             })),
             summary: raw.summary as string | undefined,
             synthesis: raw.synthesis as SynthesisResult | null | undefined,
@@ -2970,7 +3025,7 @@ export default function CompetitionPage() {
         )}
 
         {/* ── State banner ─────────────────────────────────────────────────── */}
-        <StateBanner state={state} isPaused={isPaused} />
+        <StateBanner state={state} isPaused={isPaused} competitionId={id} />
 
         {/* ── Commentary bar ───────────────────────────────────────────────── */}
         <CommentaryBar events={broadcastEvents} />

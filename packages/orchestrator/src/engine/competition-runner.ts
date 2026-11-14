@@ -27,7 +27,9 @@ import { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { EventLogger } from '../events/event-logger.js';
 import { scoreDeliverable } from '../judging/rubric-scorer.js';
 import { aiJudge, JUDGE_IDS, type AiJudgeResult } from '../judging/ai-judge.js';
-import { findMissingClis, formatMissingCliError } from '../utils/cli-preflight.js';
+import {
+  findMissingClis, formatMissingCliError, findUnavailableModels, formatUnavailableModelError,
+} from '../utils/cli-preflight.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { resolveOutcome } from '../judging/outcome.js';
 import { printResults } from '../judging/results-reporter.js';
@@ -235,41 +237,10 @@ export class CompetitionRunner extends EventEmitter {
         }
       }
 
-      // Preflight: a self-hoster will rarely have all three agent CLIs. Find out
-      // BEFORE launching, and say which binary is missing and how to get it —
-      // rather than failing halfway through with a spawn ENOENT.
-      const missingClis = await findMissingClis(
-        teams.map(t => t.model.split(':')[0] || 'claude'),
-        {
-          claude: this.options.claudeBin,
-          codex: this.options.codexBin,
-          gemini: this.options.geminiBin,
-        },
-      );
-      if (missingClis.length > 0) {
-        const message = formatMissingCliError(missingClis);
-        for (const m of missingClis) {
-          forwardEvent({
-            eventId: randomUUID(),
-            competitionId: this.competition.id,
-            teamId: teams.find(t => t.model.startsWith(`${m.provider}:`))?.id ?? m.provider,
-            timestamp: new Date().toISOString(),
-            type: EventType.ERROR,
-            payload: { stage: 'preflight', provider: m.provider, bin: m.bin, hint: m.hint, message },
-            metadata: {},
-          });
-        }
-        throw new Error(message);
-      }
-
-      // ── LAUNCHING ────────────────────────────────────────────────────────
-      this.advance(CompetitionState.LAUNCHING);
-
-      const adapters: BaseAdapter[] = await Promise.all(
+      // Resolve each team's agent (persona + model) BEFORE preflight, so the
+      // model it will run can be checked against what the CLI actually offers.
+      const resolvedTeams = new Map(await Promise.all(
         teams.map(async (team) => {
-          const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
-
-          // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
           const [provider, personaId] = team.model.split(':');
 
           // Two-path persona resolution:
@@ -302,7 +273,87 @@ export class CompetitionRunner extends EventEmitter {
             systemPrompt = resolvePersona(personaId ?? team.persona, brief.format).systemPrompt;
           }
 
-          const modelVariant = (team as any).modelVariant ?? resolvedAgent?.modelVariant;
+          const modelVariant: string | undefined = (team as any).modelVariant ?? resolvedAgent?.modelVariant;
+          return [team.id, { systemPrompt, modelVariant }] as const;
+        }),
+      ));
+
+      // Preflight: a self-hoster will rarely have all three agent CLIs. Find out
+      // BEFORE launching, and say which binary is missing and how to get it —
+      // rather than failing halfway through with a spawn ENOENT.
+      const missingClis = await findMissingClis(
+        teams.map(t => t.model.split(':')[0] || 'claude'),
+        {
+          claude: this.options.claudeBin,
+          codex: this.options.codexBin,
+          gemini: this.options.geminiBin,
+        },
+      );
+      if (missingClis.length > 0) {
+        const message = formatMissingCliError(missingClis);
+        for (const m of missingClis) {
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: teams.find(t => t.model.startsWith(`${m.provider}:`))?.id ?? m.provider,
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: { stage: 'preflight', provider: m.provider, bin: m.bin, hint: m.hint, message },
+            metadata: {},
+          });
+        }
+        throw new Error(message);
+      }
+
+      // Model check: a model id the installed CLI does not offer makes the agent
+      // exit at once, which used to surface as an unexplained 0% "loss". Refuse
+      // to start instead, naming the team, the model and what is available.
+      const badModels = await findUnavailableModels(
+        teams.map((t) => ({
+          teamId: t.id,
+          label: t.model.includes(':') ? t.model : `${t.model}:${t.persona ?? ''}`,
+          provider: t.model.split(':')[0] || 'claude',
+          modelVariant: resolvedTeams.get(t.id)?.modelVariant,
+        })),
+        {
+          claude: this.options.claudeBin,
+          codex: this.options.codexBin,
+          gemini: this.options.geminiBin,
+        },
+      );
+      if (badModels.length > 0) {
+        const message = formatUnavailableModelError(badModels);
+        for (const m of badModels) {
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: m.teamId,
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: {
+              stage: 'preflight',
+              kind: 'model-unavailable',
+              provider: m.provider,
+              model: m.modelVariant,
+              available: m.available,
+              message,
+            },
+            metadata: {},
+          });
+        }
+        throw new Error(message);
+      }
+
+      // ── LAUNCHING ────────────────────────────────────────────────────────
+      this.advance(CompetitionState.LAUNCHING);
+
+      const adapters: BaseAdapter[] = await Promise.all(
+        teams.map(async (team) => {
+          const workdir = await mkdtemp(join(tmpdir(), `arena-${team.id}-`));
+
+          // Route by model prefix: claude:* → ClaudeAdapter, codex:* → CodexAdapter, gemini:* → GeminiAdapter
+          const provider = team.model.split(':')[0];
+          const { systemPrompt, modelVariant } = resolvedTeams.get(team.id)!;
 
           let adapter: BaseAdapter;
           switch (provider) {
@@ -397,10 +448,29 @@ export class CompetitionRunner extends EventEmitter {
       await Promise.all(adapters.map((a) => a.shutdown()));
       this.assertNotCancelled();
 
-      const deliverables: Deliverable[] = await Promise.all(
+      const allDeliverables: Deliverable[] = await Promise.all(
         adapters.map((a) => a.collectDeliverables()),
       );
       this.assertNotCancelled();
+
+      // A team whose agent CLI crashed (bad model, expired login, rate limit)
+      // before writing anything did not compete. Judging its empty workdir used
+      // to record a 0% "loss" with no error anywhere; leave it unjudged instead.
+      // An agent that crashed AFTER writing files is still judged on them (its
+      // crash stays visible as an ERROR event).
+      const failedTeams = new Map(
+        adapters
+          .map((a, i) => [a, allDeliverables[i]!] as const)
+          .filter(([a, d]) => a.failure && d.files.length === 0)
+          .map(([a]) => [a.teamId, a.failure!] as const),
+      );
+      if (failedTeams.size === adapters.length) {
+        throw new Error([
+          'Every agent CLI failed before producing anything, so there is nothing to judge:',
+          ...[...failedTeams].map(([teamId, f]) => `  • ${teamId}: ${f.message}`),
+        ].join('\n'));
+      }
+      const deliverables = allDeliverables.filter((d) => !failedTeams.has(d.teamId));
 
       // ── PRESENTING ─────────────────────────────────────────────────────
       this.advance(CompetitionState.PRESENTING);
@@ -504,7 +574,18 @@ export class CompetitionRunner extends EventEmitter {
         }
       }
 
-      const scorecards = aggregate(judgeResults);
+      const judgedCards = aggregate(judgeResults);
+      const lastRank = judgedCards.reduce((max, c) => Math.max(max, c.rank), 0);
+      const scorecards = [
+        ...judgedCards,
+        ...[...failedTeams].map(([teamId, f]) => ({
+          teamId,
+          judgeResults: [],
+          finalScore: 0,
+          rank: lastRank + 1,
+          agentFailure: { message: f.message, exitCode: f.exitCode },
+        })),
+      ];
       // A tie within the aggregator's tolerance is a draw — never pick the first
       // rank-one team as if it had won.
       const { winnerId, tiedTeamIds } = resolveOutcome(scorecards);
@@ -512,8 +593,10 @@ export class CompetitionRunner extends EventEmitter {
       // ── SCORED ───────────────────────────────────────────────────────────
       this.advance(CompetitionState.SCORED);
 
-      // Fire-and-forget stats update — does not block competition flow
-      if (this.agentRepo) {
+      // Fire-and-forget stats update — does not block competition flow.
+      // Skipped entirely when an agent crashed: a forfeit is neither a fair win
+      // for the opponent nor a loss on merit for the broken setup.
+      if (this.agentRepo && failedTeams.size === 0) {
         void Promise.all(
           teams
             .filter(t => t.agentId)
@@ -532,7 +615,8 @@ export class CompetitionRunner extends EventEmitter {
         const { computeHeuristicSignals } = await import('../telemetry/quality-analyzer.js');
         const { briefQualitySignals } = await import('../db/schema.js');
         const signals = computeHeuristicSignals(scorecards, brief.deliverables ?? [], deliverables);
-        if (process.env.DATABASE_URL) {
+        // A crashed agent's zero says nothing about the brief; don't learn from it.
+        if (process.env.DATABASE_URL && failedTeams.size === 0) {
           const { db } = await import('../db/client.js');
           await db.insert(briefQualitySignals).values({
             competitionId: this.competitionId,
@@ -565,7 +649,7 @@ export class CompetitionRunner extends EventEmitter {
         printResults(brief, scorecards);
       }
 
-      const teamDeliverables: TeamDeliverable[] = deliverables.map((d) => ({
+      const teamDeliverables: TeamDeliverable[] = allDeliverables.map((d) => ({
         teamId: d.teamId,
         files: d.files,
       }));

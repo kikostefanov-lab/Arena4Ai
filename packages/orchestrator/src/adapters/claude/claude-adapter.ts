@@ -4,6 +4,7 @@ import type { Brief } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './claude-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
+import { safeModelVariant } from '../model-variant.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
 export interface ClaudeAdapterOptions {
@@ -61,8 +62,9 @@ export class ClaudeAdapter extends BaseAdapter {
         '--dangerously-skip-permissions',
       ];
 
-      if (this.modelVariant) {
-        claudeArgs.push('--model', this.modelVariant);
+      const modelVariant = safeModelVariant(this.modelVariant);
+      if (modelVariant) {
+        claudeArgs.push('--model', modelVariant);
       }
 
       const child = this.sandbox
@@ -103,12 +105,17 @@ export class ClaudeAdapter extends BaseAdapter {
         if (!line.trim()) return;
         const event = normalizeLine(line, ctx);
         this.emitArenaEvent(event);
+        // Claude reports API failures (unknown model, auth, rate limit) as
+        // stream-json on stdout; keep them so a crash can be explained.
+        const failure = claudeStreamError(line);
+        if (failure) this.noteStderr(`Error: ${failure}`);
       });
 
       // Forward stderr as ERROR events.
       const errRl = createInterface({ input: child.stderr! });
       errRl.on('line', (line) => {
         if (!line.trim()) return;
+        this.noteStderr(line);
         const event = normalizeLine(
           JSON.stringify({ type: 'error', error: { message: line } }),
           ctx,
@@ -118,11 +125,7 @@ export class ClaudeAdapter extends BaseAdapter {
 
       child.on('close', (code) => {
         this.process = null;
-        if (code === 0 || code === null) {
-          resolve();
-        } else {
-          reject(new Error(`Claude process exited with code ${code}`));
-        }
+        this.settleExit(code, 'Claude', resolve);
       });
 
       child.on('error', (err) => {
@@ -138,3 +141,18 @@ export class ClaudeAdapter extends BaseAdapter {
 
 // Re-export for convenience — callers that only need the Brief type
 export type { Brief };
+
+/** The error text of a stream-json `error` line or an `is_error` result, if any. */
+export function claudeStreamError(line: string): string | undefined {
+  let msg: Record<string, unknown>;
+  try { msg = JSON.parse(line) as Record<string, unknown>; } catch { return undefined; }
+  if (msg.type === 'result' && msg.is_error === true) {
+    return typeof msg.result === 'string' && msg.result ? msg.result : 'Claude reported an error result';
+  }
+  if (msg.type === 'error') {
+    const err = msg.error as { message?: unknown } | string | undefined;
+    if (typeof err === 'string') return err;
+    if (err && typeof err.message === 'string') return err.message;
+  }
+  return undefined;
+}

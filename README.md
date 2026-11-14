@@ -288,7 +288,8 @@ says which of the three it is.
 **Running matches**
 - Head-to-head, 3-way and 4-way competitions across Claude, Codex and Gemini
 - Round-robin **and Swiss** tournaments (Swiss pairs by win count each round, Buchholz tiebreak)
-- Per-team model variant pinning (`--model-a claude-opus-5`, `--model-b gpt-5.3-codex`, …)
+- Per-team model variant pinning (`--model-a opus`, `--model-b gpt-6.1-sol`, …), checked against
+  the models the installed CLI offers before the match starts
 - Live pause / resume / cancel on a running competition, and delete on a finished one
 - Rematch — relaunch the same brief with the same teams in one click
 
@@ -329,8 +330,8 @@ says which of the three it is.
 - AI brief generator: domain intake → clarifying questions → domain-specific generation → a
   seven-rule heuristic quality check
 - YAML import/export, an example picker, and "save this competition's brief to the library"
-- Agent Armory: personas, agent roster and an agent builder with a model combobox (presets from
-  the registry plus freeform custom model ids)
+- Agent Armory: personas, agent roster and an agent builder with a model combobox (each CLI's
+  live model list, "CLI default", plus freeform custom model ids)
 
 ### The Forge
 
@@ -528,12 +529,23 @@ Those flags are load-bearing — without `-s workspace-write` Codex cannot write
 `--yolo` Gemini stalls waiting for tool approval. Override the binary paths with `CLAUDE_BIN`,
 `CODEX_BIN`, `GEMINI_BIN`.
 
-Known model ids live in one place, `packages/orchestrator/src/adapters/model-registry.ts`, which
-also backs `GET /models` and the Armory combobox. Custom ids are always allowed. Current presets:
+Model lists come from the CLIs you have installed, not from a list in this repo, so new models
+appear without a code change (`packages/orchestrator/src/adapters/model-catalog.ts`, served by
+`GET /models` to the Armory and New Battle):
 
-- **Claude** — `claude-opus-5` (default), `claude-sonnet-5`, `claude-opus-4-8`, `claude-haiku-4-5`
-- **Codex** — `gpt-5.3-codex` (default), `gpt-5.1-codex-max`, `gpt-5.1-codex-mini`
-- **Gemini** — `gemini-3-flash` (default), `gemini-3-pro`, `gemini-3.1-pro`
+- **Codex** — `codex debug models`
+- **Gemini** — `gemini --list-models`
+- **Claude** — no list command; the aliases `opus`, `sonnet`, `haiku` and `fable` always run the
+  newest model of that family, plus a few full ids from `model-registry.ts`
+
+Every agent defaults to **CLI default** (`cli-default`: no model flag, so the CLI uses its own
+current default). Built-in agents on a model the CLI no longer offers are moved back to it on
+startup. A team whose model the CLI does not offer is refused before launch with the list of
+alternatives. Custom ids are always allowed.
+
+If an agent's CLI crashes before producing anything (bad model, expired login, rate limit), the
+team is marked **did not compete** with the CLI's own error message, rather than scored 0%, and
+the match is left out of agent stats.
 
 ### Normalizers
 

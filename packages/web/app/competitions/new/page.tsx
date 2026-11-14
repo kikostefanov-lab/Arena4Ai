@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { EXAMPLE_BRIEFS, type ExampleBrief } from '../../../lib/example-briefs';
-import type { AgentProfile, Agent } from '@arena/shared';
+import { formatModelVariant, type AgentProfile, type Agent } from '@arena/shared';
 import './new-competition.css';
 import { MONOSPACE_FONT, FORM_LABEL_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, KICKER_STYLE } from '../../../lib/design-tokens';
 
@@ -1997,7 +1997,7 @@ function NewCompetitionForm() {
                                     {agent.persona?.avatar ?? '🤖'} {agent.name}
                                     {agent.modelVariant && (
                                       <span style={{ fontSize: '0.5rem', color: '#4a8fa8', display: 'block', marginTop: 2 }}>
-                                        {agent.modelVariant}
+                                        {formatModelVariant(agent.modelVariant)}
                                       </span>
                                     )}
                                   </button>
