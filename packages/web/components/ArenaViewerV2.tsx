@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { IsoArenaRenderer, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
+import { IsoArenaRenderer, stepStructures, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
@@ -420,6 +420,10 @@ export default function ArenaViewerV2({
       canvas.height = Math.round(h * dpr);
     };
 
+    // This effect re-runs when the canvas element is replaced (3D <-> Iso, or
+    // the WebGL fallback). The new element starts at its fallback backing size,
+    // so forget the cached measurement or an unchanged box would skip sizing it.
+    sizeRef.current = { w: 0, h: 0, dpr: 0 };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
@@ -633,6 +637,9 @@ export default function ArenaViewerV2({
             const scene = sceneRef.current;
             if (scene) {
               scene.director = orbit;
+              // The isometric draw() is what normally eases block heights and
+              // fades their flashes. It is not called here, so advance them.
+              stepStructures(r.world);
               scene.sync(r.world, dtSec);
               scene.render();
             }

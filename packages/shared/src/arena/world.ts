@@ -283,6 +283,26 @@ export function targetHeight(mods: number, depth: EditDepthMode): number {
   return Math.min(3.2, 0.8 + mods * 0.22);
 }
 
+/**
+ * Advance the per-frame presentation state of every block: ease the height
+ * toward its target and decay the write flash, error damage and judge highlight.
+ *
+ * `IsoArenaRenderer.draw()` does this as it paints each block, which is fine
+ * while it is the only picture. A host that draws the world some other way (the
+ * 3D view) never calls `draw()`, so without this the blocks a live event creates
+ * stay at height zero and their flash never fades. The rates match the ones in
+ * the isometric draw path; call it once per animation frame, and never in the
+ * same frame as `draw()`.
+ */
+export function stepStructures(world: World): void {
+  for (const st of world.structures.values()) {
+    st.h += (st.th - st.h) * 0.12;
+    st.flash *= 0.88;
+    st.hit *= 0.975;
+    st.gold = Math.max(0, st.gold - 0.03);
+  }
+}
+
 export interface ApplyEffects {
   /** Called for visual side effects. Omitted during a non-live rebuild. */
   onWrite?: (team: TeamState, st: Structure) => void;
