@@ -91,6 +91,8 @@ export class GeminiAdapter extends BaseAdapter {
             {
               cwd: this.workdir,
               stdio: ['ignore', 'pipe', 'pipe'],
+              // Own process group so shutdown() can signal the agent's children too.
+              detached: process.platform !== 'win32',
               env: claudeEnv(),
             },
           );

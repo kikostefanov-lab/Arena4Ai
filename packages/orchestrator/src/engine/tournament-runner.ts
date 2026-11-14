@@ -4,6 +4,14 @@ import { CompetitionRunner } from './competition-runner.js';
 import type { RunOptions } from './competition-runner.js';
 import type { Brief } from '@arena/shared';
 
+/** Thrown by TournamentRunner.run() after cancel(). The tournament never completes. */
+export class TournamentCancelledError extends Error {
+  constructor(message = 'Tournament cancelled') {
+    super(message);
+    this.name = 'TournamentCancelledError';
+  }
+}
+
 export interface TournamentOptions extends RunOptions {
   name?: string;
   /** Tournament format. Default: 'ROUND_ROBIN' */
@@ -140,6 +148,7 @@ async function runMatch(
   options: RunOptions,
   emitter: EventEmitter,
   modelVariants?: Record<string, string>,
+  onRunner?: (runner: CompetitionRunner) => void,
 ): Promise<{ matchId: string; winner: string | null; scorecards: Array<{ teamId: string; finalScore?: number }> }> {
   const teamAEntry = {
     id: 'team-a',
@@ -155,6 +164,7 @@ async function runMatch(
   };
 
   const runner = new CompetitionRunner(brief, [teamAEntry, teamBEntry], options);
+  onRunner?.(runner);
   emitter.emit('matchStart', { teamA, teamB, competitionId: runner.competitionId, runner });
 
   const result = await runner.run();
@@ -187,6 +197,7 @@ async function runMatch(
 export class TournamentRunner extends EventEmitter {
   readonly tournamentId = randomUUID();
   private _cancelled = false;
+  private _activeMatch?: CompetitionRunner;
 
   constructor(
     private readonly brief: Brief,
@@ -229,7 +240,7 @@ export class TournamentRunner extends EventEmitter {
       if (this._cancelled) break;
 
       try {
-        const { matchId, winner, scorecards } = await runMatch(brief, teamA, teamB, options, this, options.modelVariants);
+        const { matchId, winner, scorecards } = await this._playMatch(brief, teamA, teamB, options);
         matchIds.push(matchId);
 
         // Accumulate scores
@@ -252,10 +263,14 @@ export class TournamentRunner extends EventEmitter {
           scores.get(teamB)!.draws++;
         }
       } catch (err) {
+        if (this._cancelled) break;
         console.error(`[tournament] match ${teamA} vs ${teamB} failed:`, err);
         this.emit('matchEnd', { teamA, teamB, winner: null, error: true });
       }
     }
+
+    // A cancelled tournament never completes — not even if its last match finished at the same instant.
+    if (this._cancelled) throw new TournamentCancelledError();
 
     // Compute rankings: sort by wins desc, then totalScore desc
     const rankings: TournamentRanking[] = Array.from(scores.entries())
@@ -306,7 +321,7 @@ export class TournamentRunner extends EventEmitter {
         if (this._cancelled) break;
 
         try {
-          const { matchId, winner, scorecards } = await runMatch(brief, teamA, teamB, options, this, options.modelVariants);
+          const { matchId, winner, scorecards } = await this._playMatch(brief, teamA, teamB, options);
           matchIds.push(matchId);
 
           // Track played pair
@@ -334,13 +349,17 @@ export class TournamentRunner extends EventEmitter {
             scores.get(teamB)!.draws++;
           }
         } catch (err) {
+          if (this._cancelled) break;
           console.error(`[swiss] match ${teamA} vs ${teamB} failed:`, err);
           this.emit('matchEnd', { teamA, teamB, winner: null, error: true });
         }
       }
 
+      if (this._cancelled) break;
       this.emit('roundComplete', { round, totalRounds });
     }
+
+    if (this._cancelled) throw new TournamentCancelledError();
 
     // Final rankings: wins desc → Buchholz desc → totalScore desc
     const rankings: TournamentRanking[] = Array.from(scores.entries())
@@ -373,7 +392,21 @@ export class TournamentRunner extends EventEmitter {
     return result;
   }
 
-  cancel(): void {
+  /** Cancel the tournament: stop the match in flight (and its agents) and play no further match. */
+  async cancel(): Promise<void> {
     this._cancelled = true;
+    await this._activeMatch?.cancel().catch(() => {});
+  }
+
+  private async _playMatch(brief: Brief, teamA: string, teamB: string, options: TournamentOptions) {
+    try {
+      return await runMatch(brief, teamA, teamB, options, this, options.modelVariants, (r) => {
+        this._activeMatch = r;
+        // Cancelled between matches: the new match must not run at all.
+        if (this._cancelled) void r.cancel();
+      });
+    } finally {
+      this._activeMatch = undefined;
+    }
   }
 }
