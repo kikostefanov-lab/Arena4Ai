@@ -546,7 +546,7 @@ export class Arena3D {
       let fov = 40, dur = 9;
       if (i === 0) { const a = 0.9 + t * 0.07; p.set(Math.sin(a) * R * 1.9, R * 0.5 + Math.sin(t * 0.2) * 3, Math.cos(a) * R * 1.9); l.set(0, hy, 0); }
       else if (i === 1 || i === 2) { const s = i === 1 ? -1 : 1; fov = 34; dur = 6; p.set(s * (fx + 26 - t * 0.8), 6, 30 - t * 0.6); l.set(s * (fx - 3), hy * 1.1, 0); }
-      else if (i === 3) { const a = t * 0.12; fov = 50; dur = 6; p.set(Math.sin(a) * 30, R * 3 - t * 4, Math.cos(a) * 30 + 40); l.set(0, 0, 0); }
+      else if (i === 3) { const a = -0.5 + t * 0.03, d = R * 1.5; dur = 7; p.set(Math.sin(a) * d, R, Math.cos(a) * d); l.set(0, 3, 0); } // high three-quarter: both cities at once
       else if (i === 4) { fov = 20; dur = 7; p.set(Math.sin(t * 0.3) * 2, 9, 250 - t * 6); l.set(0, hy * 1.6, 0); }
       else { fov = 36; dur = 6; p.set(-4 + t * 1.2, 12 + t * 0.4, R + 14); l.set(0, hy, -6); }
       if (!this.reduced && t > dur && world.phase === 'active') this.cut((i + 1 + ((Math.random() * 2) | 0)) % this.shotCount());
