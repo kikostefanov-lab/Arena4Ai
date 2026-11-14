@@ -28,3 +28,6 @@ runs/
 
 # Rendered video outputs (regenerable from sources)
 packages/video/out/
+
+# Robot model copied in at render time (the committed copy is packages/web/public/models)
+packages/video/public/models/

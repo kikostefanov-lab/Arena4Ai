@@ -15,7 +15,7 @@ import {
   corpusFromEvents,
 } from './event-model.js';
 import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
-import { createWorld, applyEvent, targetHeight, foldFileStats, telemetryFromStats } from './world.js';
+import { createWorld, applyEvent, stepStructures, targetHeight, foldFileStats, telemetryFromStats } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
 import { IsoArenaRenderer } from './renderer.js';
 import { MODEL_COLORS } from '../design/tokens.js';
@@ -135,6 +135,21 @@ describe('edit-depth honesty', () => {
 
 describe('world', () => {
   const teams = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }];
+
+  // A host that never calls IsoArenaRenderer.draw() (the 3D view) relies on
+  // this to move blocks at all: a LIVE event creates a block at height zero.
+  it('stepStructures raises a live block to its target and fades its flash without a draw', () => {
+    const events = toFrameEvents([ev('FILE_CREATE', 'a', { path: 'src/x.py', op: 'create', opSource: 'tool', text: '' }, 0)], T0);
+    const w = createWorld(teams, events);
+    applyEvent(w, events[0], true);
+    const st = w.structures.get('a|src/x.py')!;
+    expect(st.h).toBe(0);
+    expect(st.flash).toBe(1);
+    for (let i = 0; i < 120; i++) stepStructures(w);
+    expect(st.h).toBeCloseTo(st.th, 3);
+    expect(st.th).toBeGreaterThan(0);
+    expect(st.flash).toBeLessThan(0.01);
+  });
 
   it('grows a block for each distinct path and raises it on each edit', () => {
     const raw = [

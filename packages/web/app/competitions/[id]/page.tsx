@@ -2174,9 +2174,10 @@ export default function CompetitionPage() {
   }, []);
 
   // Battle/Log view mode
-  const [viewMode, setViewMode] = useState<'battle' | 'log'>(() => {
-    if (typeof window === 'undefined') return 'battle';
-    return (localStorage.getItem('arena-view-mode') as 'battle' | 'log') ?? 'battle';
+  const [viewMode, setViewMode] = useState<'3d' | 'battle' | 'log'>(() => {
+    if (typeof window === 'undefined') return '3d';
+    const saved = localStorage.getItem('arena-view-mode');
+    return saved === '3d' || saved === 'battle' || saved === 'log' ? saved : '3d';
   });
   useEffect(() => {
     localStorage.setItem('arena-view-mode', viewMode);
@@ -2805,12 +2806,16 @@ export default function CompetitionPage() {
 
           {/* Battle / Log view toggle (desktop only) */}
           {!isMobile && (
-            <button onClick={() => setViewMode(v => v === 'battle' ? 'log' : 'battle')} style={actionBtn(
-              '#00f0ff',
-              viewMode === 'battle' ? 'rgba(0,240,255,0.15)' : 'rgba(0,240,255,0.08)',
-            )}>
-              {viewMode === 'battle' ? '📋 Log' : '⚔ Battle'}
-            </button>
+            <>
+              {([['3d', '🏙 3D'], ['battle', '⚔ Iso'], ['log', '📋 Log']] as const).map(([mode, label]) => (
+                <button key={mode} onClick={() => setViewMode(mode)} aria-pressed={viewMode === mode} style={actionBtn(
+                  '#00f0ff',
+                  viewMode === mode ? 'rgba(0,240,255,0.22)' : 'rgba(0,240,255,0.06)',
+                )}>
+                  {label}
+                </button>
+              ))}
+            </>
           )}
 
           </div>
@@ -2967,7 +2972,7 @@ export default function CompetitionPage() {
         <CommentaryBar events={broadcastEvents} />
 
         {/* ── Battle Arena / Lanes ─────────────────────────────────────────── */}
-        {effectiveView === 'battle' ? (
+        {effectiveView !== 'log' ? (
           <div style={{ flex: bottomMaximized ? 0 : 1, height: bottomMaximized ? 0 : undefined, minHeight: 0, overflow: 'hidden' }}>
             <ArenaViewerV2
               teams={orderedTeams}
@@ -2978,6 +2983,7 @@ export default function CompetitionPage() {
               scores={result?.teams?.map((t) => ({ teamId: t.teamId, finalScore: t.totalScore })) ?? undefined}
               winnerId={result?.winnerId ?? undefined}
               deliverables={result?.deliverables ?? undefined}
+              view3d={effectiveView === '3d'}
             />
           </div>
         ) : (

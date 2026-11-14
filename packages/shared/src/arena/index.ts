@@ -24,7 +24,7 @@ export type { KnownProvider, FrameEventKind, FrameEvent, EditDepthMode, TeamTele
 export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry, reconcileWithManifest, isVendoredPath, corpusFromEvents } from './event-model.js';
 
 export type { TeamSpec, BlockKind, Structure, TeamState, Phase, World, ApplyEffects } from './world.js';
-export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, telemetryFromStats, refreshNotes, ensureGridCapacity } from './world.js';
+export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, stepStructures, telemetryFromStats, refreshNotes, ensureGridCapacity } from './world.js';
 
 export type { RendererOptions } from './renderer.js';
 export { IsoArenaRenderer } from './renderer.js';
