@@ -214,8 +214,29 @@ image yourself — nothing does it for you:**
 docker build -f Dockerfile.agent -t arena-agent:latest .
 ```
 
-Note that the image installs the three agent CLIs but has no credentials of its own; auth is
-whatever you pass through the environment.
+**Authentication inside the container.** The image installs the three agent CLIs but has no
+credentials of its own, and **a CLI login you did on the host does not carry over**: the container
+does not see your home directory (`~/.claude`, `~/.codex`, `~/.gemini`) or the macOS keychain.
+The only credentials a sandboxed agent gets are environment variables that the orchestrator
+forwards from its own environment, filtered per provider (see `sandboxEnv()` in
+`packages/orchestrator/src/utils/claude-env.ts`):
+
+| CLI | Forwarded variable families |
+|-----|-----------------------------|
+| `claude` | `ANTHROPIC_*`, `CLAUDE_*` (e.g. `ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`); `AWS_*` / `GOOGLE_*` only when Bedrock / Vertex is switched on |
+| `codex` | `OPENAI_*`, `CODEX_*`, `AZURE_OPENAI_*` |
+| `gemini` | `GEMINI_*`, `GOOGLE_*`, `GCLOUD_*`, `CLOUDSDK_*` |
+
+So export an API key (or token) for each provider you intend to use *in the shell that starts the
+orchestrator*, or use `--skip-sandbox`. Which of those variables each CLI honours is up to the CLI
+and its version; this has not been verified end to end against a running container.
+
+The Claude agent receives its brief on stdin (`docker run -i`); Codex and Gemini receive theirs as
+a command-line argument.
+
+If Docker is not installed, its daemon is not running, or the image has not been built, the run
+fails immediately (state `FAILED`, with an `ERROR` event whose `stage` is `sandbox`) and the message
+says which of the three it is.
 
 **The important asymmetry:**
 

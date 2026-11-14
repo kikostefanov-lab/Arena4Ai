@@ -72,6 +72,7 @@ export class ClaudeAdapter extends BaseAdapter {
             this.claudeBin,
             claudeArgs,
             claudeEnv(),
+            { stdin: true }, // prompt is piped on stdin below
           )
         : spawn(
             this.claudeBin,
@@ -87,6 +88,9 @@ export class ClaudeAdapter extends BaseAdapter {
 
       // Pipe prompt via stdin to avoid CLI arg length limits
       if (child.stdin) {
+        // A container (or process) that exits early would otherwise raise an
+        // unhandled EPIPE here; the close/error handlers below report the failure.
+        child.stdin.on('error', () => {});
         child.stdin.write(this.promptText);
         child.stdin.end();
       }

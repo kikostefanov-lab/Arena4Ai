@@ -169,7 +169,6 @@ export class CompetitionRunner extends EventEmitter {
     let sandboxManager: SandboxManager | undefined;
     if (!this.options.skipSandbox) {
       sandboxManager = new SandboxManager();
-      await sandboxManager.verify();
     }
     const logger = new EventLogger(this.options.logDir, this.competition.id);
 
@@ -185,6 +184,31 @@ export class CompetitionRunner extends EventEmitter {
     try {
       // ── CONFIGURED ──────────────────────────────────────────────────────
       this.advance(CompetitionState.CONFIGURED);
+
+      // Sandbox preflight lives inside the guarded lifecycle so a missing
+      // docker binary / daemon / image ends in FAILED with an ERROR event,
+      // rather than throwing before the run has a state to fail from.
+      if (sandboxManager) {
+        try {
+          await sandboxManager.verify();
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: teams[0]?.id ?? 'sandbox',
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: {
+              stage: 'sandbox',
+              reason: (err as { reason?: string }).reason,
+              message,
+            },
+            metadata: {},
+          });
+          throw err;
+        }
+      }
 
       // Preflight: a self-hoster will rarely have all three agent CLIs. Find out
       // BEFORE launching, and say which binary is missing and how to get it —
