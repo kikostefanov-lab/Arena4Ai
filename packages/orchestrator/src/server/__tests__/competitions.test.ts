@@ -300,8 +300,9 @@ describe('Auth middleware', () => {
     expect(res.status).toBe(201);
   });
 
-  it('allows GET without auth key', async () => {
-    const res = await request(app).get('/competitions');
+  it('returns 401 for GET without a key, and 200 with one', async () => {
+    expect((await request(app).get('/competitions')).status).toBe(401);
+    const res = await request(app).get('/competitions').set('Authorization', 'Bearer test-key');
     expect(res.status).toBe(200);
   });
 });

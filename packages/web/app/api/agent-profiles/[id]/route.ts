@@ -9,7 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const res = await fetch(`${ORCHESTRATOR}/agent-profiles/${id}`, { cache: 'no-store' });
+  const res = await fetch(`${ORCHESTRATOR}/agent-profiles/${id}`, { cache: 'no-store', headers: orchestratorHeaders() });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }

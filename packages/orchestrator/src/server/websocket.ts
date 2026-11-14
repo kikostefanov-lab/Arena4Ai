@@ -3,6 +3,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Server } from 'node:http';
 import { repo } from './repo.js';
 import { runnerRegistry } from './runner-registry.js';
+import { isAllowedWsOrigin } from './network.js';
 
 type RawScorecard = {
   teamId: string;
@@ -57,6 +58,11 @@ export function attachWebSocket(server: Server): void {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on('upgrade', (req: IncomingMessage, socket, head) => {
+    if (!isAllowedWsOrigin(req.headers.origin)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     const url = req.url ?? '';
     const match = url.match(/^\/competitions\/([^/]+)\/stream$/);
     if (!match) {

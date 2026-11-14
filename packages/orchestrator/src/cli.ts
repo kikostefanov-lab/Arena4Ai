@@ -190,13 +190,18 @@ program
   .command('serve')
   .description('Start the Arena HTTP API server')
   .option('-p, --port <port>', 'Port to listen on', '3000')
+  .option('--host <host>', 'Interface to bind (default 127.0.0.1; env ARENA_HOST). Use 0.0.0.0 to expose.')
   .option('--skip-sandbox', 'Skip Docker sandbox')
-  .action(async (opts: { port: string; skipSandbox?: boolean }) => {
+  .action(async (opts: { port: string; host?: string; skipSandbox?: boolean }) => {
     const { createServer } = await import('./server/app.js');
+    const { resolveHost, exposureWarning } = await import('./server/network.js');
     const server = createServer();
     const port = Number(opts.port);
-    server.listen(port, () => {
-      console.log(`[arena] server listening on http://localhost:${port}`);
+    const host = resolveHost(opts.host);
+    const warning = exposureWarning(host);
+    if (warning) console.warn(warning);
+    server.listen(port, host, () => {
+      console.log(`[arena] server listening on http://${host}:${port}`);
     });
   });
 

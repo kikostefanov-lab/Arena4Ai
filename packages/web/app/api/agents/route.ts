@@ -5,7 +5,7 @@ const ORCH = process.env.ORCHESTRATOR_URL ?? 'http://localhost:3000';
 
 export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams.toString();
-  const res = await fetch(`${ORCH}/agents${search ? '?' + search : ''}`);
+  const res = await fetch(`${ORCH}/agents${search ? '?' + search : ''}`, { headers: orchestratorHeaders() });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }
