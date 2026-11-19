@@ -1,6 +1,18 @@
 /** Highest share of a criterion's maxScore the completeness heuristic can award. */
 export const HEURISTIC_CEILING = 0.5;
 
+/** A leading token that looks like a file name: `README.md`, `src/cli.ts`, `scorer.py`. */
+const FILENAME_TOKEN = /^`?((?:[\w.-]+\/)*[\w-][\w.-]*\.[A-Za-z][A-Za-z0-9]{0,7})`?(?=$|[\s,:;(—–-])/;
+
+/**
+ * The file name a brief deliverable names, or null when the entry only describes
+ * one ("A runnable solution file (any language)") and so cannot be checked.
+ */
+export function expectedFileName(entry: string): string | null {
+  const match = FILENAME_TOKEN.exec(entry.trim());
+  return match ? match[1].replace(/^\.?\//, '') : null;
+}
+
 /** Judge id the automated fallback scorer (`rubric-scorer.ts`) reports under. */
 export const AUTOMATED_JUDGE_ID = 'automated';
 

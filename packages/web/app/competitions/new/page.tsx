@@ -1619,7 +1619,7 @@ function NewCompetitionForm() {
                   </label>
                   <input
                     className="arena-input"
-                    type="number" min={1} max={120} value={timeLimitMins}
+                    type="number" min={1} max={180} value={timeLimitMins}
                     onChange={(e) => setTimeLimitMins(Number(e.target.value))}
                     style={{ width: '7rem' }}
                   />

@@ -81,6 +81,7 @@ vi.mock('../adapters/gemini/gemini-adapter.js', () => ({ GeminiAdapter: vi.fn() 
 import { CompetitionRunner } from './competition-runner.js';
 import { aiJudge } from '../judging/ai-judge.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
+import { scoreDeliverable } from '../judging/rubric-scorer.js';
 
 const brief: Brief = {
   id: 'lc-1',
@@ -97,8 +98,8 @@ const teams = [
   { id: 'team-b', model: 'claude:speedrunner', persona: 'speedrunner' },
 ];
 
-function makeRunner() {
-  const runner = new CompetitionRunner(brief, teams, { skipSandbox: true, printResults: false });
+function makeRunner(b: Brief = brief) {
+  const runner = new CompetitionRunner(b, teams, { skipSandbox: true, printResults: false });
   const states: string[] = [];
   const results: unknown[] = [];
   runner.on('stateChange', (s: string) => states.push(s));
@@ -209,5 +210,69 @@ describe('cancellation is terminal', () => {
     await Promise.all([runner.cancel(), runner.cancel()]);
     await running;
     expect(adapters.every((a) => !a.alive)).toBe(true);
+  });
+});
+
+describe('judge retry', () => {
+  const ok = (d: { teamId: string }) => ({
+    judgeId: 'ai-claude', teamId: d.teamId, model: 'm', scores: [{ criterionId: 'c', score: 9, commentary: '' }],
+  });
+  const failed = (d: { teamId: string }, kind: string) => ({
+    judgeId: 'ai-claude', teamId: d.teamId, model: 'm', scores: [], failure: { kind, message: kind },
+  });
+
+  it('retries once after a timeout and uses the AI scores, not the fallback', async () => {
+    const calls = new Map<string, number>();
+    vi.mocked(aiJudge).mockImplementation((async (_b: unknown, d: { teamId: string }) => {
+      const n = (calls.get(d.teamId) ?? 0) + 1;
+      calls.set(d.teamId, n);
+      return n === 1 ? failed(d, 'timeout') : ok(d);
+    }) as never);
+    const { runner } = makeRunner();
+    await runner.run();
+    expect(calls.get('team-a')).toBe(2);
+    expect(vi.mocked(scoreDeliverable)).toHaveBeenCalled(); // computed in parallel, but unused
+    const { aggregate } = await import('../judging/score-aggregator.js');
+    const judged = vi.mocked(aggregate).mock.calls.at(-1)![0] as Array<{ judgeId: string }>;
+    expect(judged.every((r) => r.judgeId === 'ai-claude')).toBe(true);
+  });
+
+  it('does not retry an auth failure and falls back to the automated scorer', async () => {
+    vi.mocked(aiJudge).mockImplementation((async (_b: unknown, d: { teamId: string }) => failed(d, 'auth')) as never);
+    const { runner } = makeRunner();
+    await runner.run();
+    expect(vi.mocked(aiJudge)).toHaveBeenCalledTimes(2); // one per team, no retry
+    const { aggregate } = await import('../judging/score-aggregator.js');
+    const judged = vi.mocked(aggregate).mock.calls.at(-1)![0] as Array<{ judgeId: string }>;
+    expect(judged.every((r) => r.judgeId === 'automated')).toBe(true);
+  });
+
+  it('passes a scaled timeout to the judge', async () => {
+    const { runner } = makeRunner();
+    await runner.run();
+    expect(vi.mocked(aiJudge).mock.calls[0]![3]).toMatchObject({ timeoutMs: 120_000 });
+  });
+});
+
+describe('wall-clock stop', () => {
+  it('ends a run whose clock is paused, at 1.5x the time limit of real time', async () => {
+    vi.useFakeTimers();
+    try {
+      const long: Brief = { ...brief, timeLimitMs: 3_600_000 };
+      const { runner, states } = makeRunner(long);
+      const done = runner.run();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.waitFor(() => expect(states).toContain(CompetitionState.RUNNING));
+      await vi.advanceTimersByTimeAsync(0); // the clock starts right after the agents do
+      runner.pause();
+      await vi.advanceTimersByTimeAsync(3_600_000 * 1.5 - 5_000); // just short of the stop
+      expect(states).not.toContain(CompetitionState.COLLECTING);
+      await vi.advanceTimersByTimeAsync(5_000);
+      await done;
+      expect(states).toContain(CompetitionState.COLLECTING);
+      expect(adapters.every((a) => !a.alive)).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

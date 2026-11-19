@@ -122,14 +122,14 @@ describe('parseBrief()', () => {
     });
   });
 
-  it('throws when timeLimitMs exceeds 1 hour (3600001 ms)', async () => {
-    await withTempBrief(minimalBriefYaml({ timeLimitMs: 3_600_001 }), async (path) => {
-      await expect(parseBrief(path)).rejects.toThrow('timeLimitMs cannot exceed 1 hour');
+  it('throws when timeLimitMs exceeds 3 hours (10800001 ms)', async () => {
+    await withTempBrief(minimalBriefYaml({ timeLimitMs: 10_800_001 }), async (path) => {
+      await expect(parseBrief(path)).rejects.toThrow('timeLimitMs cannot exceed 3 hours');
     });
   });
 
-  it('does not throw when timeLimitMs is exactly 1 hour (3600000 ms, upper bound)', async () => {
-    await withTempBrief(minimalBriefYaml({ timeLimitMs: 3_600_000 }), async (path) => {
+  it('does not throw when timeLimitMs is exactly 3 hours (10800000 ms, upper bound)', async () => {
+    await withTempBrief(minimalBriefYaml({ timeLimitMs: 10_800_000 }), async (path) => {
       await expect(parseBrief(path)).resolves.toBeDefined();
     });
   });

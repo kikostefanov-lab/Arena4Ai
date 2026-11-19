@@ -1,4 +1,4 @@
-import type { Brief } from '@arena/shared';
+import { expectedFileName, type Brief } from '@arena/shared';
 
 export type IncludeField = 'title' | 'problem' | 'constraints' | 'deliverables' | 'rubric' | 'format' | 'deliverableType';
 
@@ -14,15 +14,15 @@ export interface BriefContextOptions {
 export const JUDGE_CONTEXT: BriefContextOptions = {
   include: ['title', 'problem', 'constraints', 'deliverables', 'rubric'],
   rubricDetail: 'full',
-  fileTruncation: 12000,
-  fileBudget: 80000,
+  fileTruncation: 24000,
+  fileBudget: 240000,
 };
 
 export const PRESENTER_CONTEXT: BriefContextOptions = {
   include: ['title', 'problem', 'constraints', 'deliverables', 'rubric'],
   rubricDetail: 'weights-only',
-  fileTruncation: 8000,
-  fileBudget: 50000,
+  fileTruncation: 12000,
+  fileBudget: 120000,
 };
 
 export const SYNTHESIS_CONTEXT: BriefContextOptions = {
@@ -41,35 +41,74 @@ export const FORGE_CONTEXT: BriefContextOptions = {
 
 // --------------- truncateFiles ---------------
 
+/** File names the brief's deliverables name; entries that only describe a file are skipped. */
+export function namedDeliverables(brief: Brief): string[] {
+  return brief.deliverables.map(expectedFileName).filter((n): n is string => n !== null);
+}
+
+/**
+ * Render files for an LLM prompt within a character budget.
+ *
+ * `priority` names (brief deliverables) come first, in the order given, so a
+ * large research directory cannot push them out of the prompt; each name matches
+ * an exact relative path, or a basename when it has no `/`. The output ends with
+ * what was left out, so the model never mistakes a cut manifest for a short one.
+ */
 export function truncateFiles(
   files: Array<{ path: string; content: string }>,
   perFile: number,
   totalBudget: number,
+  priority: string[] = [],
 ): string {
-  if (files.length === 0) return '';
+  if (files.length === 0 && priority.length === 0) return '';
+
+  const matches = (path: string, name: string): boolean => {
+    const p = path.replace(/^\.?\//, '').toLowerCase();
+    const n = name.replace(/^\.?\//, '').toLowerCase();
+    return n.includes('/') ? p === n : p.split('/').pop() === n;
+  };
+
+  const ordered: Array<{ path: string; content: string }> = [];
+  const missing: string[] = [];
+  const seen = new Set<string>();
+  for (const name of priority) {
+    const hits = files.filter((f) => !seen.has(f.path) && matches(f.path, name));
+    if (!files.some((f) => matches(f.path, name))) missing.push(name);
+    for (const h of hits) { seen.add(h.path); ordered.push(h); }
+  }
+  for (const f of files) if (!seen.has(f.path)) ordered.push(f);
 
   const sections: string[] = [];
   let totalChars = 0;
   let included = 0;
+  let omittedFiles = 0;
+  let omittedChars = 0;
 
-  for (const file of files) {
-    const content = file.content.length > perFile
+  for (const file of ordered) {
+    const cut = Math.max(0, file.content.length - perFile);
+    const content = cut > 0
       ? file.content.slice(0, perFile) + `\n[truncated at ${perFile} chars]`
       : file.content;
 
     const section = `### ${file.path}\n\`\`\`\n${content}\n\`\`\``;
 
     if (totalChars + section.length > totalBudget && included > 0) {
-      const remaining = files.length - included;
-      if (remaining > 0) {
-        sections.push(`(${remaining} more files omitted)`);
-      }
-      break;
+      omittedFiles++;
+      omittedChars += file.content.length;
+      continue;
     }
 
     sections.push(section);
     totalChars += section.length;
     included++;
+    omittedChars += cut;
+  }
+
+  if (missing.length > 0) {
+    sections.push(`(missing named deliverables: ${missing.join(', ')})`);
+  }
+  if (omittedFiles > 0 || omittedChars > 0) {
+    sections.push(`(${omittedFiles} files, ${omittedChars} chars omitted)`);
   }
 
   return sections.join('\n\n');

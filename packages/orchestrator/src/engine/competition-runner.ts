@@ -30,6 +30,7 @@ import { aiJudge, JUDGE_IDS, type AiJudgeResult } from '../judging/ai-judge.js';
 import {
   findMissingClis, formatMissingCliError, findUnavailableModels, formatUnavailableModelError,
 } from '../utils/cli-preflight.js';
+import { stageTimeoutMs } from '../utils/stage-timeout.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { resolveOutcome } from '../judging/outcome.js';
 import { printResults } from '../judging/results-reporter.js';
@@ -90,6 +91,12 @@ export interface CompetitionResult {
   synthesis: SynthesisResult | null;      // synthesized hybrid solution
   deliverables: TeamDeliverable[];
 }
+
+/** The unpausable stop fires this many times the time limit after the start. */
+const WALL_CLOCK_FACTOR = 1.5;
+
+/** Judge failures worth one more try; auth, a missing CLI or a retired model will not fix themselves. */
+const RETRYABLE_JUDGE_FAILURES = new Set<string>(['timeout', 'rate-limit', 'cli-error', 'bad-output']);
 
 /**
  * Orchestrates the full competition lifecycle:
@@ -434,7 +441,20 @@ export class CompetitionRunner extends EventEmitter {
       const cancelPromise = new Promise<void>((resolve) => {
         this._cancelResolve = resolve;
       });
-      await Promise.race([raceFinished, allAdaptersDone, cancelPromise]);
+      // The clock can be paused, so it alone cannot bound a run. This real-time
+      // stop cannot be paused: 1.5x the limit after the start, whatever happens.
+      let wallClockTimer: NodeJS.Timeout | undefined;
+      const wallClockStop = new Promise<void>((resolve) => {
+        wallClockTimer = setTimeout(() => {
+          console.error(`[arena] wall-clock limit (${WALL_CLOCK_FACTOR}x the time limit) reached — stopping the agents.`);
+          resolve();
+        }, brief.timeLimitMs * WALL_CLOCK_FACTOR);
+      });
+      try {
+        await Promise.race([raceFinished, allAdaptersDone, cancelPromise, wallClockStop]);
+      } finally {
+        clearTimeout(wallClockTimer);
+      }
 
       // ── TIME_UP / COLLECTING ─────────────────────────────────────────────
       this.advance(CompetitionState.TIME_UP);
@@ -449,7 +469,7 @@ export class CompetitionRunner extends EventEmitter {
       this.assertNotCancelled();
 
       const allDeliverables: Deliverable[] = await Promise.all(
-        adapters.map((a) => a.collectDeliverables()),
+        adapters.map((a) => a.collectDeliverables(brief.deliverables)),
       );
       this.assertNotCancelled();
 
@@ -476,6 +496,11 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.PRESENTING);
       console.log('[arena] generating human-readable presentations...');
 
+      // Judge and presenter read the same files, so one input size scales both timeouts.
+      const totalChars = deliverables.reduce(
+        (sum, d) => sum + d.files.reduce((s, f) => s + f.content.length, 0), 0);
+      const helperTimeoutMs = stageTimeoutMs(totalChars);
+
       const teamModels = new Map(teams.map((t) => [t.id, t.model]));
       let presentations: TeamPresentation[] = [];
       try {
@@ -483,7 +508,7 @@ export class CompetitionRunner extends EventEmitter {
           brief,
           deliverables,
           teamModels,
-          { claudeBin: this.options.claudeBin },
+          { claudeBin: this.options.claudeBin, timeoutMs: helperTimeoutMs },
         );
       } catch (err) {
         console.error('[arena] presentation generation failed:', (err as Error).message);
@@ -509,17 +534,23 @@ export class CompetitionRunner extends EventEmitter {
 
       // Run AI cross-judge (primary) + automated scorer (fallback) in parallel
       console.log('[arena] judging with AI cross-judge (automated scorer as fallback)...');
-      const aiJudgePromises: Promise<AiJudgeResult>[] = deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
-        judgeId: JUDGE_IDS.aiClaude,
-        claudeBin: this.options.claudeBin,
-      }));
+      const judgeOnce = async (d: Deliverable, judgeId: string): Promise<AiJudgeResult> => {
+        const run = () => aiJudge(brief, d, brief.rubric, {
+          judgeId,
+          claudeBin: this.options.claudeBin,
+          timeoutMs: helperTimeoutMs,
+        });
+        const first = await run();
+        if (!first.failure || !RETRYABLE_JUDGE_FAILURES.has(first.failure.kind)) return first;
+        this.assertNotCancelled();
+        console.error(`[arena] AI judge ${judgeId} failed for ${d.teamId} (${first.failure.kind}) — retrying once.`);
+        return run();
+      };
+      const aiJudgePromises: Promise<AiJudgeResult>[] = deliverables.map((d) => judgeOnce(d, JUDGE_IDS.aiClaude));
 
       if (this.options.aiJudgeCount >= 2) {
         aiJudgePromises.push(
-          ...deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
-            judgeId: JUDGE_IDS.aiAdversarial,
-            claudeBin: this.options.claudeBin,
-          })),
+          ...deliverables.map((d) => judgeOnce(d, JUDGE_IDS.aiAdversarial)),
         );
       }
 

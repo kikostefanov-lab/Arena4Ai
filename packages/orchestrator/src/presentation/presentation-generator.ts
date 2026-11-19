@@ -3,10 +3,12 @@ import type { Brief, Deliverable, TeamPresentation } from '@arena/shared';
 import { helperClaudeArgs, helperClaudeEnv } from '../utils/claude-helper.js';
 import { resolveStageModel } from '../adapters/model-registry.js';
 import { extractJson } from '../utils/extract-json.js';
-import { buildBriefContext, truncateFiles, PRESENTER_CONTEXT } from '../utils/brief-context.js';
+import { buildBriefContext, truncateFiles, namedDeliverables, PRESENTER_CONTEXT } from '../utils/brief-context.js';
 
 export interface PresentationOptions {
   claudeBin?: string;
+  /** Hard kill after this many ms. Default 120s; the runner scales it with the input size. */
+  timeoutMs?: number;
 }
 
 /**
@@ -22,7 +24,7 @@ export async function generatePresentation(
   teamModel: string,
   options: PresentationOptions = {},
 ): Promise<TeamPresentation | null> {
-  const { claudeBin = 'claude' } = options;
+  const { claudeBin = 'claude', timeoutMs = 120_000 } = options;
 
   if (deliverable.files.length === 0) {
     return {
@@ -41,7 +43,7 @@ export async function generatePresentation(
   }
 
   const briefContext = buildBriefContext(brief, PRESENTER_CONTEXT);
-  const filesSections = truncateFiles(deliverable.files, PRESENTER_CONTEXT.fileTruncation!, PRESENTER_CONTEXT.fileBudget!);
+  const filesSections = truncateFiles(deliverable.files, PRESENTER_CONTEXT.fileTruncation!, PRESENTER_CONTEXT.fileBudget!, namedDeliverables(brief));
 
   const criterionIds = brief.rubric.criteria.map((c) => c.id);
 
@@ -94,8 +96,8 @@ You MUST include one entry per criterionId, in the same order.`;
 
       const timeout = setTimeout(() => {
         child.kill();
-        reject(new Error('Presentation generation timed out after 2 minutes'));
-      }, 120_000);
+        reject(new Error(`Presentation generation timed out after ${Math.round(timeoutMs / 1000)}s`));
+      }, timeoutMs);
 
       child.on('close', (code) => {
         clearTimeout(timeout);

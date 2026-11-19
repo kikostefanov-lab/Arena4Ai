@@ -175,6 +175,35 @@ describe('truncateFiles', () => {
     expect(result).toContain('omitted');
   });
 
+  it('puts priority files first, in the order given', () => {
+    const files = ['a.md', 'b.md', 'demo.html', 'c.md', 'decision.md'].map((path) => ({ path, content: path }));
+    const result = truncateFiles(files, 8000, 50000, ['decision.md', 'demo.html']);
+    expect(result.startsWith('### decision.md')).toBe(true);
+    expect(result.indexOf('### demo.html')).toBeLessThan(result.indexOf('### a.md'));
+    expect(result).not.toContain('missing named deliverables');
+  });
+
+  it('matches a priority name by basename when it has no slash', () => {
+    const files = [{ path: 'x.md', content: 'x' }, { path: 'docs/decision.md', content: 'd' }];
+    expect(truncateFiles(files, 8000, 50000, ['decision.md']).startsWith('### docs/decision.md')).toBe(true);
+  });
+
+  it('reports omissions and missing named files', () => {
+    const files = [
+      { path: 'a.md', content: 'a'.repeat(100) },
+      { path: 'b.md', content: 'b'.repeat(100) },
+      { path: 'c.md', content: 'c'.repeat(100) },
+    ];
+    const result = truncateFiles(files, 8000, 150, ['pilot.md']);
+    expect(result).toContain('missing named deliverables: pilot.md');
+    expect(result).toMatch(/\(2 files, 200 chars omitted\)$/);
+  });
+
+  it('counts per-file truncation in the omitted chars', () => {
+    const result = truncateFiles([{ path: 'a.md', content: 'a'.repeat(30) }], 10, 50000);
+    expect(result).toMatch(/\(0 files, 20 chars omitted\)$/);
+  });
+
   it('handles empty file list', () => {
     const result = truncateFiles([], 8000, 50000);
     expect(result).toBe('');
@@ -193,15 +222,15 @@ describe('preset constants', () => {
   it('JUDGE_CONTEXT has correct values', () => {
     expect(JUDGE_CONTEXT.include).toEqual(['title', 'problem', 'constraints', 'deliverables', 'rubric']);
     expect(JUDGE_CONTEXT.rubricDetail).toBe('full');
-    expect(JUDGE_CONTEXT.fileTruncation).toBe(12000);
-    expect(JUDGE_CONTEXT.fileBudget).toBe(80000);
+    expect(JUDGE_CONTEXT.fileTruncation).toBe(24000);
+    expect(JUDGE_CONTEXT.fileBudget).toBe(240000);
   });
 
   it('PRESENTER_CONTEXT has correct values', () => {
     expect(PRESENTER_CONTEXT.include).toEqual(['title', 'problem', 'constraints', 'deliverables', 'rubric']);
     expect(PRESENTER_CONTEXT.rubricDetail).toBe('weights-only');
-    expect(PRESENTER_CONTEXT.fileTruncation).toBe(8000);
-    expect(PRESENTER_CONTEXT.fileBudget).toBe(50000);
+    expect(PRESENTER_CONTEXT.fileTruncation).toBe(12000);
+    expect(PRESENTER_CONTEXT.fileBudget).toBe(120000);
   });
 
   it('SYNTHESIS_CONTEXT has correct values', () => {

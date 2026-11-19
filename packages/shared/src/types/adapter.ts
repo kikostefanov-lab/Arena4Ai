@@ -6,6 +6,6 @@ export interface ModelAdapter {
   injectBrief(brief: Brief, persona: string): Promise<void>;
   startExecution(): Promise<void>;
   on(event: 'arenaEvent', listener: (e: ArenaEvent) => void): this;
-  collectDeliverables(): Promise<Deliverable>;
+  collectDeliverables(named?: string[]): Promise<Deliverable>;
   shutdown(): Promise<void>;
 }

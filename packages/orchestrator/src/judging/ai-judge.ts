@@ -3,7 +3,7 @@ import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@a
 import { helperClaudeArgs, helperEnv } from '../utils/claude-helper.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
-import { buildBriefContext, truncateFiles, JUDGE_CONTEXT } from '../utils/brief-context.js';
+import { buildBriefContext, truncateFiles, namedDeliverables, JUDGE_CONTEXT } from '../utils/brief-context.js';
 import { isCliDefaultModel, AUTOMATED_JUDGE_ID } from '@arena/shared';
 import { resolveJudgeModel, getProviderConfig } from '../adapters/model-registry.js';
 
@@ -183,7 +183,8 @@ export function classifyJudgeFailure(
     };
   }
   if (err instanceof Error && /timed out/i.test(err.message)) {
-    return { kind: 'timeout', message: 'AI judge unavailable: timed out after 120s.', detail };
+    const after = /timed out after (\d+s)/i.exec(err.message)?.[1] ?? '120s';
+    return { kind: 'timeout', message: `AI judge unavailable: timed out after ${after}.`, detail };
   }
   if (err instanceof Error && /exited with code/i.test(err.message)) {
     return { kind: 'cli-error', message: `AI judge unavailable: ${err.message}.`, detail };
@@ -295,7 +296,7 @@ export function buildJudgePrompt(
 
   const perFile = JUDGE_CONTEXT.fileTruncation ?? 12000;
   const totalBudget = JUDGE_CONTEXT.fileBudget ?? 80000;
-  const filesText = truncateFiles(deliverable.files, perFile, totalBudget);
+  const filesText = truncateFiles(deliverable.files, perFile, totalBudget, namedDeliverables(brief));
 
   const adversarialClause = judgeId.includes('adversarial')
     ? '\n\nIMPORTANT: You are an adversarial judge. Look for weaknesses, gaps, and missed edge cases. Score critically — be specific about what is missing or wrong.'

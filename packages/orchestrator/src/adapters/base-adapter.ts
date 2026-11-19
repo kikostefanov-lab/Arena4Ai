@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { readdir, readFile, stat, rm } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { EventType, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
+import { EventType, expectedFileName, isVendoredPath, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
 import type { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { stripAnsi, makeEvent, makeFileEvent } from './normalizer-utils.js';
 import { squadLimits } from './squad-limits.js';
@@ -75,13 +75,19 @@ const DELIVERABLE_GUIDE: Record<string, string> = {
   mixed:        'Produce whichever combination of code and documents best addresses the brief.',
 };
 
-/** Recursively walk `dir`, returning all text files under size limits. */
+interface WalkedFile { path: string; size: number; full: string }
+
+/**
+ * Recursively list the candidate files under `dir`. Dot-directories (`.git`, ...)
+ * are skipped silently; vendored and generated directories (`node_modules`,
+ * `dist`, ...) are not descended into and are reported in `excluded` once each.
+ */
 async function walkDir(
   dir: string,
   base: string,
-  budget: { remaining: number },
-): Promise<Array<{ path: string; content: string }>> {
-  const results: Array<{ path: string; content: string }> = [];
+  excluded: NonNullable<Deliverable['excluded']>,
+): Promise<WalkedFile[]> {
+  const results: WalkedFile[] = [];
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -90,18 +96,28 @@ async function walkDir(
   }
   for (const entry of entries) {
     const full = join(dir, entry.name);
+    const rel = relative(base, full);
     if (entry.isDirectory()) {
-      results.push(...await walkDir(full, base, budget));
+      if (entry.name.startsWith('.')) continue;
+      if (isVendoredPath(rel)) {
+        excluded.push({ path: rel, reason: 'vendored' });
+        continue;
+      }
+      results.push(...await walkDir(full, base, excluded));
     } else if (entry.isFile()) {
+      if (isVendoredPath(rel)) continue;
       const info = await stat(full).catch(() => null);
-      if (!info || info.size > MAX_FILE_BYTES || info.size > budget.remaining) continue;
-      const content = await readFile(full, 'utf-8').catch(() => null);
-      if (content === null || content.includes('\0')) continue; // skip binary
-      budget.remaining -= info.size;
-      results.push({ path: relative(base, full), content });
+      if (info) results.push({ path: rel, size: info.size, full });
     }
   }
   return results;
+}
+
+/** Index of the first named deliverable `path` satisfies: exact path, or basename when the name has no `/`. */
+function namedRank(path: string, names: string[]): number {
+  const lower = path.toLowerCase();
+  const base = lower.split('/').pop()!;
+  return names.findIndex((n) => (n.includes('/') ? lower === n : base === n));
 }
 
 /**
@@ -234,14 +250,43 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     return Promise.resolve();
   }
 
-  async collectDeliverables(): Promise<Deliverable> {
+  /**
+   * Collect the workdir's text files, the brief's named deliverables first so a
+   * big research directory cannot crowd them out of the 5 MB budget. `named`
+   * holds brief deliverable entries; those that name no file are ignored.
+   */
+  async collectDeliverables(named: string[] = []): Promise<Deliverable> {
+    const excluded: NonNullable<Deliverable['excluded']> = [];
+    const wanted = named
+      .map((n) => expectedFileName(n))
+      .filter((n): n is string => n !== null)
+      .map((n) => n.toLowerCase());
+
+    const walked = await walkDir(this.workdir, this.workdir, excluded);
+    const ranked = walked
+      .map((f) => ({ f, rank: namedRank(f.path, wanted) }))
+      .sort((a, b) => {
+        const ra = a.rank < 0 ? Number.MAX_SAFE_INTEGER : a.rank;
+        const rb = b.rank < 0 ? Number.MAX_SAFE_INTEGER : b.rank;
+        return ra - rb || (a.f.path < b.f.path ? -1 : 1);
+      });
+
     const budget = { remaining: MAX_TOTAL_BYTES };
-    const files = await walkDir(this.workdir, this.workdir, budget);
+    const files: Array<{ path: string; content: string }> = [];
+    for (const { f } of ranked) {
+      if (f.size > MAX_FILE_BYTES) { excluded.push({ path: f.path, reason: 'size' }); continue; }
+      if (f.size > budget.remaining) { excluded.push({ path: f.path, reason: 'budget' }); continue; }
+      const content = await readFile(f.full, 'utf-8').catch(() => null);
+      if (content === null || content.includes('\0')) continue; // skip binary
+      budget.remaining -= f.size;
+      files.push({ path: f.path, content });
+    }
 
     return {
       teamId: this.teamId,
       files,
       collectedAt: new Date().toISOString(),
+      ...(excluded.length > 0 ? { excluded } : {}),
     };
   }
 
