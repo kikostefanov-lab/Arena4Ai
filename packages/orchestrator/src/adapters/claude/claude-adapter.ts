@@ -3,9 +3,8 @@ import { createInterface } from 'node:readline';
 import type { Brief } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { ClaudeNormalizer, normalizeLine } from './claude-normalizer.js';
-import { claudeIsolationArgs } from '../isolation.js';
+import { claudeIsolationArgs, competitorEnv } from '../isolation.js';
 import { squadLimits } from '../squad-limits.js';
-import { claudeEnv } from '../../utils/claude-env.js';
 import { safeModelVariant } from '../model-variant.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
@@ -58,7 +57,7 @@ export class ClaudeAdapter extends BaseAdapter {
     const normalizer = new ClaudeNormalizer(ctx);
     const { maxConcurrent, maxDepth } = squadLimits();
     const agentEnv = {
-      ...claudeEnv(),
+      ...competitorEnv(),
       CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(maxConcurrent),
       CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: String(maxDepth),
     };

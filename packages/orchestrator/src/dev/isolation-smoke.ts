@@ -13,8 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { claudeEnv } from '../utils/claude-env.js';
-import { claudeIsolationArgs, codexIsolationArgs, geminiIsolationArgs } from '../adapters/isolation.js';
+import { claudeIsolationArgs, competitorEnv, codexIsolationArgs, geminiIsolationArgs } from '../adapters/isolation.js';
 import { codexArgs } from '../adapters/codex/codex-adapter.js';
 
 const BUILTIN_AGENTS = new Set(['general-purpose', 'Explore', 'Plan', 'statusline-setup', 'claude-code-guide', 'claude']);
@@ -22,9 +21,9 @@ const PROMPT = 'reply OK';
 
 function run(bin: string, args: string[], input?: string) {
   const cwd = mkdtempSync(join(tmpdir(), 'arena-iso-'));
-  const env: NodeJS.ProcessEnv = { ...claudeEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
-  // The operator's own session may inject plugins through this variable; a real run from a shell would not.
-  delete env['CLAUDE_CODE_PLUGIN_DIRS'];
+  // The adapters' real env path, with no manual deletes: run this from inside a
+  // Claude Code session (CLAUDE_CODE_PLUGIN_DIRS set) to prove the scrub works.
+  const env: NodeJS.ProcessEnv = { ...competitorEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
   const r = spawnSync(bin, args, { cwd, env, input: input ?? '', encoding: 'utf8', timeout: 180_000 });
   return { stdout: r.stdout ?? '', stderr: r.stderr ?? '', status: r.status };
 }

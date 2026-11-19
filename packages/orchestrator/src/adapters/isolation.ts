@@ -38,7 +38,13 @@
  *   The test machine had no gemini extensions or MCP servers configured, so
  *   for gemini the smoke check proves the flags are accepted and auth works,
  *   not that they removed anything.
+ *
+ * `--ignore-user-config` makes Codex ignore the operator's config.toml (model
+ * defaults, a custom model_provider / base URL), while model-catalog's
+ * `codex debug models` probe does not use the flag.
  */
+
+import { claudeEnv } from '../utils/claude-env.js';
 
 export function claudeIsolationArgs(): string[] {
   return ['--strict-mcp-config', '--setting-sources', 'project'];
@@ -50,4 +56,29 @@ export function codexIsolationArgs(): string[] {
 
 export function geminiIsolationArgs(): string[] {
   return ['--extensions', 'none', '--allowed-mcp-server-names', 'arena-none'];
+}
+
+/**
+ * Environment variables that inject plugins, MCP servers, managed settings or
+ * settings files into a competitor's CLI. The server is usually started from
+ * inside a Claude Code session, which sets some of these; the flags above do
+ * not cover them. Auth variables (CLAUDE_CONFIG_DIR, ANTHROPIC_*, CODEX_HOME,
+ * GEMINI_CLI_HOME, API keys) are deliberately NOT here.
+ */
+const INJECTING_EXACT: readonly string[] = [
+  'CLAUDE_CODE_MANAGED_SETTINGS_PATH',
+  'GEMINI_CLI_SYSTEM_SETTINGS_PATH',
+  'GEMINI_CLI_SYSTEM_DEFAULTS_PATH',
+];
+const INJECTING_PREFIXES: readonly string[] = ['CLAUDE_CODE_PLUGIN_', 'CLAUDE_CODE_MCP_'];
+
+export function isInjectingEnvVar(name: string): boolean {
+  return INJECTING_EXACT.includes(name) || INJECTING_PREFIXES.some((p) => name.startsWith(p));
+}
+
+/** The competitor's environment: the host env minus anything that injects extra tools. */
+export function competitorEnv(source: NodeJS.ProcessEnv = claudeEnv()): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(source)) if (!isInjectingEnvVar(k)) out[k] = v;
+  return out;
 }

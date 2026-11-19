@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CompetitionFormat } from '@arena/shared';
 import type { Brief } from '@arena/shared';
 
-const { spawnCalls } = vi.hoisted(() => ({ spawnCalls: [] as Array<{ command: string; args: string[] }> }));
+const { spawnCalls } = vi.hoisted(() => ({ spawnCalls: [] as Array<{ command: string; args: string[]; env?: NodeJS.ProcessEnv }> }));
 
 vi.mock('node:child_process', async () => {
   const { EventEmitter } = await import('node:events');
@@ -19,8 +19,8 @@ vi.mock('node:child_process', async () => {
     kill = vi.fn();
   }
   return {
-    spawn: (command: string, args: string[]) => {
-      spawnCalls.push({ command, args });
+    spawn: (command: string, args: string[], options?: { env?: NodeJS.ProcessEnv }) => {
+      spawnCalls.push({ command, args, env: options?.env });
       return new FakeChild();
     },
   };
@@ -69,6 +69,48 @@ describe('competitor isolation', () => {
       expect(args.indexOf(iso[0]!)).toBeLessThan(args.indexOf(modelFlag));
     });
   }
+});
+
+describe('competitor environment', () => {
+  beforeEach(() => { spawnCalls.length = 0; });
+
+  const INJECTORS = [
+    'CLAUDE_CODE_PLUGIN_DIRS', 'CLAUDE_CODE_PLUGIN_SEED_DIR', 'CLAUDE_CODE_PLUGIN_CACHE_DIR',
+    'CLAUDE_CODE_MANAGED_SETTINGS_PATH', 'CLAUDE_CODE_MCP_SERVER_URL',
+    'GEMINI_CLI_SYSTEM_SETTINGS_PATH', 'GEMINI_CLI_SYSTEM_DEFAULTS_PATH',
+  ];
+
+  for (const [name, Adapter] of [['claude', ClaudeAdapter], ['codex', CodexAdapter], ['gemini', GeminiAdapter]] as const) {
+    it(`${name} does not inherit variables that inject plugins, MCP or settings`, async () => {
+      for (const k of INJECTORS) process.env[k] = '/somewhere';
+      process.env['CLAUDE_CONFIG_DIR'] = '/auth-dir';
+      try {
+        const a = new Adapter('t', { workdir: '/tmp', competitionId: 'c' } as never);
+        await a.injectBrief(BRIEF, 'p');
+        await a.startExecution();
+        const env = spawnCalls[0]!.env!;
+        for (const k of INJECTORS) expect(env[k], k).toBeUndefined();
+        expect(env['CLAUDE_CONFIG_DIR']).toBe('/auth-dir'); // auth is kept
+      } finally {
+        for (const k of [...INJECTORS, 'CLAUDE_CONFIG_DIR']) delete process.env[k];
+      }
+    });
+  }
+
+  it('claude keeps the squad cap variables', async () => {
+    process.env['CLAUDE_CODE_PLUGIN_DIRS'] = '/x';
+    try {
+      const a = new ClaudeAdapter('t', { workdir: '/tmp', competitionId: 'c' });
+      await a.injectBrief(BRIEF, 'p');
+      await a.startExecution();
+      expect(spawnCalls[0]!.env).toMatchObject({
+        CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '6',
+        CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '1',
+      });
+    } finally {
+      delete process.env['CLAUDE_CODE_PLUGIN_DIRS'];
+    }
+  });
 });
 
 describe('helper stages', () => {

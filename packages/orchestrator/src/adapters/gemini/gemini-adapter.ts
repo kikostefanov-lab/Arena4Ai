@@ -3,8 +3,7 @@ import { createInterface } from 'node:readline';
 import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
-import { claudeEnv } from '../../utils/claude-env.js';
-import { geminiIsolationArgs } from '../isolation.js';
+import { competitorEnv, geminiIsolationArgs } from '../isolation.js';
 import { safeModelVariant } from '../model-variant.js';
 import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
@@ -144,5 +143,5 @@ export class GeminiAdapter extends BaseAdapter {
  * unknown flag.
  */
 function geminiAgentEnv(): NodeJS.ProcessEnv {
-  return { ...claudeEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
+  return { ...competitorEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
 }

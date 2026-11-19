@@ -2,9 +2,8 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { BaseAdapter } from '../base-adapter.js';
 import { CodexJsonNormalizer } from './codex-json-normalizer.js';
-import { codexIsolationArgs } from '../isolation.js';
+import { codexIsolationArgs, competitorEnv } from '../isolation.js';
 import { squadLimits } from '../squad-limits.js';
-import { claudeEnv } from '../../utils/claude-env.js';
 import { safeModelVariant } from '../model-variant.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
@@ -88,7 +87,7 @@ export class CodexAdapter extends BaseAdapter {
             this.workdir,
             this.codexBin,
             args,
-            claudeEnv(),
+            competitorEnv(),
           )
         : spawn(
             this.codexBin,
@@ -98,7 +97,7 @@ export class CodexAdapter extends BaseAdapter {
               stdio: ['ignore', 'pipe', 'pipe'],
               // Own process group so shutdown() can signal the agent's children too.
               detached: process.platform !== 'win32',
-              env: claudeEnv(),
+              env: competitorEnv(),
             },
           );
 
