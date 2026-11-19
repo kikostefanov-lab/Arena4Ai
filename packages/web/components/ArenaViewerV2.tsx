@@ -381,6 +381,8 @@ export default function ArenaViewerV2({
   const originRef = useRef<number | null>(null);
   /** Current winner, so a renderer rebuilt mid-flight does not lose the verdict. */
   const winnerRef = useRef<string | null>(null);
+  /** The final state of a FINISHED competition (null while live), for the same reason. */
+  const finalStateRef = useRef<string | null>(null);
   /** End of stream the paused view is currently parked on. */
   const parkedAtRef = useRef<number | null>(null);
 
@@ -404,6 +406,16 @@ export default function ArenaViewerV2({
    */
   const isLive = phase === 'active' || phase === 'freeze' || phase === 'judging';
 
+  /**
+   * A replay plays as a match: the renderer's world is 'active' until the
+   * playhead reaches the end and only then reveals the verdict. The HUD follows
+   * that, not the final `state` prop, or the VICTOR panel would sit over the
+   * whole replay. Live, the prop is the truth and this is not consulted.
+   */
+  const [playheadPhase, setPlayheadPhase] = useState<ArenaPhase | null>(null);
+  const playheadPhaseRef = useRef<ArenaPhase | null>(null);
+  const hudPhase: ArenaPhase = isLive ? phase : (playheadPhase ?? phase);
+
   const teamsKey = useMemo(
     () => teams.map((t) => `${t.id}|${t.model}|${t.persona ?? ''}`).join('::'),
     [teams],
@@ -426,6 +438,8 @@ export default function ArenaViewerV2({
         typeof window !== 'undefined' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     });
+    r.setWinner(winnerRef.current);
+    r.setFinalState(finalStateRef.current);
     rendererRef.current = r;
     consumedRef.current = 0;
     lastIdRef.current = null;
@@ -559,6 +573,7 @@ export default function ArenaViewerV2({
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
       const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
       replay.setWinner(winnerRef.current);
+      replay.setFinalState(finalStateRef.current);
       /**
        * Open a FINISHED competition on its finished state, not on an empty floor.
        *
@@ -591,6 +606,8 @@ export default function ArenaViewerV2({
       rendererRef.current = null;
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
       const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
+      rebuilt.setWinner(winnerRef.current);
+      rebuilt.setFinalState(finalStateRef.current);
       rendererRef.current = rebuilt;
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
@@ -613,8 +630,10 @@ export default function ArenaViewerV2({
   // ── Winner / terminal poses ───────────────────────────────────
   useEffect(() => {
     winnerRef.current = phase === 'reveal' ? (winnerId ?? null) : null;
+    finalStateRef.current = isLive ? null : state;
     rendererRef.current?.setWinner(winnerRef.current);
-  }, [phase, winnerId]);
+    rendererRef.current?.setFinalState(finalStateRef.current);
+  }, [phase, winnerId, isLive, state]);
 
   // ── The single animation loop ─────────────────────────────────
   //
@@ -661,7 +680,16 @@ export default function ArenaViewerV2({
             parkedAtRef.current = r.totalMs;
           }
 
-          if (orbit && phase !== 'reveal') {
+          // A replay's phase lives in the world. Mirror it into React only when
+          // it changes, never per frame.
+          if (!isLive && r.world.phase !== playheadPhaseRef.current) {
+            playheadPhaseRef.current = r.world.phase;
+            setPlayheadPhase(r.world.phase);
+          }
+
+          // Live is never 'reveal' (that is what makes it live); a replay holds
+          // the orbit off only once its playhead has reached the verdict.
+          if (orbit && !(!isLive && r.world.phase === 'reveal')) {
             r.camera.tyaw = -0.62 + Math.sin(performance.now() / 9000) * 0.14;
           }
 
@@ -721,7 +749,7 @@ export default function ArenaViewerV2({
       {teams.length >= 2 && (
         <>
           {teams.length > 2 && (
-            <div style={{ position: 'relative', height: 48 }}><PhaseChip phase={phase} /></div>
+            <div style={{ position: 'relative', height: 48 }}><PhaseChip phase={hudPhase} /></div>
           )}
           <div style={{
             display: 'grid', alignItems: 'start', gap: 12,
@@ -729,7 +757,7 @@ export default function ArenaViewerV2({
           }}>
             {teams.map((t, i) => (
               <Fragment key={t.id}>
-                {teams.length === 2 && i === 1 && <PhaseChip phase={phase} />}
+                {teams.length === 2 && i === 1 && <PhaseChip phase={hudPhase} />}
                 <LaneHeader
                   team={t} color={teamColors[t.id]}
                   align={teams.length === 2 ? (i === 0 ? 'left' : 'right') : 'left'}
@@ -782,7 +810,7 @@ export default function ArenaViewerV2({
           </div>
         )}
         <WinnerBanner
-          visible={phase === 'reveal' && !!winnerId}
+          visible={hudPhase === 'reveal' && !!winnerId}
           winner={teams.find((t) => t.id === winnerId)}
           color={winnerId ? teamColors[winnerId] : '#00f0ff'}
           scores={scores}

@@ -1087,6 +1087,100 @@ describe('squads', () => {
     expect(r.honestyNotes).toEqual(['Codex reported a squad it did not identify.']);
   });
 
+  describe('replaying a finished match plays it as a match', () => {
+    type Terminal = { terminal: 'triumph' | 'kneel' | null };
+    const terminals = (r: IsoArenaRenderer) =>
+      [...(r as unknown as { units: Map<string, Terminal> }).units.values()].map((u) => u.terminal);
+    /** A finished match: last event at 120 s, verdict 'a', final state COMPLETE. */
+    const finished = (raw: ArenaEvent[], timeLimitMs = 300_000) => {
+      const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(raw, T0), timeLimitMs });
+      r.setWinner('a');
+      r.setFinalState('COMPLETE');
+      return r;
+    };
+    const match = () => [spawn('a', 'x1', 10_000), fileBy('a', 'main.go', 60_000), toolBy('b', 120_000)];
+
+    it('replay of a finished match is active before the end and reveal at the end', () => {
+      const r = finished(match());
+      r.seek(60_000);
+      expect(r.world.phase).toBe('active');
+      expect(terminals(r)).toEqual([null, null]);
+
+      r.seek(r.totalMs);
+      expect(r.world.phase).toBe('reveal');
+      expect(r.world.winnerId).toBe('a');
+      expect(r.world.compState).toBe('COMPLETE');
+      expect(terminals(r)).toEqual(['triumph', 'kneel']);
+
+      r.seek(30_000);
+      expect(r.world.phase).toBe('active');
+      // Rewinding takes the verdict poses down with the phase.
+      expect(terminals(r)).toEqual([null, null]);
+    });
+
+    it('squad members are visible state during replay', () => {
+      const r = finished([spawn('a', 'x1', 10_000), done('a', 'x1', 50_000), toolBy('b', 120_000)]);
+      r.seek(20_000);
+      expect(r.world.teams.get('a')!.squad.get('x1')!.status).toBe('running');
+      expect(r.world.phase).toBe('active');
+    });
+
+    it('the end is the last event, and playback agrees with seek on either side of it', () => {
+      const ticked = finished(match());
+      const timed = finished(match());
+      for (const t of [119_000, 119_999]) {
+        ticked.tick(t - ticked.world.t);
+        timed.setTime(t);
+        const seeked = finished(match());
+        seeked.seek(t);
+        for (const r of [ticked, timed, seeked]) expect(r.world.phase).toBe('active');
+      }
+      ticked.tick(1);
+      timed.setTime(120_000);
+      const seeked = finished(match());
+      seeked.seek(120_000);
+      for (const r of [ticked, timed, seeked]) {
+        expect(r.world.phase).toBe('reveal');
+        expect(terminals(r)).toEqual(['triumph', 'kneel']);
+      }
+      // Playing on past the end stays revealed, and does not re-fire the reveal.
+      const confetti = (r: IsoArenaRenderer) =>
+        (r as unknown as { effects: Array<{ kind: string }> }).effects.filter((e) => e.kind === 'confetti').length;
+      expect(confetti(ticked)).toBe(1);
+      ticked.tick(5000);
+      expect(ticked.world.phase).toBe('reveal');
+      expect(confetti(ticked)).toBe(1);
+      expect(confetti(seeked)).toBe(0);
+    });
+
+    it('the end is the time limit when the stream runs past it', () => {
+      const r = finished(match(), 100_000);
+      r.seek(99_999);
+      expect(r.world.phase).toBe('active');
+      r.seek(100_000);
+      expect(r.world.phase).toBe('reveal');
+    });
+
+    it('declaring the final state while parked at the end reveals at once', () => {
+      const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });
+      r.seek(r.totalMs);
+      expect(r.world.phase).toBe('active');
+      r.setWinner('b');
+      r.setFinalState('COMPLETE');
+      expect(r.world.phase).toBe('reveal');
+      expect(terminals(r)).toEqual(['kneel', 'triumph']);
+    });
+
+    it('a renderer with no final state (live) never has its phase forced', () => {
+      const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });
+      r.setWinner(null);
+      r.seek(r.totalMs);
+      expect(r.world.phase).toBe('active');
+      r.setTime(r.totalMs + 10_000);
+      expect(r.world.phase).toBe('active');
+    });
+  });
+
   it('draws one marker per open member with a slot, plus a count, and takes deliverables', () => {
     const events = toFrameEvents([spawn('a', 'x1', 100), spawn('a', 'x2', 200), spawn('a', 'x3', 300), done('a', 'x3', 400)], T0);
     const r = new IsoArenaRenderer({ teams: two, events, timeLimitMs: 120_000, deliverables: ['decision.md'] });

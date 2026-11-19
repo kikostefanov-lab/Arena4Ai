@@ -87,6 +87,11 @@ export class IsoArenaRenderer {
   /** End of the stream. Grows in live mode as events arrive. */
   totalMs: number;
 
+  /** The declared verdict. Kept here because `seek()` wipes the world's copy. */
+  private winnerId: string | null = null;
+  /** How a FINISHED match ended; null while it is live. See `setFinalState()`. */
+  private finalState: string | null = null;
+
   /** Reused across frames so a 400-block floor allocates nothing per frame. */
   private sortIdx: Int32Array = new Int32Array(0);
   private sortDepth: Float64Array = new Float64Array(0);
@@ -236,6 +241,7 @@ export class IsoArenaRenderer {
       applied = true;
     }
     void applied;
+    this.followPlayhead(true);
   }
 
   // ─── time ──────────────────────────────────────────────────────────────────
@@ -251,11 +257,13 @@ export class IsoArenaRenderer {
       applied = true;
     }
     void applied;
+    this.followPlayhead(true);
   }
 
   /** Jump to `t`, rebuilding the world without firing effects. */
   seek(t: number): void {
     resetWorld(this.world);
+    this.world.winnerId = this.winnerId;
     this.effects.length = 0;
     this.applied = 0;
     this.world.t = t;
@@ -263,6 +271,43 @@ export class IsoArenaRenderer {
       applyEvent(this.world, this.events[this.applied++], false, { onState: (s) => this.onState(s, false) });
     }
     for (const st of this.world.structures.values()) st.h = st.th;
+    this.followPlayhead(false);
+  }
+
+  /**
+   * Where a finished match ends on the arena clock: its last event, or the time
+   * limit if that comes first (agents shut down at the deadline can still log
+   * a line or two after it; the match was over regardless).
+   */
+  get matchEndMs(): number {
+    const last = this.events.length ? this.events[this.events.length - 1].t : 0;
+    return Math.min(last, this.timeLimitMs);
+  }
+
+  /**
+   * In a replay of a FINISHED match the phase follows the playhead.
+   *
+   * No competition state events are stored, so nothing in the stream itself
+   * ever moves a replay out of 'active' or into the verdict. Before the match
+   * end the world is whatever its events made it ('active' after a reset);
+   * from the end on it is the declared final state, with the winner's
+   * end sequence. `seek()` and playback both land here after applying their
+   * events, so the two cannot disagree. A live renderer (no final state) is
+   * left exactly as its events leave it.
+   */
+  private followPlayhead(live: boolean): void {
+    const final = this.finalState;
+    if (final === null) return;
+    if (this.world.t >= this.matchEndMs) {
+      if (this.world.compState === final) return;
+      this.world.compState = final;
+      this.world.phase = phaseFor(final);
+      this.onState(final, live);
+    } else if (!live) {
+      // A rebuild before the end: take down the verdict poses an earlier
+      // position may have shown. (Playback only moves forward, so it never needs this.)
+      this.onState(this.world.compState, false);
+    }
   }
 
   private applyLive(ev: FrameEvent): void {
@@ -310,8 +355,21 @@ export class IsoArenaRenderer {
 
   /** Declare the winner (from the SCORED result, which is not an event payload). */
   setWinner(teamId: string | null): void {
+    this.winnerId = teamId;
     this.world.winnerId = teamId;
     this.onState(this.world.compState, false);
+  }
+
+  /**
+   * Declare the match FINISHED in `state` (e.g. 'COMPLETE'), or pass null for a
+   * live match. A finished match plays as a match: 'active' while the playhead
+   * is before `matchEndMs`, then `phaseFor(state)` with the winner's end
+   * sequence. Takes effect at once, so a view parked on the end reveals now.
+   */
+  setFinalState(state: string | null): void {
+    if (state === this.finalState) return;
+    this.finalState = state;
+    this.followPlayhead(false);
   }
 
   private push(e: Effect): void {
