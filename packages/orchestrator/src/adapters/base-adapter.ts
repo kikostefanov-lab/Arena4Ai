@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { readdir, readFile, stat, rm } from 'node:fs/promises';
+import { readdir, lstat, rm } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { EventType, expectedFileName, isVendoredPath, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
@@ -8,6 +8,7 @@ import type { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { stripAnsi, makeEvent, makeFileEvent } from './normalizer-utils.js';
 import { squadLimits } from './squad-limits.js';
 import { WorkdirWatcher, type WatchedFile } from './workdir-watcher.js';
+import { readRegularFile } from './safe-read.js';
 
 export const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
@@ -102,12 +103,17 @@ async function walkDir(
   } catch {
     return results;
   }
+  // The tree is agent-controlled: Dirent types and lstat never follow a
+  // symlink, so symlinks, FIFOs and devices are skipped here, and a directory
+  // swapped for a symlink since readdir is not descended into.
   for (const entry of entries) {
     const full = join(dir, entry.name);
     const rel = relative(base, full);
     const lower = rel.toLowerCase();
     if (entry.isDirectory()) {
       if (entry.name.startsWith('.')) continue;
+      const dirInfo = await lstat(full).catch(() => null);
+      if (!dirInfo?.isDirectory()) continue;
       const vendored = inVendored || isVendoredPath(rel);
       if (!vendored) {
         results.push(...await walkDir(full, base, excluded, namedPaths));
@@ -124,8 +130,8 @@ async function walkDir(
           continue;
         }
       }
-      const info = await stat(full).catch(() => null);
-      if (info) results.push({ path: rel, size: info.size, full });
+      const info = await lstat(full).catch(() => null);
+      if (info?.isFile()) results.push({ path: rel, size: info.size, full });
     }
   }
   return results;
@@ -303,10 +309,12 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     for (const { f } of ranked) {
       if (f.size > MAX_FILE_BYTES) { excluded.push({ path: f.path, reason: 'size' }); continue; }
       if (f.size > budget.remaining) { excluded.push({ path: f.path, reason: 'budget' }); continue; }
-      const content = await readFile(f.full, 'utf-8').catch(() => null);
-      if (content === null || content.includes('\0')) continue; // skip binary
-      budget.remaining -= f.size;
-      files.push({ path: f.path, content });
+      // No symlink follow, no blocking on a FIFO swapped in since the walk,
+      // and the caps re-checked against the file actually opened.
+      const read = await readRegularFile(f.full, Math.min(MAX_FILE_BYTES, budget.remaining));
+      if (read === null || read.data.includes(0)) continue; // not a regular file, or binary
+      budget.remaining -= read.size;
+      files.push({ path: f.path, content: read.data.toString('utf-8') });
     }
 
     return {

@@ -1,7 +1,8 @@
-import { closeSync, openSync, readSync, readdirSync, statSync } from 'node:fs';
+import { lstatSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isVendoredPath } from '@arena/shared';
 import { MAX_FILE_BYTES } from './base-adapter.js';
+import { readRegularFileSync } from './safe-read.js';
 
 export interface WatchedFile {
   /** Relative to the workdir, the same shape stream events use. */
@@ -26,19 +27,15 @@ const SNIFF_BYTES = 8192;
 /** Files one scan looks at before giving up on the rest (a vendored tree we missed). */
 export const MAX_SCAN_FILES = 5000;
 
-/** True when the file's first bytes contain a NUL: collection would skip it too. */
+/**
+ * True when the file's first bytes contain a NUL (collection would skip it too)
+ * or it cannot be read as a regular file. The read never follows a symlink and
+ * never blocks on a FIFO or device the agent swapped in (see safe-read.ts).
+ */
 function looksBinary(full: string): boolean {
-  let fd: number | undefined;
-  try {
-    fd = openSync(full, 'r');
-    const buf = Buffer.alloc(SNIFF_BYTES);
-    const n = readSync(fd, buf, 0, SNIFF_BYTES, 0);
-    return buf.subarray(0, n).includes(0);
-  } catch {
-    return true; // unreadable: nothing collection could show either
-  } finally {
-    if (fd !== undefined) closeSync(fd);
-  }
+  const read = readRegularFileSync(full, MAX_FILE_BYTES, SNIFF_BYTES);
+  if (!read) return true; // not a regular file: nothing collection could show either
+  return read.data.includes(0);
 }
 
 /**
@@ -138,22 +135,34 @@ export class WorkdirWatcher {
     } catch {
       return true;
     }
+    // Agent-controlled tree: lstat, never stat. A symlink, FIFO or device is
+    // skipped, and an entry swapped since readdir is re-checked here.
     for (const entry of entries) {
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (entry.name.startsWith('.') || isVendoredPath(childRel)) continue;
+        if (!isRealDirectory(join(this.opts.root, childRel))) continue;
         if (!this.walk(childRel, visit)) return false;
       } else if (entry.isFile()) {
         if (isVendoredPath(childRel)) continue;
         const full = join(this.opts.root, childRel);
         let info;
         try {
-          info = statSync(full);
+          info = lstatSync(full);
         } catch { continue; /* vanished mid-scan */ }
-        if (info.size > MAX_FILE_BYTES) continue;
+        if (!info.isFile() || info.size > MAX_FILE_BYTES) continue;
         if (!visit(childRel, `${info.mtimeMs}:${info.size}`, full)) return false;
       }
     }
     return true;
+  }
+}
+
+/** True for a directory that is not a symlink (lstat), at the moment of asking. */
+function isRealDirectory(full: string): boolean {
+  try {
+    return lstatSync(full).isDirectory();
+  } catch {
+    return false;
   }
 }
