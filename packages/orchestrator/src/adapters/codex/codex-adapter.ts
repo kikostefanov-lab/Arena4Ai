@@ -88,6 +88,7 @@ export class CodexAdapter extends BaseAdapter {
           );
 
       this.process = child;
+      this.startWorkdirWatch();
 
       // Codex writes all output (reasoning, tool calls, file writes) to stderr.
       // stdout is unused — attach it to suppress "pipe buffer full" backpressure.

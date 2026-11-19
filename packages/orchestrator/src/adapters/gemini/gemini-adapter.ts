@@ -98,6 +98,7 @@ export class GeminiAdapter extends BaseAdapter {
           );
 
       this.process = child;
+      this.startWorkdirWatch();
 
       const rl = createInterface({ input: child.stdout! });
       rl.on('line', (line) => {

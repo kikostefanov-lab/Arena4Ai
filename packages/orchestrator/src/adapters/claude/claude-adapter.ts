@@ -89,6 +89,7 @@ export class ClaudeAdapter extends BaseAdapter {
           );
 
       this.process = child;
+      this.startWorkdirWatch();
 
       // Pipe prompt via stdin to avoid CLI arg length limits
       if (child.stdin) {

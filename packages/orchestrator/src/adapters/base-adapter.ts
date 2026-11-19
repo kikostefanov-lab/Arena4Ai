@@ -5,10 +5,11 @@ import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { EventType, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
 import type { SandboxManager } from '../sandbox/sandbox-manager.js';
-import { stripAnsi, makeEvent } from './normalizer-utils.js';
+import { stripAnsi, makeEvent, makeFileEvent } from './normalizer-utils.js';
 import { squadLimits } from './squad-limits.js';
+import { WorkdirWatcher, type WatchedFile } from './workdir-watcher.js';
 
-const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
+export const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
 
 /** stderr lines kept per agent for a crash report. */
@@ -170,6 +171,9 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
 
   private readonly openSubAgents = new Set<string>();
   private readonly closedSubAgents = new Set<string>();
+  /** Set once shutdown() has run its final close: no new sub-agent may open. */
+  private sealed = false;
+  private watcher: WorkdirWatcher | null = null;
 
   constructor(teamId: string, workdir: string, competitionId: string, sandbox?: SandboxManager) {
     super();
@@ -252,6 +256,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
    */
   async shutdown(): Promise<void> {
     this.stopping = true;
+    this.watcher?.stop();
     if (this.sandbox) {
       // Kills the container; the `docker run` client process is handled below.
       await this.sandbox.killContainer(this.teamId).catch(() => {});
@@ -260,6 +265,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     if (!child) {
       liveAdapters.delete(this);
       this.closeOpenSubAgents('killed', 'deadline');
+      this.sealed = true;
       return;
     }
 
@@ -287,6 +293,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     this.process = null;
     liveAdapters.delete(this);
     this.closeOpenSubAgents('killed', 'deadline');
+    this.sealed = true;
   }
 
   /** Signal the process group when we own one (`detached` spawn), else just the child. */
@@ -354,7 +361,8 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     // Each sub-agent gets exactly one SPAWN and one DONE, whatever the CLI reports.
     if (event.type === EventType.SUB_AGENT_SPAWN) {
       const id = (event.payload as { agentId: string }).agentId;
-      if (this.openSubAgents.has(id) || this.closedSubAgents.has(id)) return;
+      // Trailing stdout after shutdown must not open a member nothing will close.
+      if (this.sealed || this.openSubAgents.has(id) || this.closedSubAgents.has(id)) return;
       this.openSubAgents.add(id);
     } else if (event.type === EventType.SUB_AGENT_DONE) {
       const id = (event.payload as { agentId: string }).agentId;
@@ -362,7 +370,33 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       this.openSubAgents.delete(id);
       this.closedSubAgents.add(id);
     }
+    if (
+      (event.type === EventType.FILE_CREATE || event.type === EventType.FILE_MODIFY) &&
+      (event.payload as { opSource?: string }).opSource !== 'watch'
+    ) {
+      const path = (event.payload as { path?: string }).path;
+      if (path) this.watcher?.noteStreamPath(path);
+    }
     this.emit('arenaEvent', event);
+  }
+
+  /**
+   * Poll the workdir for files the CLI's stream never reports (sub-agents write
+   * straight to disk). Call right after spawning; shutdown() stops it.
+   */
+  protected startWorkdirWatch(): void {
+    this.watcher?.stop();
+    this.watcher = new WorkdirWatcher({ root: this.workdir, onFile: (f) => this.onWatchedFile(f) });
+    this.watcher.start();
+  }
+
+  protected onWatchedFile(f: WatchedFile): void {
+    const event = makeFileEvent(
+      { op: f.op, opSource: 'watch', path: f.path, text: f.path },
+      { competitionId: this.competitionId, teamId: this.teamId },
+    );
+    if (this.openSubAgentCount > 0) event.metadata.squad = true;
+    this.emitArenaEvent(event);
   }
 
   /** Sub-agents spawned and not yet reported done. */
