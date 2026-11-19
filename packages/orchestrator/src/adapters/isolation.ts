@@ -44,7 +44,7 @@
  * `codex debug models` probe does not use the flag.
  */
 
-import { claudeEnv, isOperatorHandleEnvVar } from '../utils/claude-env.js';
+import { claudeEnv, isArenaSecretEnvVar, isOperatorHandleEnvVar } from '../utils/claude-env.js';
 
 export function claudeIsolationArgs(): string[] {
   return ['--strict-mcp-config', '--setting-sources', 'project'];
@@ -78,15 +78,19 @@ export function isInjectingEnvVar(name: string): boolean {
 
 /**
  * The competitor's environment: the host env minus anything that injects extra
- * tools, and minus the handles to the operator's machine (IDE ports, local
+ * tools, minus the handles to the operator's machine (IDE ports, local
  * bridges, their tokens) that the sandbox blocklist already names
- * (`isOperatorHandleEnvVar`). Auth stays: CLAUDE_CONFIG_DIR, ANTHROPIC_*,
- * CODEX_HOME, OPENAI_*, GEMINI_CLI_HOME, GEMINI_API_KEY / GOOGLE_* and HOME.
+ * (`isOperatorHandleEnvVar`), and minus the arena's own secrets
+ * (`isArenaSecretEnvVar`: DATABASE_URL, ARENA_*, PG*), which a host-run
+ * competitor's code could otherwise use to read the arena DB or rewrite its
+ * own scores. Auth stays: CLAUDE_CONFIG_DIR, ANTHROPIC_*, CODEX_HOME, OPENAI_*,
+ * GEMINI_CLI_HOME, GEMINI_API_KEY / GOOGLE_* and HOME. The squad caps the
+ * adapters add on top (CLAUDE_CODE_MAX_*) are set after this filter.
  */
 export function competitorEnv(source: NodeJS.ProcessEnv = claudeEnv()): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(source)) {
-    if (isInjectingEnvVar(k) || isOperatorHandleEnvVar(k)) continue;
+    if (isInjectingEnvVar(k) || isOperatorHandleEnvVar(k) || isArenaSecretEnvVar(k)) continue;
     out[k] = v;
   }
   return out;

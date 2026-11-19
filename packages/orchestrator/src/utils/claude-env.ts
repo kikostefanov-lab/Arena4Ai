@@ -95,6 +95,26 @@ export function isOperatorHandleEnvVar(name: string): boolean {
   return OPERATOR_HANDLE_EXACT.includes(name) || OPERATOR_HANDLE_PREFIXES.some((p) => name.startsWith(p));
 }
 
+/**
+ * The arena's own secrets: its database and its API key. Model-written code
+ * that can read these can read the arena DB or rewrite its own scores, so they
+ * reach no competitor, sandboxed (`sandboxEnv()`) or host-run
+ * (`competitorEnv()`). One list for both, so the two paths cannot drift.
+ *
+ *  - DATABASE_URL     the orchestrator's Postgres connection string
+ *  - ARENA_*          ARENA_API_KEY and every other orchestrator setting. The
+ *                     orchestrator reads its own (ARENA_SQUAD_MAX_*, judge
+ *                     models...) before a child env is built; no CLI needs them.
+ *  - PG*              libpq's connection variables (PGPASSWORD, PGHOST, PGUSER...)
+ */
+export const ARENA_SECRET_EXACT: readonly string[] = ['DATABASE_URL'];
+export const ARENA_SECRET_PREFIXES: readonly string[] = ['ARENA_', 'PG'];
+
+/** True for a variable that is one of the arena's own secrets (see above). */
+export function isArenaSecretEnvVar(name: string): boolean {
+  return ARENA_SECRET_EXACT.includes(name) || ARENA_SECRET_PREFIXES.some((p) => name.startsWith(p));
+}
+
 const BLOCKED_EXACT: ReadonlySet<string> = new Set([
   // nested-session markers — a claude inside a claude refuses to start
   'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT',
@@ -116,17 +136,17 @@ const BLOCKED_EXACT: ReadonlySet<string> = new Set([
 
 /**
  * Namespaces that never cross the boundary, even when they sit under an
- * allowed prefix. `ARENA_` is listed for the record — DATABASE_URL and
- * ARENA_API_KEY are already outside every allowed prefix, but stating it
- * here means widening a prefix later cannot quietly re-expose them.
+ * allowed prefix. The arena's secrets are already outside every allowed
+ * prefix, but blocking them here means widening a prefix later cannot quietly
+ * re-expose them.
  */
 const BLOCKED_PREFIXES: readonly string[] = [
-  'ARENA_',
+  ...ARENA_SECRET_PREFIXES,
   ...OPERATOR_HANDLE_PREFIXES,
 ];
 
 /** Never forwarded, full stop. Redundant with the rules above, kept explicit. */
-const NEVER_FORWARD: readonly string[] = ['DATABASE_URL', 'ARENA_API_KEY'];
+const NEVER_FORWARD: readonly string[] = [...ARENA_SECRET_EXACT, 'ARENA_API_KEY'];
 
 function isTruthy(value: string | undefined): boolean {
   if (!value) return false;

@@ -123,6 +123,62 @@ describe('competitor environment', () => {
     });
   }
 
+  // A host-run competitor (ARENA_SKIP_SANDBOX=true) runs model-written code on
+  // the operator's machine: with these it could read the arena DB or rewrite
+  // its own scores mid-match.
+  const ARENA_SECRETS = {
+    DATABASE_URL: 'postgresql://localhost/arena', ARENA_API_KEY: 'secret-key',
+    ARENA_ALLOWED_ORIGINS: 'https://x', PGPASSWORD: 'pw', PGHOST: 'db.internal',
+    ARENA_SQUAD_MAX_CONCURRENT: '6', ARENA_SQUAD_MAX_DEPTH: '1',
+  };
+
+  for (const [name, Adapter] of [['claude', ClaudeAdapter], ['codex', CodexAdapter], ['gemini', GeminiAdapter]] as const) {
+    it(`${name} does not inherit the arena's own secrets, and keeps auth`, async () => {
+      Object.assign(process.env, ARENA_SECRETS, AUTH);
+      try {
+        const a = new Adapter('t', { workdir: '/tmp', competitionId: 'c' } as never);
+        await a.injectBrief(BRIEF, 'p');
+        await a.startExecution();
+        const env = spawnCalls[0]!.env!;
+        for (const k of Object.keys(ARENA_SECRETS)) expect(env[k], k).toBeUndefined();
+        expect(Object.keys(env).filter((k) => k.startsWith('ARENA_') || k.startsWith('PG'))).toEqual([]);
+        expect(env).toMatchObject(AUTH);
+        if (name === 'claude') {
+          // The caps are read by the orchestrator from ARENA_SQUAD_MAX_* before
+          // the env is built, so dropping those from the child loses nothing.
+          expect(env).toMatchObject({
+            CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '6',
+            CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '1',
+          });
+        }
+        if (name === 'codex') {
+          expect(spawnCalls[0]!.args).toContain('agents.max_concurrent_threads_per_session=6');
+        }
+      } finally {
+        for (const k of [...Object.keys(ARENA_SECRETS), ...Object.keys(AUTH)]) delete process.env[k];
+      }
+    });
+  }
+
+  it('the squad cap set by ARENA_SQUAD_MAX_* still reaches the CLI though the variable does not', async () => {
+    process.env['ARENA_SQUAD_MAX_CONCURRENT'] = '3';
+    process.env['ARENA_SQUAD_MAX_DEPTH'] = '2';
+    try {
+      const a = new ClaudeAdapter('t', { workdir: '/tmp', competitionId: 'c' });
+      await a.injectBrief(BRIEF, 'p');
+      await a.startExecution();
+      const env = spawnCalls[0]!.env!;
+      expect(env['ARENA_SQUAD_MAX_CONCURRENT']).toBeUndefined();
+      expect(env).toMatchObject({
+        CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '3',
+        CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '2',
+      });
+    } finally {
+      delete process.env['ARENA_SQUAD_MAX_CONCURRENT'];
+      delete process.env['ARENA_SQUAD_MAX_DEPTH'];
+    }
+  });
+
   it('claude keeps the squad cap variables', async () => {
     process.env['CLAUDE_CODE_PLUGIN_DIRS'] = '/x';
     try {
