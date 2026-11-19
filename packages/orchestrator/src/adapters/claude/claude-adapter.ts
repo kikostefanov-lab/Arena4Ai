@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { Brief } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
-import { normalizeLine } from './claude-normalizer.js';
+import { ClaudeNormalizer, normalizeLine } from './claude-normalizer.js';
+import { squadLimits } from '../squad-limits.js';
 import { claudeEnv } from '../../utils/claude-env.js';
 import { safeModelVariant } from '../model-variant.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
@@ -53,6 +54,13 @@ export class ClaudeAdapter extends BaseAdapter {
     }
 
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
+    const normalizer = new ClaudeNormalizer(ctx);
+    const { maxConcurrent, maxDepth } = squadLimits();
+    const agentEnv = {
+      ...claudeEnv(),
+      CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(maxConcurrent),
+      CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: String(maxDepth),
+    };
 
     this.executionDone = new Promise<void>((resolve, reject) => {
       const claudeArgs = [
@@ -73,7 +81,7 @@ export class ClaudeAdapter extends BaseAdapter {
             this.workdir,
             this.claudeBin,
             claudeArgs,
-            claudeEnv(),
+            agentEnv,
             { stdin: true }, // prompt is piped on stdin below
           )
         : spawn(
@@ -84,7 +92,7 @@ export class ClaudeAdapter extends BaseAdapter {
               stdio: ['pipe', 'pipe', 'pipe'],
               // Own process group so shutdown() can signal the agent's children too.
               detached: process.platform !== 'win32',
-              env: claudeEnv(),
+              env: agentEnv,
             },
           );
 
@@ -104,8 +112,7 @@ export class ClaudeAdapter extends BaseAdapter {
       const rl = createInterface({ input: child.stdout! });
       rl.on('line', (line) => {
         if (!line.trim()) return;
-        const event = normalizeLine(line, ctx);
-        this.emitArenaEvent(event);
+        for (const event of normalizer.addLine(line)) this.emitArenaEvent(event);
         // Claude reports API failures (unknown model, auth, rate limit) as
         // stream-json on stdout; keep them so a crash can be explained.
         const failure = claudeStreamError(line);

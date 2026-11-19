@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeLine } from './claude-normalizer.js';
+import { ClaudeNormalizer, normalizeLine } from './claude-normalizer.js';
+import { loadFixture } from '../__fixtures__/load.js';
 import { EventType } from '@arena/shared';
 
 const BASE = { competitionId: 'comp-1', teamId: 'team-a' };
@@ -140,5 +141,66 @@ describe('normalizeLine()', () => {
   it('handles malformed JSON gracefully by returning an ERROR event', () => {
     const event = normalizeLine('not-json{{', BASE);
     expect(event.type).toBe(EventType.ERROR);
+  });
+});
+
+
+describe('ClaudeNormalizer squad events', () => {
+  const run = (name: string) => {
+    const n = new ClaudeNormalizer(BASE);
+    return loadFixture(name).flatMap((l) => n.addLine(l));
+  };
+  const ofType = (evs: ReturnType<typeof run>, t: EventType) => evs.filter((e) => e.type === t);
+
+  it('claude-parallel: two spawns, two completed dones, files attributed', () => {
+    const evs = run('claude-parallel');
+    const spawns = ofType(evs, EventType.SUB_AGENT_SPAWN);
+    const dones = ofType(evs, EventType.SUB_AGENT_DONE);
+    expect(spawns).toHaveLength(2);
+    expect(dones).toHaveLength(2);
+    const ids = spawns.map((e) => (e.payload as { agentId: string }).agentId);
+    expect(new Set(ids).size).toBe(2);
+    expect(dones.map((e) => (e.payload as { status: string }).status)).toEqual(['completed', 'completed']);
+    expect(spawns[0].payload).toMatchObject({ kind: 'general-purpose', background: false, depth: 1 });
+    expect(dones.every((e) => (e.payload as { model?: string }).model === 'claude-haiku-5-5')).toBe(true);
+    const files = ofType(evs, EventType.FILE_CREATE);
+    expect(files.length).toBeGreaterThanOrEqual(2);
+    for (const f of files) expect(ids).toContain(f.metadata.agentId);
+    const lead = evs.filter((e) => e.metadata.agentId === undefined);
+    expect(lead.some((e) => e.type === EventType.FILE_CREATE)).toBe(false);
+  });
+
+  it('merges task_notification into an earlier task_updated DONE (usage-first order)', () => {
+    const n = new ClaudeNormalizer(BASE);
+    const started = { type: 'system', subtype: 'task_started', task_id: 't1', tool_use_id: 'u1', description: 'd', task_type: 'local_agent' };
+    const note = { type: 'system', subtype: 'task_notification', task_id: 't1', status: 'completed', summary: 'ok', usage: { total_tokens: 5, tool_uses: 2, duration_ms: 9 } };
+    n.addLine(JSON.stringify(started));
+    const first = n.addLine(JSON.stringify(note));
+    expect(first).toHaveLength(1);
+    expect(first[0].payload).toMatchObject({ agentId: 't1', status: 'completed', summary: 'ok', usage: { tokens: 5, toolUses: 2, durationMs: 9 } });
+    const upd = n.addLine(JSON.stringify({ type: 'system', subtype: 'task_updated', task_id: 't1', patch: { status: 'completed' } }));
+    expect(upd.filter((e) => e.type === EventType.SUB_AGENT_DONE)).toHaveLength(0);
+  });
+
+  it('ignores DONE for an unknown task id', () => {
+    const n = new ClaudeNormalizer(BASE);
+    const evs = n.addLine(JSON.stringify({ type: 'system', subtype: 'task_updated', task_id: 'nope', patch: { status: 'completed' } }));
+    expect(evs.some((e) => e.type === EventType.SUB_AGENT_DONE)).toBe(false);
+  });
+
+  it('claude-background-bash: local_bash tasks make no spawn/done and result lines do not throw', () => {
+    const evs = run('claude-background-bash');
+    const ids = [...ofType(evs, EventType.SUB_AGENT_SPAWN), ...ofType(evs, EventType.SUB_AGENT_DONE)].map(
+      (e) => (e.payload as { agentId: string }).agentId,
+    );
+    // only the local_agent member (spawn + done); the nested local_bash task is ignored
+    expect(ids).toEqual(['afd0784724d161c13', 'afd0784724d161c13']);
+    expect(ids).not.toContain('bbv53n6u2');
+  });
+
+  it('claude-concurrency-refused: one spawn, refused call stays a TOOL_CALL', () => {
+    const evs = run('claude-concurrency-refused');
+    expect(ofType(evs, EventType.SUB_AGENT_SPAWN)).toHaveLength(1);
+    expect(ofType(evs, EventType.TOOL_CALL).some((e) => (e.payload as { tool: string }).tool === 'Agent')).toBe(true);
   });
 });

@@ -304,3 +304,16 @@ describe('gemini trusted-folder requirement (gemini-cli >= 0.68)', () => {
     );
   });
 });
+
+describe('ClaudeAdapter squad limits', () => {
+  it('passes the squad caps to the agent CLI environment', async () => {
+    spawnCalls.length = 0;
+    const a = new ClaudeAdapter('t', { workdir: '/tmp', competitionId: 'c' });
+    await a.injectBrief(BRIEF, 'p');
+    await a.startExecution();
+    expect(spawnCalls[0].options?.env).toMatchObject({
+      CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '6',
+      CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '1',
+    });
+  });
+});

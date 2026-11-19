@@ -1,5 +1,12 @@
-import { EventType, type ArenaEvent } from '@arena/shared';
 import {
+  EventType,
+  type ArenaEvent,
+  type SubAgentDonePayload,
+  type SubAgentSpawnPayload,
+  type SubAgentStatus,
+} from '@arena/shared';
+import {
+  squadLabel,
   stripAnsi,
   makeEvent,
   FILE_PATH_RE,
@@ -146,6 +153,126 @@ function normalizeContentBlock(block: ContentBlock, ctx: NormalizeContext): Aren
 
     default:
       return makeEvent(EventType.REASONING, { raw: block }, ctx);
+  }
+}
+
+const STATUS_MAP: Record<string, SubAgentStatus> = {
+  completed: 'completed',
+  failed: 'failed',
+  error: 'failed',
+  killed: 'killed',
+  stopped: 'killed',
+};
+
+/**
+ * Stateful wrapper around {@link normalizeLine} that understands Claude's
+ * squad lines: `task_started` / `task_updated` / `task_notification` system
+ * lines become SUB_AGENT_SPAWN / SUB_AGENT_DONE, and any line tagged with a
+ * `parent_tool_use_id` is attributed to its sub-agent via `metadata.agentId`.
+ *
+ * One instance per agent process (it remembers tool_use_id -> task id).
+ */
+export class ClaudeNormalizer {
+  private readonly taskByToolUse = new Map<string, string>();
+  private readonly known = new Set<string>();
+  private readonly done = new Set<string>();
+  private readonly modelByAgent = new Map<string, string>();
+
+  constructor(private readonly ctx: NormalizeContext) {}
+
+  addLine(line: string): ArenaEvent[] {
+    let msg: Record<string, unknown> | undefined;
+    try {
+      const parsed: unknown = JSON.parse(line);
+      if (parsed && typeof parsed === 'object') msg = parsed as Record<string, unknown>;
+    } catch {
+      // normalizeLine reports the parse failure
+    }
+    if (!msg) return [normalizeLine(line, this.ctx)];
+
+    if (msg.type === 'system') {
+      const handled = this.systemLine(msg);
+      if (handled) return handled;
+    }
+
+    const event = normalizeLine(line, this.ctx);
+    const parent = msg.parent_tool_use_id;
+    if (typeof parent === 'string' && parent) {
+      const agentId =
+        this.taskByToolUse.get(parent) ?? (typeof msg.agent_id === 'string' ? msg.agent_id : undefined);
+      if (agentId) {
+        event.metadata.agentId = agentId;
+        const model = (msg.message as { model?: unknown } | undefined)?.model;
+        if (msg.type === 'assistant' && typeof model === 'string' && !this.modelByAgent.has(agentId)) {
+          this.modelByAgent.set(agentId, model);
+        }
+      }
+    }
+    return [event];
+  }
+
+  /** Returns the events for a squad system line, or undefined when it is not one. */
+  private systemLine(msg: Record<string, unknown>): ArenaEvent[] | undefined {
+    const taskId = typeof msg.task_id === 'string' ? msg.task_id : undefined;
+    if (!taskId) return undefined;
+
+    switch (msg.subtype) {
+      case 'task_started': {
+        if (msg.task_type !== 'local_agent') return undefined;
+        const toolUseId = typeof msg.tool_use_id === 'string' ? msg.tool_use_id : undefined;
+        if (toolUseId) this.taskByToolUse.set(toolUseId, taskId);
+        this.known.add(taskId);
+        const description = typeof msg.description === 'string' ? msg.description : '';
+        const payload: SubAgentSpawnPayload = {
+          agentId: taskId,
+          label: squadLabel(description),
+          description,
+          kind: typeof msg.subagent_type === 'string' ? msg.subagent_type : undefined,
+          background: typeof msg.is_backgrounded === 'boolean' ? msg.is_backgrounded : undefined,
+          depth: typeof msg.spawn_depth === 'number' ? msg.spawn_depth : 1,
+        };
+        return [makeEvent(EventType.SUB_AGENT_SPAWN, payload, this.ctx)];
+      }
+
+      case 'task_updated': {
+        if (!this.known.has(taskId)) return undefined;
+        const status = (msg.patch as { status?: unknown } | undefined)?.status;
+        if (typeof status !== 'string' || !(status in STATUS_MAP)) return undefined;
+        return this.finish(taskId, STATUS_MAP[status]);
+      }
+
+      case 'task_notification': {
+        if (!this.known.has(taskId)) return undefined;
+        if (this.done.has(taskId)) return [];
+        const status = typeof msg.status === 'string' ? STATUS_MAP[msg.status] : undefined;
+        const usage = msg.usage as { total_tokens?: number; tool_uses?: number; duration_ms?: number } | undefined;
+        return this.finish(taskId, status ?? 'unknown', {
+          summary: typeof msg.summary === 'string' ? msg.summary : undefined,
+          usage: usage
+            ? { tokens: usage.total_tokens, toolUses: usage.tool_uses, durationMs: usage.duration_ms }
+            : undefined,
+        });
+      }
+
+      default:
+        return undefined;
+    }
+  }
+
+  private finish(
+    agentId: string,
+    status: SubAgentStatus,
+    extra: Pick<SubAgentDonePayload, 'summary' | 'usage'> = {},
+  ): ArenaEvent[] {
+    if (this.done.has(agentId)) return [];
+    this.done.add(agentId);
+    const payload: SubAgentDonePayload = {
+      agentId,
+      status,
+      model: this.modelByAgent.get(agentId),
+      ...extra,
+    };
+    return [makeEvent(EventType.SUB_AGENT_DONE, payload, this.ctx)];
   }
 }
 
