@@ -5,7 +5,8 @@ import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { EventType, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
 import type { SandboxManager } from '../sandbox/sandbox-manager.js';
-import { stripAnsi } from './normalizer-utils.js';
+import { stripAnsi, makeEvent } from './normalizer-utils.js';
+import { squadLimits } from './squad-limits.js';
 
 const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
@@ -167,6 +168,9 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   /** Grace period between SIGTERM and SIGKILL in shutdown(). */
   shutdownGraceMs = Number(process.env.ARENA_SHUTDOWN_GRACE_MS) || DEFAULT_SHUTDOWN_GRACE_MS;
 
+  private readonly openSubAgents = new Set<string>();
+  private readonly closedSubAgents = new Set<string>();
+
   constructor(teamId: string, workdir: string, competitionId: string, sandbox?: SandboxManager) {
     super();
     this.teamId = teamId;
@@ -196,6 +200,16 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       'You are an autonomous AI agent in a timed competition. There is NO human to interact with.',
       'Do NOT ask clarifying questions — no one will answer. Make reasonable assumptions and start working immediately.',
       'Your ONLY goal is to produce deliverable files in the current working directory before time runs out.',
+      [
+        '[SQUAD]',
+        `You are the lead of a squad. Delegate independent parts of this brief to sub-agents running`,
+        `in parallel (up to ${squadLimits().maxConcurrent} at a time), and integrate their results yourself.`,
+        '1. First, write a skeleton of every named deliverable, so something exists if time runs out.',
+        '2. Give each sub-agent one clear task, the file it must write, and a time box well inside',
+        '   the time limit. Sub-agents work in this same directory.',
+        '3. Finish integrating and writing final deliverables before 80% of the time limit.',
+        'Only files in this directory are judged.',
+      ].join('\n'),
       `[BRIEF: ${brief.title}]`,
       brief.problem,
       constraints,
@@ -243,7 +257,11 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       await this.sandbox.killContainer(this.teamId).catch(() => {});
     }
     const child = this.process;
-    if (!child) { liveAdapters.delete(this); return; }
+    if (!child) {
+      liveAdapters.delete(this);
+      this.closeOpenSubAgents('killed', 'deadline');
+      return;
+    }
 
     const hasExited = () => child.exitCode !== null || child.signalCode !== null;
     const exited = new Promise<void>((resolve) => {
@@ -268,6 +286,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     this.signalProcess(child, 'SIGKILL', true);
     this.process = null;
     liveAdapters.delete(this);
+    this.closeOpenSubAgents('killed', 'deadline');
   }
 
   /** Signal the process group when we own one (`detached` spawn), else just the child. */
@@ -300,6 +319,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
    * not a rejection nobody awaits.
    */
   protected settleExit(code: number | null, cliName: string, resolve: () => void): void {
+    if (!this.stopping) this.closeOpenSubAgents('unknown', 'lead exited without reporting');
     if (code === 0 || code === null || this.stopping) {
       resolve();
       return;
@@ -331,7 +351,31 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
 
   /** Convenience: emit a typed ArenaEvent to all listeners. */
   protected emitArenaEvent(event: ArenaEvent): void {
+    // Each sub-agent gets exactly one SPAWN and one DONE, whatever the CLI reports.
+    if (event.type === EventType.SUB_AGENT_SPAWN) {
+      const id = (event.payload as { agentId: string }).agentId;
+      if (this.openSubAgents.has(id) || this.closedSubAgents.has(id)) return;
+      this.openSubAgents.add(id);
+    } else if (event.type === EventType.SUB_AGENT_DONE) {
+      const id = (event.payload as { agentId: string }).agentId;
+      if (this.closedSubAgents.has(id)) return;
+      this.openSubAgents.delete(id);
+      this.closedSubAgents.add(id);
+    }
     this.emit('arenaEvent', event);
+  }
+
+  /** Sub-agents spawned and not yet reported done. */
+  get openSubAgentCount(): number {
+    return this.openSubAgents.size;
+  }
+
+  /** Emit a DONE for every sub-agent still open, so no lifecycle is left dangling. */
+  protected closeOpenSubAgents(status: 'killed' | 'unknown', reason: string): void {
+    const ctx = { competitionId: this.competitionId, teamId: this.teamId };
+    for (const agentId of [...this.openSubAgents]) {
+      this.emitArenaEvent(makeEvent(EventType.SUB_AGENT_DONE, { agentId, status, reason }, ctx));
+    }
   }
 
   /**

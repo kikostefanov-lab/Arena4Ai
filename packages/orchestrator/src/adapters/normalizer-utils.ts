@@ -112,3 +112,16 @@ export const ERROR_LINE_RE = /^(?:error|fatal|exception)[:\s]/i;
 export function normalizeOutput(s: string): string {
   return s.trim().replace(/\r\n/g, '\n');
 }
+
+const SQUAD_LABEL_MAX = 18;
+
+/** Short chip label for a sub-agent: the first words of its description, at most 18 chars. */
+export function squadLabel(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return 'sub-agent';
+  if (clean.length <= SQUAD_LABEL_MAX) return clean;
+  const cut = clean.slice(0, SQUAD_LABEL_MAX - 1);
+  const atWord = cut.lastIndexOf(' ');
+  const base = atWord > 0 ? cut.slice(0, atWord) : cut;
+  return `${base.trimEnd()}…`;
+}
