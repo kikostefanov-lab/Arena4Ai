@@ -336,7 +336,7 @@
 - [ ] **Step 3: Run to confirm tests fail**
 
   ```bash
-  cd "/Users/kstefano/Personal Projects/agentarena" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator -- --reporter=verbose 2>&1 | grep -E "AgentProfileRepository|FAIL|PASS" | head -20
+  cd "<repo>" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator -- --reporter=verbose 2>&1 | grep -E "AgentProfileRepository|FAIL|PASS" | head -20
   ```
 
   Expected: FAIL — `AgentProfileRepository` not found.
@@ -506,7 +506,7 @@
 - [ ] **Step 5: Run the new tests**
 
   ```bash
-  cd "/Users/kstefano/Personal Projects/agentarena" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
+  cd "<repo>" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
   ```
 
   Expected: All tests pass. Count goes from 159 to 168 (9 new tests including the tags filter test).
@@ -576,7 +576,7 @@
 - [ ] **Step 3: Run to confirm the test FAILS**
 
   ```bash
-  cd "/Users/kstefano/Personal Projects/agentarena" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
+  cd "<repo>" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
   ```
 
   Expected: 1 test FAILS (makeTestRunner does not accept agentProfileRepo yet / updateStats not called).
@@ -626,7 +626,7 @@
 - [ ] **Step 5: Run tests**
 
   ```bash
-  cd "/Users/kstefano/Personal Projects/agentarena" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
+  cd "<repo>" && DATABASE_URL=postgresql://localhost/arena npm run test --workspace=packages/orchestrator 2>&1 | tail -5
   ```
 
   Expected: All tests pass.

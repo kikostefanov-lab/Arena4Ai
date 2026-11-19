@@ -18,9 +18,29 @@ export interface JudgeResult {
   heuristic?: boolean;
 }
 
+/**
+ * One seat of the cross-vendor judge panel (Claude, Codex and Gemini each judge
+ * every team). Recorded per team so a reader can see which judges the
+ * team's finalScore averages, and which dropped out and why.
+ */
+export interface JudgePanelSeat {
+  provider: 'claude' | 'codex' | 'gemini';
+  /** Model the judge ran on (the CLI's own report when it ran on its default). */
+  model: string;
+  judgeId: string;
+  /** Present iff this judge failed and is not in `judgeResults`. Failure kind, e.g. 'auth', 'timeout'. */
+  failure?: string;
+}
+
 export interface ScoreCard {
   teamId: string;
   judgeResults: JudgeResult[];
+  /**
+   * Set when the match was judged by the cross-vendor panel. `judgeResults`
+   * then holds the judges that succeeded, and `finalScore` is their mean; when
+   * every seat failed it holds the automated fallback instead.
+   */
+  judgePanel?: JudgePanelSeat[];
   finalScore: number;     // aggregated across judges
   rank: number;           // 1 = winner
   /**

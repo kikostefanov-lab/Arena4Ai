@@ -46,6 +46,8 @@ export interface Deliverable {
   teamId: string;
   files: Array<{ path: string; content: string }>;
   collectedAt: string; // ISO 8601
+  /** Files collection left out, so a short manifest is never mistaken for a short deliverable. */
+  excluded?: Array<{ path: string; reason: 'size' | 'budget' | 'vendored' }>;
 }
 
 export interface Competition {

@@ -189,3 +189,80 @@ describe('BaseAdapter.injectBrief() deliverable format injection', () => {
     expect(formatIdx).toBeLessThan(deliverablesIdx);
   });
 });
+
+describe('BaseAdapter.collectDeliverables named-first collection', () => {
+  let dir: string;
+  afterEach(async () => { await rm(dir, { recursive: true, force: true }); });
+
+  it('reads nested named files before a large research dir, and lists budget exclusions', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'research'));
+    // 60 x 100 KB = 6 MB, over the 5 MB total budget. Names sort before the named files.
+    for (let i = 0; i < 60; i++) {
+      await writeFile(join(dir, 'research', `a${String(i).padStart(2, '0')}.md`), 'x'.repeat(100 * 1024));
+    }
+    await writeFile(join(dir, 'decision.md'), '# Decision');
+    await writeFile(join(dir, 'research', 'kegs.md'), '# Kegs');
+    const a = new TestAdapter('team-a', dir, 'comp-1');
+    const d = await a.collectDeliverables(['decision.md with the final call', 'research/kegs.md']);
+    const paths = d.files.map((f) => f.path);
+    expect(paths.slice(0, 2)).toEqual(['decision.md', 'research/kegs.md']);
+    expect(d.excluded?.some((e) => e.reason === 'budget')).toBe(true);
+    expect(paths.length + d.excluded!.length).toBe(62);
+  });
+
+  it('matches a named file without a slash by basename anywhere in the tree', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'docs'));
+    await writeFile(join(dir, 'a.md'), 'a');
+    await writeFile(join(dir, 'docs', 'zz-report.md'), 'r');
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables(['zz-report.md']);
+    expect(d.files[0].path).toBe('docs/zz-report.md');
+  });
+
+  it('puts the top-level file ahead of a nested basename match for a bare name', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'docs'));
+    await writeFile(join(dir, 'docs', 'report.md'), 'draft'); // sorts first by path
+    await writeFile(join(dir, 'report.md'), 'final');
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables(['report.md']);
+    expect(d.files.map((f) => f.path).slice(0, 2)).toEqual(['report.md', 'docs/report.md']);
+  });
+
+  it('skips node_modules and .git, reporting only the vendored directory', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'node_modules', 'pkg'), { recursive: true });
+    await mkdir(join(dir, '.git'));
+    await writeFile(join(dir, 'node_modules', 'pkg', 'index.js'), 'module.exports = 1');
+    await writeFile(join(dir, '.git', 'config'), '[core]');
+    await writeFile(join(dir, 'main.js'), 'console.log(1)');
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables();
+    expect(d.files.map((f) => f.path)).toEqual(['main.js']);
+    expect(d.excluded).toEqual([{ path: 'node_modules', reason: 'vendored' }]);
+  });
+
+  it('collects a named file under a vendored-looking dir, and nothing else in it', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'out', 'deep'), { recursive: true });
+    await mkdir(join(dir, 'dist'));
+    await writeFile(join(dir, 'out', 'report.md'), '# Report');
+    await writeFile(join(dir, 'out', 'other.md'), 'other');
+    await writeFile(join(dir, 'out', 'deep', 'x.md'), 'x');
+    await writeFile(join(dir, 'dist', 'app.js'), 'app');
+    await writeFile(join(dir, 'main.js'), 'main');
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables(['out/report.md with findings']);
+    expect(d.files.map((f) => f.path)).toEqual(['out/report.md', 'main.js']);
+    expect(d.excluded).toEqual(expect.arrayContaining([
+      { path: 'dist', reason: 'vendored' },
+      { path: 'out', reason: 'vendored' },
+    ]));
+  });
+
+  it('reports an over-size file as excluded', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await writeFile(join(dir, 'big.txt'), 'x'.repeat(501 * 1024));
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables();
+    expect(d.files).toEqual([]);
+    expect(d.excluded).toEqual([{ path: 'big.txt', reason: 'size' }]);
+  });
+});

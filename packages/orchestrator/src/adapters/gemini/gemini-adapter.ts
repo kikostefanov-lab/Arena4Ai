@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline';
 import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
-import { claudeEnv } from '../../utils/claude-env.js';
+import { competitorEnv, geminiIsolationArgs } from '../isolation.js';
 import { safeModelVariant } from '../model-variant.js';
 import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
@@ -71,7 +71,7 @@ export class GeminiAdapter extends BaseAdapter {
       // SECURITY: spawn with an argv array, never through `/bin/sh -c`. The model
       // variant and the prompt are user-supplied; as argv entries they can only
       // ever be one argument each, whatever characters they contain.
-      const args = ['-p', this.promptText!, '--yolo', '-o', 'stream-json'];
+      const args = ['-p', this.promptText!, '--yolo', '-o', 'stream-json', ...geminiIsolationArgs()];
       const modelVariant = safeModelVariant(this.modelVariant);
       if (modelVariant) {
         args.push('--model', modelVariant);
@@ -98,11 +98,12 @@ export class GeminiAdapter extends BaseAdapter {
           );
 
       this.process = child;
+      this.startWorkdirWatch();
 
       const rl = createInterface({ input: child.stdout! });
       rl.on('line', (line) => {
         if (!line.trim()) return;
-        this.emitArenaEvent(normalizeLine(line, ctx));
+        for (const event of this.normalizeSafely(line, (l) => normalizeLine(l, ctx))) this.emitArenaEvent(event);
       });
 
       const errRl = createInterface({ input: child.stderr! });
@@ -142,5 +143,5 @@ export class GeminiAdapter extends BaseAdapter {
  * unknown flag.
  */
 function geminiAgentEnv(): NodeJS.ProcessEnv {
-  return { ...claudeEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
+  return { ...competitorEnv(), GEMINI_CLI_TRUST_WORKSPACE: 'true' };
 }

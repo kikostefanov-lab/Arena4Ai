@@ -1,18 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { EventType } from '@arena/shared';
 import { normalizeLine as claudeLine } from '../claude/claude-normalizer.js';
-import { CodexNormalizer } from '../codex/codex-normalizer.js';
+import { CodexJsonNormalizer } from '../codex/codex-json-normalizer.js';
 import { normalizeLine as geminiLine } from '../gemini/gemini-normalizer.js';
 import { PROVIDER_FILE_CAPABILITIES } from '../normalizer-utils.js';
 
 const BASE = { competitionId: 'c', teamId: 't' };
 
+/** codex `exec --json`: a completed file_change item, one change. */
 function codexFileEvent(line: string) {
-  const n = new CodexNormalizer(BASE);
-  n.addLine('OpenAI Codex v0.144.1'); n.addLine('--------');
-  n.addLine('workdir: /tmp/x'); n.addLine('model: m'); n.addLine('--------');
-  n.addLine('codex'); n.addLine('x'); n.addLine('file update');
-  return n.addLine(line)!;
+  const [kind, path] = line.split(' ');
+  const n = new CodexJsonNormalizer(BASE);
+  const [ev] = n.addLine(JSON.stringify({
+    type: 'item.completed',
+    item: { id: 'i', type: 'file_change', status: 'completed', changes: [{ path, kind: kind === 'A' ? 'add' : 'update' }] },
+  }));
+  return ev;
 }
 /** gemini's primary path since AA-037: `-o stream-json` tool_use events. */
 const geminiFileEvent = (tool_name: string, file_path: string, extra: Record<string, unknown> = {}) =>

@@ -38,6 +38,8 @@ import { CodexAdapter } from '../codex/codex-adapter.js';
 import { GeminiAdapter } from '../gemini/gemini-adapter.js';
 import { isSafeModelVariant, safeModelVariant } from '../model-variant.js';
 import { ClaudeAdapter, claudeStreamError } from '../claude/claude-adapter.js';
+import { CodexJsonNormalizer } from '../codex/codex-json-normalizer.js';
+import { ClaudeNormalizer } from '../claude/claude-normalizer.js';
 import { summarizeAgentError } from '../base-adapter.js';
 import { CLI_DEFAULT_MODEL, EventType, type ArenaEvent } from '@arena/shared';
 
@@ -67,7 +69,8 @@ describe('CodexAdapter spawn', () => {
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0].command).toBe('codex');
     expect(spawnCalls[0].command).not.toBe('/bin/sh');
-    expect(spawnCalls[0].args).not.toContain('-c');
+    // `-c` is codex's own config flag now, so a shell is ruled out by argv[0] instead.
+    expect(spawnCalls[0].args[0]).toBe('exec');
   });
 
   it('passes a model variant as its own argv entry', async () => {
@@ -243,6 +246,54 @@ describe('agent crash reporting', () => {
     expect(adapter.failure).toBeNull();
   });
 
+  it('keeps a crash reason codex --json reports on stdout', async () => {
+    const { adapter, child } = await startCodex();
+    child.stdout.write('{"type":"thread.started","thread_id":"t"}\n');
+    child.stdout.write('{"type":"error","message":"Reconnecting... 1/5"}\n');
+    child.stdout.write('{"type":"turn.failed","error":{"message":"You have hit your usage limit."}}\n');
+    await tick();
+    child.emit('close', 1);
+    await adapter.done;
+    expect(adapter.failure?.message).toBe('Codex exited with code 1: You have hit your usage limit.');
+  });
+
+  it('a normalizer that throws costs one line, not the process', async () => {
+    const spy = vi.spyOn(CodexJsonNormalizer.prototype, 'addLine')
+      .mockImplementationOnce(() => { throw new Error('bad shape'); });
+    try {
+      const { adapter, events, child } = await startCodex();
+      child.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"first"}}\n');
+      child.stdout.write('{"type":"item.completed","item":{"type":"agent_message","text":"second"}}\n');
+      await tick();
+      expect(events.filter((e) => e.type === EventType.REASONING).map((e) => (e.payload as { text: string }).text))
+        .toEqual(['second']);
+      child.emit('close', 1);
+      await adapter.done;
+      expect(adapter.failure?.detail).toContain('bad shape');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('the Claude adapter survives a throwing normalizer too', async () => {
+    const spy = vi.spyOn(ClaudeNormalizer.prototype, 'addLine')
+      .mockImplementationOnce(() => { throw new Error('bad claude line'); });
+    try {
+      const a = new ClaudeAdapter('t', { workdir: '/tmp', competitionId: 'c' });
+      const events: ArenaEvent[] = [];
+      a.on('arenaEvent', (e: ArenaEvent) => events.push(e));
+      await a.injectBrief(BRIEF, 'p');
+      await a.startExecution();
+      const child = spawnCalls.at(-1)!.child;
+      child.stdout.write('{"type":"assistant","message":{"content":[]}}\n');
+      child.stdout.write('{"type":"assistant","message":{"content":[{"type":"text","text":"still here"}]}}\n');
+      await tick();
+      expect(events.length).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('falls back to a generic message when stderr says nothing useful', async () => {
     const { adapter, child } = await startCodex();
     child.emit('close', 2);
@@ -302,5 +353,18 @@ describe('gemini trusted-folder requirement (gemini-cli >= 0.68)', () => {
     expect(a.failure?.message).toBe(
       'Gemini exited with code 55: Gemini CLI is not running in a trusted directory. To proceed, either use `--skip-trust`',
     );
+  });
+});
+
+describe('ClaudeAdapter squad limits', () => {
+  it('passes the squad caps to the agent CLI environment', async () => {
+    spawnCalls.length = 0;
+    const a = new ClaudeAdapter('t', { workdir: '/tmp', competitionId: 'c' });
+    await a.injectBrief(BRIEF, 'p');
+    await a.startExecution();
+    expect(spawnCalls[0].options?.env).toMatchObject({
+      CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: '6',
+      CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: '1',
+    });
   });
 });

@@ -215,7 +215,7 @@ Expected: 0 errors
 **Step 11: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/shared/src/constants/states.ts packages/shared/src/constants/states.test.ts
 git add packages/orchestrator/src/db/schema.ts packages/orchestrator/src/db/migrations/0003_add_synthesis.sql packages/orchestrator/src/db/migrations/meta/_journal.json
 git add packages/orchestrator/src/db/repository.ts

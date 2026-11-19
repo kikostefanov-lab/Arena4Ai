@@ -151,19 +151,23 @@ export function resolveStageModel(): string {
  * unless an override names a model: a hardcoded id for them goes stale, and
  * pinning a codex judge to `claude-opus-5` would simply be rejected by the CLI.
  *
- * The env overrides still win, and are deliberately provider-agnostic: they
- * exist to reproduce one specific historical score, at which point the operator
- * knows exactly which model they mean.
+ * The env overrides exist to reproduce one specific historical score, and are
+ * per provider, because the cross-vendor panel runs all three judges at once
+ * and a Claude id handed to codex or gemini would simply be rejected:
+ *   - claude: ARENA_JUDGE_MODEL (ARENA_ADVERSARIAL_JUDGE_MODEL for the adversarial judge)
+ *   - codex:  ARENA_JUDGE_MODEL_CODEX
+ *   - gemini: ARENA_JUDGE_MODEL_GEMINI
  */
 export function resolveJudgeModel(judgeId: string, provider: string = 'claude'): string {
   const adversarial = judgeId.includes('adversarial');
-  const override = adversarial
-    ? process.env['ARENA_ADVERSARIAL_JUDGE_MODEL']
-    : process.env['ARENA_JUDGE_MODEL'];
-  if (override) return override;
-
   if (provider === 'claude') {
+    const override = adversarial
+      ? process.env['ARENA_ADVERSARIAL_JUDGE_MODEL']
+      : process.env['ARENA_JUDGE_MODEL'];
+    if (override) return override;
     return adversarial ? DEFAULT_ADVERSARIAL_JUDGE_MODEL : DEFAULT_JUDGE_MODEL;
   }
+  const override = process.env[`ARENA_JUDGE_MODEL_${provider.toUpperCase()}`];
+  if (override) return override;
   return requireDefaultModel(provider);
 }

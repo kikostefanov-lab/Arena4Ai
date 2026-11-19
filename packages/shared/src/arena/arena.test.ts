@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ArenaEvent } from '../types/event.js';
 import type { FrameEvent } from './event-model.js';
 import { PROVIDER_FILE_CAPABILITIES } from '../types/event.js';
@@ -14,8 +14,8 @@ import {
   isVendoredPath,
   corpusFromEvents,
 } from './event-model.js';
-import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
-import { createWorld, applyEvent, stepStructures, targetHeight, foldFileStats, telemetryFromStats } from './world.js';
+import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, squadSlotCells, SQUAD_SLOTS } from './layout.js';
+import { createWorld, resetWorld, applyEvent, stepStructures, targetHeight, foldFileStats, telemetryFromStats, momentumShares, deliverableMatches } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
 import { IsoArenaRenderer } from './renderer.js';
 import { MODEL_COLORS } from '../design/tokens.js';
@@ -577,6 +577,21 @@ describe('parallel bands — N teams get N bands, and none of them overlap', () 
     }
   });
 
+  it('claims no more capacity than the smallest band can hold (middle band loses x=0)', () => {
+    // planGrid used to claim floor((2gx-1)/n) columns per band, but at N=3 the
+    // middle band also loses the x=0 centre column: needed=10 claimed 37 cells
+    // while the bands held [37, 30, 37].
+    for (const n of [2, 3, 4]) {
+      for (const needed of [1, 10, 37, 60, 80, 200, MAX_BLOCKS_PER_TEAM]) {
+        const g = planGrid(needed, n);
+        expect(g.capacity).toBeGreaterThanOrEqual(needed);
+        for (const b of bandsFor(n, g, 6.2)) {
+          expect(bandCells(b, g).length).toBeGreaterThanOrEqual(g.capacity);
+        }
+      }
+    }
+  });
+
   it('sizes the floor per BAND, so four teams are not given a two-team floor', () => {
     // planGrid(needed, n) must grow with n: the same per-team demand on more
     // teams needs more floor, or the extra bands stack like the old code did.
@@ -653,7 +668,7 @@ describe('reconcileWithManifest', () => {
     const { events: out } = reconcileWithManifest([fileEv(100, 'b', 'a.js')], [
       { teamId: 'b', paths: ['a.js', 'c.js'], corpus: namesAll('a.js','c.js') },
     ]);
-    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 };
     for (const e of out) foldFileStats(stats, e);
 
     const tel = telemetryFromStats('codex', stats);
@@ -689,7 +704,7 @@ describe('reconcileWithManifest', () => {
   });
 
   it('a complete stream with a contract stays MEASURED', () => {
-    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 };
     foldFileStats(stats, fileEv(100, 'b', 'a.js'));
     expect(telemetryFromStats('codex', stats).editDepth).toBe('measured');
   });
@@ -819,5 +834,440 @@ describe('corpusFromEvents', () => {
     expect(corpus.get('a')).toContain('server/index.mjs');
     expect(corpus.get('a')).not.toContain('only-b.ts');
     expect(corpus.get('b')).toContain('only-b.ts');
+  });
+});
+
+// ─── agent squads ────────────────────────────────────────────────────────────
+
+describe('squads', () => {
+  function evm(
+    type: string, teamId: string, payload: Record<string, unknown>, tMs: number,
+    metadata: Record<string, unknown> = {},
+  ): ArenaEvent {
+    return { ...ev(type, teamId, payload, tMs), eventId: `e${type}${tMs}${teamId}`, metadata };
+  }
+  const spawn = (team: string, id: string, t: number, label = `agent ${id}`) =>
+    evm('SUB_AGENT_SPAWN', team, { agentId: id, label, description: label, depth: 1 }, t);
+  const done = (team: string, id: string, t: number, status = 'completed') =>
+    evm('SUB_AGENT_DONE', team, { agentId: id, status }, t);
+  const fileBy = (team: string, path: string, t: number, agentId?: string, op = 'create') =>
+    evm('FILE_CREATE', team, { path, op, opSource: 'tool', text: path }, t, agentId ? { agentId } : {});
+  const toolBy = (team: string, t: number, agentId?: string) =>
+    evm('TOOL_CALL', team, { tool: 'Bash', text: 'ls' }, t, agentId ? { agentId } : {});
+  const watch = (team: string, path: string, t: number, op = 'modify') =>
+    evm('FILE_MODIFY', team, { path, op, opSource: 'watch', text: path }, t, { squad: true });
+  const rawLine = (team: string, raw: Record<string, unknown>, t: number) =>
+    evm('REASONING', team, { raw }, t);
+
+  const two = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }];
+  const squadJson = (r: IsoArenaRenderer) =>
+    [...r.world.teams.values()].map((t) => JSON.stringify([...t.squad.entries()]));
+
+  it('toFrameEvent maps spawn/done and copies agentId and squad from metadata onto every kind', () => {
+    const s = toFrameEvent(spawn('a', 'x1', 0, 'research kegs'), T0);
+    expect(s).toMatchObject({ kind: 'spawn', agentId: 'x1', label: 'research kegs' });
+    const d = toFrameEvent(evm('SUB_AGENT_DONE', 'a', { agentId: 'x1', status: 'failed', model: 'm1' }, 10), T0);
+    expect(d).toMatchObject({ kind: 'agentDone', agentId: 'x1', agentStatus: 'failed', model: 'm1' });
+    expect(toFrameEvent(fileBy('a', 'f.md', 0, 'x1'), T0).agentId).toBe('x1');
+    expect(toFrameEvent(toolBy('a', 0, 'x1'), T0).agentId).toBe('x1');
+    expect(toFrameEvent(watch('a', 'f.md', 0), T0).squad).toBe(true);
+    expect(toFrameEvent(fileBy('a', 'f.md', 0), T0).agentId).toBeUndefined();
+  });
+
+  it('spawn and done build a member with event-time timestamps', () => {
+    const events = toFrameEvents([spawn('a', 'x1', 1000), done('a', 'x1', 5000)], T0);
+    const r = new IsoArenaRenderer({ teams: two, events, timeLimitMs: 120_000 });
+    r.seek(9000);
+    const m = r.world.teams.get('a')!.squad.get('x1')!;
+    expect(m.spawnedAt).toBe(1000);
+    expect(m.endedAt).toBe(5000);
+    expect(m.status).toBe('completed');
+    expect(m.slot).toBe(0);
+    expect(r.world.teams.get('a')!.squadTotals).toEqual({ spawned: 1, failed: 0, peak: 1 });
+  });
+
+  it('seeking gives the same squad as playback', () => {
+    const raw = [
+      spawn('a', 'a1', 500), spawn('a', 'a2', 900), spawn('b', 'b1', 1200),
+      fileBy('a', 'research/one.md', 1500, 'a1'), toolBy('a', 1800, 'a2'),
+      fileBy('a', 'research/two.md', 2200, 'a2'), watch('b', 'notes.md', 2600),
+      done('a', 'a1', 3000), spawn('a', 'a3', 3500), toolBy('a', 3900, 'a3'),
+      fileBy('a', 'research/one.md', 4500, 'a3', 'modify'), done('b', 'b1', 5000, 'failed'),
+      spawn('b', 'b2', 5500), fileBy('b', 'main.go', 6000), toolBy('a', 6500, 'a2'),
+      done('a', 'a2', 7000), fileBy('a', 'decision.md', 8000), done('a', 'a3', 9000, 'killed'),
+      toolBy('b', 10_000), done('b', 'b2', 11_000, 'unknown'),
+    ];
+    expect(raw.length).toBe(20);
+    const events = toFrameEvents(raw, T0);
+
+    const played = new IsoArenaRenderer({ teams: two, events: [...events], timeLimitMs: 120_000 });
+    for (let t = 0; t < 12_000; t += 250) played.setTime(t + 250);
+    const seeked = new IsoArenaRenderer({ teams: two, events: [...events], timeLimitMs: 120_000 });
+    seeked.seek(12_000);
+    expect(squadJson(seeked)).toEqual(squadJson(played));
+    for (const id of ['a', 'b']) {
+      expect(seeked.world.teams.get(id)!.squadTotals).toEqual(played.world.teams.get(id)!.squadTotals);
+    }
+
+    seeked.seek(4000);
+    const straight = new IsoArenaRenderer({ teams: two, events: [...events], timeLimitMs: 120_000 });
+    for (let t = 0; t < 4000; t += 100) straight.setTime(t + 100);
+    expect(squadJson(seeked)).toEqual(squadJson(straight));
+    expect(seeked.world.teams.get('a')!.squad.get('a3')!.endedAt).toBeUndefined();
+    expect(seeked.world.recent.every((e) => e.t <= 4000)).toBe(true);
+    expect(seeked.world.recent.map((e) => e.t)).toEqual(straight.world.recent.map((e) => e.t));
+  });
+
+  it('slots: seventh open member gets null, and a freed slot is reused', () => {
+    const raw = [
+      ...Array.from({ length: 7 }, (_, i) => spawn('a', `m${i}`, 100 + i)),
+      done('a', 'm2', 500),
+      spawn('a', 'm7', 600),
+      spawn('a', 'm8', 700),
+    ];
+    const events = toFrameEvents(raw, T0);
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    const sq = w.teams.get('a')!.squad;
+    expect([0, 1, 2, 3, 4, 5].map((i) => sq.get(`m${i}`)!.slot)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(sq.get('m6')!.slot).toBeNull();
+    expect(sq.get('m7')!.slot).toBe(2);
+    expect(sq.get('m8')!.slot).toBeNull();
+    expect(w.teams.get('a')!.squadTotals.spawned).toBe(9);
+    expect(w.teams.get('a')!.squadTotals.peak).toBe(8);
+  });
+
+  it('a raw task_started and a SUB_AGENT_SPAWN for the same id count once', () => {
+    const raw = [
+      rawLine('a', { type: 'system', subtype: 'task_started', task_id: 't1', tool_use_id: 'tu1', description: 'Research the keg market', task_type: 'local_agent' }, 100),
+      spawn('a', 't1', 101, 'Research the keg'),
+      rawLine('a', { type: 'system', subtype: 'task_notification', task_id: 't1', status: 'completed' }, 2000),
+      done('a', 't1', 2001),
+    ];
+    const events = toFrameEvents(raw, T0);
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    const team = w.teams.get('a')!;
+    expect(team.squad.size).toBe(1);
+    expect(team.squadTotals.spawned).toBe(1);
+    expect(team.squad.get('t1')!.endedAt).toBe(2000);
+  });
+
+  it('read-time upgrade: a stored REASONING raw task_started(local_agent) becomes a spawn; local_bash does not', () => {
+    const raw = [
+      rawLine('a', { type: 'system', subtype: 'task_started', task_id: 't1', tool_use_id: 'tu1', description: 'Research the three candidate markets', task_type: 'local_agent', subagent_type: 'general-purpose' }, 100),
+      rawLine('a', { type: 'system', subtype: 'task_started', task_id: 'b1', tool_use_id: 'tu2', description: 'npm install', task_type: 'local_bash' }, 200),
+      rawLine('a', { type: 'assistant', parent_tool_use_id: 'tu1', message: { content: [] } }, 300),
+      rawLine('a', { type: 'system', subtype: 'task_notification', task_id: 'b1', status: 'completed' }, 400),
+      rawLine('a', { type: 'system', subtype: 'task_notification', task_id: 't1', status: 'stopped' }, 500),
+    ];
+    const events = toFrameEvents(raw, T0);
+    expect(events[0]).toMatchObject({ kind: 'spawn', agentId: 't1', agentKind: 'general-purpose' });
+    expect(events[0].label!.length).toBeLessThanOrEqual(18);
+    expect(events[1].kind).toBe('reasoning');
+    expect(events[2]).toMatchObject({ kind: 'reasoning', agentId: 't1' });
+    expect(events[4]).toMatchObject({ kind: 'agentDone', agentId: 't1', agentStatus: 'killed' });
+
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    const team = w.teams.get('a')!;
+    expect([...team.squad.keys()]).toEqual(['t1']);
+    expect(team.squad.get('t1')!.status).toBe('killed');
+    expect(team.squad.get('t1')!.kind).toBe('general-purpose');
+  });
+
+  it('attributed file and tool events count against their member', () => {
+    const events = toFrameEvents([
+      spawn('a', 'x1', 100), fileBy('a', 'a.md', 200, 'x1'), fileBy('a', 'b.md', 300, 'x1'), toolBy('a', 400, 'x1'),
+    ], T0);
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    const m = w.teams.get('a')!.squad.get('x1')!;
+    expect(m.files).toBe(2);
+    expect(m.tools).toBe(1);
+    expect(m.lastActiveAt).toBe(400);
+  });
+
+  it('watch events never raise edit depth', () => {
+    const events = toFrameEvents([watch('b', 'notes.md', 100), watch('b', 'notes.md', 200), watch('b', 'notes.md', 300)], T0);
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    const st = w.structures.get('b|notes.md')!;
+    expect(st.mods).toBe(0);
+    expect(st.depth).toBe('inferred');
+    expect(w.teams.get('b')!.counts.edits).toBe(0);
+    expect(w.teams.get('b')!.counts.files).toBe(1);
+  });
+
+  it('a watch-only team is not labelled measured, and says why (both telemetry paths)', () => {
+    const events = toFrameEvents([watch('b', 'notes.md', 100), watch('b', 'plan.md', 200)], T0);
+    const w = createWorld(two, events);
+    const fromEvents = w.teams.get('b')!.telemetry;
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 };
+    for (const e of events) foldFileStats(stats, e);
+    const fromStats = telemetryFromStats('codex', stats);
+    for (const t of [fromEvents, fromStats]) {
+      expect(t.editDepth).toBe('inferred');
+      expect(t.note).toContain('files observed on disk; the CLI did not report its edits');
+      expect(t.note).not.toContain('predates');
+    }
+    expect(fromStats).toEqual(fromEvents);
+    // One CLI-reported edit makes it measured again, in both places.
+    const mixed = toFrameEvents([fileBy('b', 'main.go', 50), watch('b', 'notes.md', 100)], T0);
+    expect(createWorld(two, mixed).teams.get('b')!.telemetry.editDepth).toBe('measured');
+  });
+
+  it('a watch event never downgrades a measured block', () => {
+    const events = toFrameEvents([fileBy('a', 'x.md', 100), watch('a', 'x.md', 200)], T0);
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    expect(w.structures.get('a|x.md')!.depth).toBe('measured');
+  });
+
+  it('momentumShares counts file events only', () => {
+    const raw = [
+      ...Array.from({ length: 10 }, (_, i) => toolBy('a', 1000 + i * 10)),
+      fileBy('b', 'main.go', 1500),
+    ];
+    const events = toFrameEvents(raw, T0);
+    const w = createWorld(two, events);
+    for (const e of events) applyEvent(w, e, false);
+    w.t = 2000;
+    const s = momentumShares(w);
+    expect(s.get('a')).toBe(0);
+    expect(s.get('b')).toBe(1);
+    w.t = 20_000; // the window has moved past every event
+    expect([...momentumShares(w).values()]).toEqual([0, 0]);
+  });
+
+  it('delivered tracks named deliverables, including nested names', () => {
+    const deliverables = ['research/kegs.md — the keg market', 'decision.md with the pick', 'A short pitch'];
+    const events = toFrameEvents([fileBy('a', 'research/kegs.md', 100), fileBy('a', 'node_modules/x/decision.md', 150)], T0);
+    const w = createWorld(two, events, { deliverables });
+    expect(w.deliverables).toEqual(['research/kegs.md', 'decision.md']);
+    for (const e of events) applyEvent(w, e, false);
+    const team = w.teams.get('a')!;
+    expect(team.delivered.has('research/kegs.md')).toBe(true);
+    // Collection does not search vendored dirs for a bare name, so neither does the strip.
+    expect(team.delivered.has('decision.md')).toBe(false);
+    // A nested basename is what the judge collects when there is no top-level file.
+    applyEvent(w, toFrameEvent(watch('a', 'notes/decision.md', 300), T0), false);
+    expect(team.delivered.has('decision.md')).toBe(true);
+    expect(w.teams.get('b')!.delivered.size).toBe(0);
+  });
+
+  it('deliverableMatches follows the judge: exact path, or a bare name at top level or nested', () => {
+    expect(deliverableMatches('decision.md', 'decision.md')).toBe(true);
+    expect(deliverableMatches('./Decision.MD', 'decision.md')).toBe(true);
+    expect(deliverableMatches('notes/decision.md', 'decision.md')).toBe(true);
+    expect(deliverableMatches('.github/decision.md', 'decision.md')).toBe(false);
+    expect(deliverableMatches('node_modules/p/decision.md', 'decision.md')).toBe(false);
+    expect(deliverableMatches('research/kegs.md', 'research/kegs.md')).toBe(true);
+    expect(deliverableMatches('old/research/kegs.md', 'research/kegs.md')).toBe(false);
+    expect(deliverableMatches('kegs.md', 'research/kegs.md')).toBe(false);
+  });
+
+  it('resetWorld clears squads, totals and delivered', () => {
+    const events = toFrameEvents([spawn('a', 'x1', 100), fileBy('a', 'decision.md', 200)], T0);
+    const w = createWorld(two, events, { deliverables: ['decision.md'] });
+    for (const e of events) applyEvent(w, e, false);
+    const team = w.teams.get('a')!;
+    expect(team.squad.size).toBe(1);
+    expect(team.delivered.size).toBe(1);
+    resetWorld(w);
+    expect(team.squad.size).toBe(0);
+    expect(team.squadTotals).toEqual({ spawned: 0, failed: 0, peak: 0 });
+    expect(team.delivered.size).toBe(0);
+    expect(w.deliverables).toEqual(['decision.md']);
+  });
+
+  it.each([2, 3, 4])('layout keeps slot cells free (%i teams)', (n) => {
+    const grid = planGrid(1, n);
+    for (const band of bandsFor(n, grid, 6.2)) {
+      const slots = squadSlotCells(band);
+      expect(slots.length).toBe(SQUAD_SLOTS);
+      const slotKeys = new Set(slots.map((c) => `${c.x},${c.z}`));
+      expect(slotKeys.size).toBe(SQUAD_SLOTS);
+      for (const c of slots) {
+        // Inside the team's own band and on the lattice.
+        expect(c.x).toBeGreaterThanOrEqual(band.lo);
+        expect(c.x).toBeLessThan(band.hi);
+        expect(c.x).not.toBe(0);
+        expect(Math.abs(c.z)).toBeLessThanOrEqual(grid.gz - 1);
+        // Not the cell the lead stands on.
+        expect(Math.abs(c.x - band.baseX) < 0.8 && Math.abs(c.z) < 0.6).toBe(false);
+      }
+      for (const c of bandCells(band, grid)) expect(slotKeys.has(`${c.x},${c.z}`)).toBe(false);
+    }
+  });
+
+  it('notes appear only after a spawn, per capability', () => {
+    const three = [{ id: 'a', model: 'claude' }, { id: 'b', model: 'codex' }, { id: 'c', model: 'gemini' }];
+    const attribution = (p: string) =>
+      `${p} doesn't report which sub-agent wrote each file. Squad files appear as they land, unassigned.`;
+    const lifecycle = (p: string) =>
+      `${p} finish times are when the lead collected the result, not when the sub-agent finished.`;
+
+    const r = new IsoArenaRenderer({ teams: three, events: [], timeLimitMs: 120_000 });
+    expect(r.honestyNotes).toEqual([]);
+
+    // Claude reports both, so its squad earns no note.
+    r.appendEvents([toFrameEvent(spawn('a', 'x1', 100), T0)]);
+    expect(r.honestyNotes).toEqual([]);
+
+    r.appendEvents([toFrameEvent(spawn('c', 'g1', 200), T0)]);
+    expect(r.honestyNotes).toEqual([attribution('Gemini'), lifecycle('Gemini')]);
+    expect(r.honestyNotes.join(' ')).not.toMatch(/Codex/);
+
+    // A replay built from the full list has them from the first frame, and keeps them when scrubbed.
+    const events = toFrameEvents([spawn('b', 'c1', 5000), spawn('c', 'g1', 6000)], T0);
+    const replay = new IsoArenaRenderer({ teams: three, events, timeLimitMs: 120_000 });
+    expect(replay.honestyNotes).toEqual([attribution('Codex'), lifecycle('Codex'), attribution('Gemini'), lifecycle('Gemini')]);
+    replay.seek(0);
+    expect(replay.honestyNotes.length).toBe(4);
+  });
+
+  it('a Codex squad it did not identify gets its own note', () => {
+    const r = new IsoArenaRenderer({ teams: two, events: [], timeLimitMs: 120_000 });
+    r.appendEvents([toFrameEvent(evm('REASONING', 'b', { text: 'waited on agents', squadUnidentified: true }, 100), T0)]);
+    expect(r.honestyNotes).toEqual(['Codex reported a squad it did not identify.']);
+  });
+
+  describe('replaying a finished match plays it as a match', () => {
+    type Terminal = { terminal: 'triumph' | 'kneel' | null };
+    const terminals = (r: IsoArenaRenderer) =>
+      [...(r as unknown as { units: Map<string, Terminal> }).units.values()].map((u) => u.terminal);
+    /** A finished match: last event at 120 s, verdict 'a', final state COMPLETE. */
+    const finished = (raw: ArenaEvent[], timeLimitMs = 300_000) => {
+      const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(raw, T0), timeLimitMs });
+      r.setWinner('a');
+      r.setFinalState('COMPLETE');
+      return r;
+    };
+    const match = () => [spawn('a', 'x1', 10_000), fileBy('a', 'main.go', 60_000), toolBy('b', 120_000)];
+
+    it('replay of a finished match is active before the end and reveal at the end', () => {
+      const r = finished(match());
+      r.seek(60_000);
+      expect(r.world.phase).toBe('active');
+      expect(terminals(r)).toEqual([null, null]);
+
+      r.seek(r.totalMs);
+      expect(r.world.phase).toBe('reveal');
+      expect(r.world.winnerId).toBe('a');
+      expect(r.world.compState).toBe('COMPLETE');
+      expect(terminals(r)).toEqual(['triumph', 'kneel']);
+
+      r.seek(30_000);
+      expect(r.world.phase).toBe('active');
+      // Rewinding takes the verdict poses down with the phase.
+      expect(terminals(r)).toEqual([null, null]);
+    });
+
+    it('squad members are visible state during replay', () => {
+      const r = finished([spawn('a', 'x1', 10_000), done('a', 'x1', 50_000), toolBy('b', 120_000)]);
+      r.seek(20_000);
+      expect(r.world.teams.get('a')!.squad.get('x1')!.status).toBe('running');
+      expect(r.world.phase).toBe('active');
+    });
+
+    it('the end is the last event, and playback agrees with seek on either side of it', () => {
+      const ticked = finished(match());
+      const timed = finished(match());
+      for (const t of [119_000, 119_999]) {
+        ticked.tick(t - ticked.world.t);
+        timed.setTime(t);
+        const seeked = finished(match());
+        seeked.seek(t);
+        for (const r of [ticked, timed, seeked]) expect(r.world.phase).toBe('active');
+      }
+      ticked.tick(1);
+      timed.setTime(120_000);
+      const seeked = finished(match());
+      seeked.seek(120_000);
+      for (const r of [ticked, timed, seeked]) {
+        expect(r.world.phase).toBe('reveal');
+        expect(terminals(r)).toEqual(['triumph', 'kneel']);
+      }
+      // Playing on past the end stays revealed, and does not re-fire the reveal.
+      const confetti = (r: IsoArenaRenderer) =>
+        (r as unknown as { effects: Array<{ kind: string }> }).effects.filter((e) => e.kind === 'confetti').length;
+      expect(confetti(ticked)).toBe(1);
+      ticked.tick(5000);
+      expect(ticked.world.phase).toBe('reveal');
+      expect(confetti(ticked)).toBe(1);
+      expect(confetti(seeked)).toBe(0);
+    });
+
+    it('the end is the time limit when the stream runs past it', () => {
+      const r = finished(match(), 100_000);
+      r.seek(99_999);
+      expect(r.world.phase).toBe('active');
+      r.seek(100_000);
+      expect(r.world.phase).toBe('reveal');
+    });
+
+    it('declaring the final state while parked at the end reveals at once', () => {
+      const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });
+      r.seek(r.totalMs);
+      expect(r.world.phase).toBe('active');
+      r.setWinner('b');
+      r.setFinalState('COMPLETE');
+      expect(r.world.phase).toBe('reveal');
+      expect(terminals(r)).toEqual(['kneel', 'triumph']);
+    });
+
+    it('a replay is marked on the world, live is not, and a scrub keeps it', () => {
+      const r = finished(match());
+      expect(r.world.replayOf).toBe('COMPLETE');
+      r.seek(0);
+      expect(r.world.replayOf).toBe('COMPLETE');
+      const live = new IsoArenaRenderer({ teams: two, events: [], timeLimitMs: 300_000 });
+      expect(live.world.replayOf).toBeNull();
+    });
+
+    for (const state of ['FAILED', 'CANCELLED']) {
+      it(`a ${state} replay is a replay but never reveals a verdict`, () => {
+        const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });
+        r.setWinner(null);
+        r.setFinalState(state);
+        r.seek(r.totalMs);
+        expect(r.world.replayOf).toBe(state);
+        expect(r.world.phase).toBe('active');
+        expect(r.world.compState).not.toBe(state);
+      });
+    }
+
+    it('a renderer with no final state (live) never has its phase forced', () => {
+      const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });
+      r.setWinner(null);
+      r.seek(r.totalMs);
+      expect(r.world.phase).toBe('active');
+      r.setTime(r.totalMs + 10_000);
+      expect(r.world.phase).toBe('active');
+    });
+  });
+
+  it('draws one marker per open member with a slot, plus a count, and takes deliverables', () => {
+    const events = toFrameEvents([spawn('a', 'x1', 100), spawn('a', 'x2', 200), spawn('a', 'x3', 300), done('a', 'x3', 400)], T0);
+    const r = new IsoArenaRenderer({ teams: two, events, timeLimitMs: 120_000, deliverables: ['decision.md'] });
+    r.seek(1000);
+    const texts: string[] = [];
+    const ctx = new Proxy({}, {
+      get: (_t, k) => {
+        if (k === 'fillText') return (t: string) => { texts.push(t); };
+        if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => ({ addColorStop() {} });
+        if (k === 'measureText') return () => ({ width: 10 });
+        return () => undefined;
+      },
+      set: () => true,
+    });
+    r.attach(ctx as never);
+    const spy = vi.spyOn(r as never, 'drawSquadMarker');
+    expect(() => r.draw()).not.toThrow();
+    // x1, x2 are open; x3 has ended and holds no slot.
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(texts).toContain('◆2');
+    expect(texts).not.toContain('◆3');
   });
 });

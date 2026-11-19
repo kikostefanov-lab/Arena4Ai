@@ -5,7 +5,10 @@ import type { CameraState, Viewport, Projected } from './camera.js';
 import { createCamera, project, worldScale, focus, stepCamera, safeBox, NO_INSETS, DEFAULT_YAW } from './camera.js';
 import type { FrameEvent } from './event-model.js';
 import type { World, TeamState, Structure, TeamSpec } from './world.js';
-import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats } from './world.js';
+import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats, foldSquadSignals } from './world.js';
+
+/** Finished states that carry a verdict: a replay ending in one reveals it. */
+export const VERDICT_STATES: ReadonlySet<string> = new Set(['SCORED', 'COMPLETE', 'FORGING', 'FORGE_COMPLETE']);
 
 /**
  * The isometric arena renderer.
@@ -30,6 +33,8 @@ export interface RendererOptions {
   reducedMotion?: boolean;
   /** Show the honest-absence legend. Default true — hiding it defeats the point. */
   showLegend?: boolean;
+  /** The brief's deliverable names; lets the world tell a delivered file from scratch work. */
+  deliverables?: string[];
 }
 
 type Effect =
@@ -85,6 +90,13 @@ export class IsoArenaRenderer {
   /** End of the stream. Grows in live mode as events arrive. */
   totalMs: number;
 
+  /** The declared verdict. Kept here because `seek()` wipes the world's copy. */
+  private winnerId: string | null = null;
+  /** How a FINISHED match ended; null while it is live. See `setFinalState()`. */
+  private finalState: string | null = null;
+  /** End of stream as of the last seek or tick; see `holdOrFollowEnd()`. */
+  private endSeen: number | null = null;
+
   /** Reused across frames so a 400-block floor allocates nothing per frame. */
   private sortIdx: Int32Array = new Int32Array(0);
   private sortDepth: Float64Array = new Float64Array(0);
@@ -92,7 +104,7 @@ export class IsoArenaRenderer {
 
   constructor(opts: RendererOptions) {
     this.events = opts.events;
-    this.world = createWorld(opts.teams, opts.events);
+    this.world = createWorld(opts.teams, opts.events, { deliverables: opts.deliverables });
     this.reduced = opts.reducedMotion ?? false;
     this.showLegend = opts.showLegend ?? true;
     this.timeLimitMs = opts.timeLimitMs ?? 120_000;
@@ -160,16 +172,17 @@ export class IsoArenaRenderer {
    */
   appendEvents(incoming: FrameEvent[]): void {
     if (incoming.length === 0) return;
+    let squadChanged = false;
     for (const ev of incoming) {
       this.events.push(ev);
-      if (ev.kind === 'file' && ev.teamId) {
-        const team = this.world.teams.get(ev.teamId);
-        if (team) foldFileStats(team.fileStats, ev);
-      }
+      const team = ev.teamId ? this.world.teams.get(ev.teamId) : undefined;
+      if (!team) continue;
+      if (ev.kind === 'file') foldFileStats(team.fileStats, ev);
+      if (foldSquadSignals(team.squadSignals, ev)) squadChanged = true;
     }
     const last = this.events[this.events.length - 1];
     this.totalMs = Math.max(this.totalMs, last.t + 2000);
-    this.syncTelemetry();
+    this.syncTelemetry(squadChanged);
   }
 
   /**
@@ -198,8 +211,8 @@ export class IsoArenaRenderer {
    * live arena starts out knowing only what the capability table declares and
    * learns the rest. Cheap — one pass over the teams, not over the events.
    */
-  private syncTelemetry(): void {
-    let changed = false;
+  private syncTelemetry(notesStale = false): void {
+    let changed = notesStale;
     for (const team of this.world.teams.values()) {
       const next = telemetryFromStats(team.model, team.fileStats);
       if (next.editDepth !== team.telemetry.editDepth || next.note !== team.telemetry.note) {
@@ -233,12 +246,14 @@ export class IsoArenaRenderer {
       applied = true;
     }
     void applied;
+    this.followPlayhead(true);
   }
 
   // ─── time ──────────────────────────────────────────────────────────────────
 
   /** Advance playback by `dtMs` of arena time, applying any events it passes. */
   tick(dtMs: number): void {
+    this.endSeen = this.totalMs;
     this.world.t = Math.min(this.totalMs, this.world.t + dtMs);
     let applied = false;
     while (this.applied < this.events.length && this.events[this.applied].t <= this.world.t) {
@@ -248,11 +263,28 @@ export class IsoArenaRenderer {
       applied = true;
     }
     void applied;
+    this.followPlayhead(true);
+  }
+
+  /**
+   * A paused frame. A view paused mid-match HOLDS its frame: that is what pause
+   * means, and a recording depends on it. A view parked on the END follows the
+   * end as the stream grows: the page delivers a finished match's history
+   * progressively, so a replay can be built from its first few events, and
+   * without this it would stay on that early end with the rest unapplied.
+   * "Parked on the end" means at or past the end as of the last seek or tick.
+   */
+  holdOrFollowEnd(): void {
+    const prev = this.endSeen;
+    if (prev !== null && this.totalMs !== prev && this.world.t >= prev) this.seek(this.totalMs);
+    this.endSeen = this.totalMs;
   }
 
   /** Jump to `t`, rebuilding the world without firing effects. */
   seek(t: number): void {
+    this.endSeen = this.totalMs;
     resetWorld(this.world);
+    this.world.winnerId = this.winnerId;
     this.effects.length = 0;
     this.applied = 0;
     this.world.t = t;
@@ -260,6 +292,43 @@ export class IsoArenaRenderer {
       applyEvent(this.world, this.events[this.applied++], false, { onState: (s) => this.onState(s, false) });
     }
     for (const st of this.world.structures.values()) st.h = st.th;
+    this.followPlayhead(false);
+  }
+
+  /**
+   * Where a finished match ends on the arena clock: its last event, or the time
+   * limit if that comes first (agents shut down at the deadline can still log
+   * a line or two after it; the match was over regardless).
+   */
+  get matchEndMs(): number {
+    const last = this.events.length ? this.events[this.events.length - 1].t : 0;
+    return Math.min(last, this.timeLimitMs);
+  }
+
+  /**
+   * In a replay of a FINISHED match the phase follows the playhead.
+   *
+   * No competition state events are stored, so nothing in the stream itself
+   * ever moves a replay out of 'active' or into the verdict. Before the match
+   * end the world is whatever its events made it ('active' after a reset);
+   * from the end on it is the declared final state, with the winner's
+   * end sequence. `seek()` and playback both land here after applying their
+   * events, so the two cannot disagree. A live renderer (no final state) is
+   * left exactly as its events leave it.
+   */
+  private followPlayhead(live: boolean): void {
+    const final = this.finalState;
+    if (final === null) return;
+    if (this.world.t >= this.matchEndMs) {
+      if (this.world.compState === final) return;
+      this.world.compState = final;
+      this.world.phase = phaseFor(final);
+      this.onState(final, live);
+    } else if (!live) {
+      // A rebuild before the end: take down the verdict poses an earlier
+      // position may have shown. (Playback only moves forward, so it never needs this.)
+      this.onState(this.world.compState, false);
+    }
   }
 
   private applyLive(ev: FrameEvent): void {
@@ -307,8 +376,26 @@ export class IsoArenaRenderer {
 
   /** Declare the winner (from the SCORED result, which is not an event payload). */
   setWinner(teamId: string | null): void {
+    this.winnerId = teamId;
     this.world.winnerId = teamId;
     this.onState(this.world.compState, false);
+  }
+
+  /**
+   * Declare the match FINISHED in `state` (e.g. 'COMPLETE'), or pass null for a
+   * live match. The world records it as `replayOf` either way, so a view can
+   * say REPLAY. A match that reached a verdict (`VERDICT_STATES`) plays as a
+   * match: 'active' while the playhead is before `matchEndMs`, then
+   * `phaseFor(state)` with the winner's end sequence, at once if the view is
+   * parked on the end. One that ended without a verdict (FAILED, CANCELLED)
+   * never reveals: it has no verdict to show, and must not end on SCORED.
+   */
+  setFinalState(state: string | null): void {
+    this.world.replayOf = state;
+    const verdict = state !== null && VERDICT_STATES.has(state) ? state : null;
+    if (verdict === this.finalState) return;
+    this.finalState = verdict;
+    this.followPlayhead(false);
   }
 
   private push(e: Effect): void {
@@ -810,7 +897,45 @@ export class IsoArenaRenderer {
     }
 
     ctx.shadowBlur = 0;
+    this.drawSquad(ctx, u, s, dir, now);
     ctx.restore();
+  }
+
+  /** The team's open sub-agents as small markers behind its figure, with a `◆N` count. Read from the world only. */
+  private drawSquad(ctx: Ctx2D, u: Unit, s: number, dir: number, now: number): void {
+    const team = this.world.teams.get(u.teamId);
+    if (!team) return;
+    let open = 0;
+    for (const m of team.squad.values()) {
+      if (m.status !== 'running') continue;
+      open++;
+      if (m.slot !== null) this.drawSquadMarker(ctx, u.color, m.slot, s, dir, now);
+    }
+    if (open === 0) return;
+    ctx.font = `700 ${Math.max(9, s * 0.2)}px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = rgba(u.color, 0.95);
+    ctx.fillText(`◆${open}`, -dir * s * 0.95, s * 0.28);
+  }
+
+  /** One marker: a diamond on a 3-wide, 2-deep grid behind the figure. */
+  private drawSquadMarker(ctx: Ctx2D, color: string, slot: number, s: number, dir: number, now: number): void {
+    const col = slot % 3;
+    const row = Math.floor(slot / 3);
+    const x = -dir * s * (0.65 + col * 0.3);
+    const y = -s * (0.2 + row * 0.42) + (this.reduced ? 0 : Math.sin(now / 400 + slot) * s * 0.02);
+    const r = s * 0.11;
+    ctx.fillStyle = rgba(color, 0.35);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   private drawEffects(ctx: Ctx2D, P: (x: number, y: number, z: number) => Projected, now: number): void {
@@ -897,4 +1022,89 @@ export class IsoArenaRenderer {
       y += 14;
     }
   }
+}
+
+/**
+ * A FINISHED match as a viewer opens it: the whole stream in hand, the verdict
+ * declared, and the playhead parked on the end.
+ *
+ * Hosts use this for every finished match, whether the page opened on it or
+ * watched it live and saw it finish. A renderer that was fed live is on the live
+ * clock, which the page stops when the agents finish and which reads 0 on a page
+ * loaded after that, so playing it on after the finish shows the match from
+ * wherever that clock stopped (a squad still "active", a verdict not yet
+ * reached) rather than the result.
+ */
+export function finishedReplay(opts: RendererOptions, winnerId: string | null, finalState: string | null): IsoArenaRenderer {
+  const r = new IsoArenaRenderer(opts);
+  r.setWinner(winnerId);
+  r.setFinalState(finalState);
+  r.seek(r.totalMs);
+  return r;
+}
+
+/** What a host does with its renderer when its event list may have changed. See `rendererAction()`. */
+export type RendererAction = 'keep' | 'rebuild-replay' | 'rebuild' | 'append';
+
+export interface RendererFeedState {
+  /** The match is still running (or collecting / judging): the host owns the clock. */
+  isLive: boolean;
+  /** The current renderer was fed while the match was live. */
+  fedLive: boolean;
+  /** How many of the host's events the current renderer has consumed. */
+  consumed: number;
+  /** How many events the host now holds. */
+  eventsLength: number;
+  /** The consumed prefix is unchanged (same last event at the same index). */
+  prefixIntact: boolean;
+}
+
+/**
+ * The host's choice of renderer for its current event list:
+ *  - `rebuild-replay`: a finished match with nothing consumed yet, OR one the
+ *    current renderer was fed live → `finishedReplay()` from the whole list,
+ *    parked on the verdict. A live-fed renderer is on the live clock, which the
+ *    page stops when the agents finish and which reads 0 on a page loaded after
+ *    that; kept, it played the finished match on from there (7adcd4df showed
+ *    Claude's squad "1 ACTIVE" long after the result was in);
+ *  - `rebuild`: the consumed prefix changed (a reorder) → rebuild from the whole list;
+ *  - `append`: new events after an intact prefix → `appendEvents()`;
+ *  - `keep`: nothing new.
+ */
+export function rendererAction(s: RendererFeedState): RendererAction {
+  if (s.eventsLength === 0) return 'keep';
+  if (!s.isLive && (s.consumed === 0 || s.fedLive)) return 'rebuild-replay';
+  if (!s.prefixIntact) return 'rebuild';
+  if (s.eventsLength === s.consumed) return 'keep';
+  return 'append';
+}
+
+/** The host's view of the clock for one frame. See `advanceClock()`. */
+export interface ClockFrame {
+  /** The match is still running: the host owns the clock. */
+  isLive: boolean;
+  /** A replay's transport is playing. */
+  playing: boolean;
+  /** Live: the competition's real elapsed time. */
+  elapsedMs: number;
+  /** Replay: arena time to advance while playing. */
+  dtMs: number;
+}
+
+/**
+ * Move a renderer's clock for one animation frame: live, the host's elapsed
+ * time; playing, `dtMs` of arena time; paused, `holdOrFollowEnd()`.
+ *
+ * The host must pass the renderer it holds AFTER feeding this frame's events:
+ * ingest can replace it. ArenaViewerV2 used the one the frame began with, and
+ * kept the end it remembered in a ref shared by both, so the empty renderer's
+ * tick recorded ITS end (the time limit) and the replay just built from the
+ * first 52 events of 7adcd4df never followed the rest: it stayed on its
+ * +30.5 s end, verdict up, Claude's squad "1 ACTIVE". The end each view
+ * follows now lives on its renderer.
+ */
+export function advanceClock(r: IsoArenaRenderer, f: ClockFrame): void {
+  if (f.isLive) r.setTime(f.elapsedMs);
+  else if (f.playing) r.tick(f.dtMs);
+  else r.holdOrFollowEnd();
 }

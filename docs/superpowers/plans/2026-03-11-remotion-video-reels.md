@@ -136,7 +136,7 @@ Config.setOverwriteOutput(true);
 - [ ] **Step 4: Install dependencies**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npm install --workspace=packages/video
 ```
 
@@ -145,7 +145,7 @@ Expected: Remotion packages installed in `packages/video/node_modules`.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/video/package.json packages/video/tsconfig.json packages/video/remotion.config.ts
 git commit -m "feat(video): scaffold packages/video with Remotion dependencies"
 ```
@@ -297,7 +297,7 @@ export const COMPOSITION_ID = 'CompetitionRecap' as const;
 - [ ] **Step 5: Verify TypeScript compiles**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npm run typecheck --workspace=packages/video
 ```
 
@@ -319,7 +319,7 @@ export function hexToRgb(hex: string): string {
 - [ ] **Step 6: Verify TypeScript compiles**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npm run typecheck --workspace=packages/video
 ```
 
@@ -328,7 +328,7 @@ Expected: No errors.
 - [ ] **Step 7: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/video/src/
 git commit -m "feat(video): add ReelData types, design tokens, mock fixture, utils, and package entry"
 ```
@@ -411,7 +411,7 @@ export const TronGrid: React.FC<TronGridProps> = ({ opacity = 1 }) => {
 - [ ] **Step 2: Verify no TypeScript errors**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npm run typecheck --workspace=packages/video
 ```
 
@@ -1596,7 +1596,7 @@ git commit -m "feat(video): wire up CompetitionRecap composition and Root"
 - [ ] **Step 1: Install Remotion browser if needed**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena/packages/video"
+cd "<repo>/packages/video"
 npx remotion browser ensure
 ```
 
@@ -1607,7 +1607,7 @@ Expected: Chromium installed or already present.
 **Important:** The orchestrator API server runs on port 3000. Use port 3002 to avoid conflict.
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena/packages/video"
+cd "<repo>/packages/video"
 npx remotion studio src/Root.tsx --port 3002
 ```
 
@@ -1672,7 +1672,7 @@ If a `paths` key already exists, add these entries to it.
 - [ ] **Step 3: Install new dependencies**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npm install
 ```
 
@@ -1702,7 +1702,7 @@ export function getBundle(): Promise<string> {
 - [ ] **Step 5: Verify web package typechecks**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npx tsc --noEmit -p packages/web/tsconfig.json
 ```
 
@@ -2292,14 +2292,14 @@ git commit -m "feat(web): add Generate Reel button and TRON progress card to com
 
 Terminal 1:
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 DATABASE_URL=postgresql://localhost/arena \
   npx tsx packages/orchestrator/src/cli.ts serve --port 3000
 ```
 
 Terminal 2:
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena/packages/web"
+cd "<repo>/packages/web"
 npm run dev
 ```
 

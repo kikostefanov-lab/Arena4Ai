@@ -2,6 +2,7 @@ import { useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
 import type { ReelData } from '../types';
 import { ACCENT_CYAN, TEXT_DIM, TEXT_PRIMARY, TEXT_MUTED, ORBITRON, BG_DARK } from '../tokens';
 import { hexToRgb } from '../utils';
+import { teamDisplayName } from '@arena/shared';
 
 interface KeyMomentsProps {
   data: Pick<ReelData, 'keyMoments' | 'teams'>;
@@ -34,7 +35,7 @@ export const KeyMoments: React.FC<KeyMomentsProps> = ({ data }) => {
   // Map teamId → index for stable swoop direction assignment
   const teamIndexMap = Object.fromEntries(data.teams.map((t, i) => [t.teamId, i]));
   const teamColorMap = Object.fromEntries(data.teams.map(t => [t.teamId, t.color]));
-  const teamLabelMap = Object.fromEntries(data.teams.map(t => [t.teamId, `${t.model.toUpperCase()}:${t.persona}`]));
+  const teamLabelMap = Object.fromEntries(data.teams.map(t => [t.teamId, teamDisplayName(t.model, t.persona).toUpperCase()]));
 
   const titleOpacity = interpolate(frame, [0, 20], [0, 1], { extrapolateRight: 'clamp' });
 

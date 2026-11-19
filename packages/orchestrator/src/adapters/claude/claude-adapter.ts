@@ -2,8 +2,9 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import type { Brief } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
-import { normalizeLine } from './claude-normalizer.js';
-import { claudeEnv } from '../../utils/claude-env.js';
+import { ClaudeNormalizer, normalizeLine } from './claude-normalizer.js';
+import { claudeIsolationArgs, competitorEnv } from '../isolation.js';
+import { squadLimits } from '../squad-limits.js';
 import { safeModelVariant } from '../model-variant.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
 
@@ -53,6 +54,13 @@ export class ClaudeAdapter extends BaseAdapter {
     }
 
     const ctx = { competitionId: this.competitionId, teamId: this.teamId };
+    const normalizer = new ClaudeNormalizer(ctx);
+    const { maxConcurrent, maxDepth } = squadLimits();
+    const agentEnv = {
+      ...competitorEnv(),
+      CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS: String(maxConcurrent),
+      CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH: String(maxDepth),
+    };
 
     this.executionDone = new Promise<void>((resolve, reject) => {
       const claudeArgs = [
@@ -60,6 +68,7 @@ export class ClaudeAdapter extends BaseAdapter {
         '--output-format', 'stream-json',
         '--verbose',
         '--dangerously-skip-permissions',
+        ...claudeIsolationArgs(),
       ];
 
       const modelVariant = safeModelVariant(this.modelVariant);
@@ -73,7 +82,7 @@ export class ClaudeAdapter extends BaseAdapter {
             this.workdir,
             this.claudeBin,
             claudeArgs,
-            claudeEnv(),
+            agentEnv,
             { stdin: true }, // prompt is piped on stdin below
           )
         : spawn(
@@ -84,11 +93,12 @@ export class ClaudeAdapter extends BaseAdapter {
               stdio: ['pipe', 'pipe', 'pipe'],
               // Own process group so shutdown() can signal the agent's children too.
               detached: process.platform !== 'win32',
-              env: claudeEnv(),
+              env: agentEnv,
             },
           );
 
       this.process = child;
+      this.startWorkdirWatch();
 
       // Pipe prompt via stdin to avoid CLI arg length limits
       if (child.stdin) {
@@ -103,8 +113,7 @@ export class ClaudeAdapter extends BaseAdapter {
       const rl = createInterface({ input: child.stdout! });
       rl.on('line', (line) => {
         if (!line.trim()) return;
-        const event = normalizeLine(line, ctx);
-        this.emitArenaEvent(event);
+        for (const event of this.normalizeSafely(line, (l) => normalizer.addLine(l))) this.emitArenaEvent(event);
         // Claude reports API failures (unknown model, auth, rate limit) as
         // stream-json on stdout; keep them so a crash can be explained.
         const failure = claudeStreamError(line);
@@ -116,11 +125,11 @@ export class ClaudeAdapter extends BaseAdapter {
       errRl.on('line', (line) => {
         if (!line.trim()) return;
         this.noteStderr(line);
-        const event = normalizeLine(
+        const events = this.normalizeSafely(
           JSON.stringify({ type: 'error', error: { message: line } }),
-          ctx,
+          (l) => normalizeLine(l, ctx),
         );
-        this.emitArenaEvent(event);
+        for (const event of events) this.emitArenaEvent(event);
       });
 
       child.on('close', (code) => {

@@ -4,12 +4,12 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { streamUrl } from '../../../lib/stream-url';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, BORDER_DIM, BG_HEADER, TEXT_MUTED, TEXT_DIM, ACCENT_CYAN, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import ArenaViewerV2 from '../../../components/ArenaViewerV2';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
-import { isHeuristicScore, HEURISTIC_CEILING } from '@arena/shared';
+import { teamDisplayName, isHeuristicScore, judgeBreakdown, teamCriterionScores, HEURISTIC_CEILING, type JudgeBreakdown } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,11 @@ interface TeamResult {
   agentFailure?: { message: string; exitCode: number };
   /** The AI judge failed; this score is the capped completeness heuristic, not a judgement. */
   heuristic?: boolean;
+  /** Per-judge scores when more than one AI judge (or the cross-vendor panel) judged this team. */
+  judges?: JudgeBreakdown;
 }
+
+const JUDGE_PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
 interface TeamDeliverable { teamId: string; files: { path: string; content: string }[]; }
 interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale: string; winningApproach?: string; losingApproach?: string; }
 interface SynthesisResult { synthesis: string; overallRationale?: string; perCriterion: SynthesisPerCriterion[]; }
@@ -61,9 +65,9 @@ const HIST_COLORS: Record<string, string> = {
   FILE_MODIFY: '#0066ff',
   REASONING:   '#0066ff',
   ERROR:       '#ef4444',
+  SUB_AGENT_SPAWN: '#a78bfa',
+  SUB_AGENT_DONE:  '#a78bfa',
 };
-
-// LANE_COLORS imported from design-tokens above
 
 const ARTIFACT_EMOJI: Record<string, string> = {
   // Universal
@@ -217,7 +221,7 @@ const INIT_MESSAGES = [
 function PreBattleScreen({ color, model, persona }: { color: string; model: string; persona?: string }) {
   const [msgIdx, setMsgIdx] = useState(0);
   const [progress, setProgress] = useState(8);
-  const displayName = persona ? `${model}:${persona}` : model;
+  const displayName = teamDisplayName(model, persona);
 
   useEffect(() => {
     const t = setInterval(() => setMsgIdx((i) => (i + 1) % INIT_MESSAGES.length), 1600);
@@ -309,6 +313,17 @@ const LanePanel = forwardRef<
     (Date.now() - new Date(events[events.length - 1].timestamp).getTime()) < 5000;
 
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+
+  // agentId → label from the spawn events, so a squad member's rows read "↳ label".
+  const squadLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of events) {
+      if (e.type !== 'SUB_AGENT_SPAWN') continue;
+      const p = e.payload as { agentId?: unknown; label?: unknown } | null;
+      if (typeof p?.agentId === 'string') m.set(p.agentId, typeof p.label === 'string' ? p.label : p.agentId);
+    }
+    return m;
+  }, [events]);
 
   // Flash "BATTLE COMMENCED" when first renderable event arrives
   const [showLaunch, setShowLaunch] = useState(false);
@@ -409,6 +424,12 @@ const LanePanel = forwardRef<
             startTs={competitionStartTime ? new Date(competitionStartTime).toISOString() : null}
             expanded={expandedEventId === ev.eventId}
             onToggle={() => setExpandedEventId(prev => prev === ev.eventId ? null : ev.eventId)}
+            agentLabel={
+              typeof ev.metadata?.agentId === 'string' && ev.type !== 'SUB_AGENT_SPAWN' && ev.type !== 'SUB_AGENT_DONE'
+                ? squadLabels.get(ev.metadata.agentId) ?? ev.metadata.agentId
+                : undefined
+            }
+            teamColor={color}
           />
         ))}
       </div>
@@ -678,10 +699,30 @@ function ScoreDrawer({
     ? resolveTeamLabel(teams, result.winnerId, result.winnerId)
     : null;
 
+  /**
+   * A team's colour is its model's, never its position. These lists are in
+   * rank, presentation or delivery order, so a colour taken by index painted
+   * the winner in the first team's colour (codex in Claude orange).
+   */
+  const teamColor = (teamId: string): string => getModelColor(teams.find((t) => t.id === teamId)?.model ?? '');
+
+  /**
+   * A short chip naming a team: its provider ("CODEX"), or its whole display
+   * name when another team in the match shares that provider, since colour and
+   * provider alone cannot tell claude:architect from claude:speedrunner.
+   */
+  const providerOf = (model: string): string => model.split(':')[0].toLowerCase();
+  const teamChip = (teamId: string, label: string): string => {
+    const own = teams.find((t) => t.id === teamId);
+    const provider = own ? providerOf(own.model) : providerOf(label);
+    const shared = teams.filter((t) => providerOf(t.model) === provider).length > 1;
+    return (shared ? label : label.split(':')[0]).toUpperCase();
+  };
+
   const teamDisplays = result.teams.map((tr, i) => ({
     result: tr,
     label: resolveTeamLabel(teams, tr.teamId, `Team ${i + 1}`),
-    color: LANE_COLORS[i] ?? '#4a8fa8',
+    color: teamColor(tr.teamId),
     isWinner: tr.teamId === result.winnerId,
   }));
 
@@ -1131,7 +1172,7 @@ function ScoreDrawer({
                               background: `rgba(${hexToRgb(winnerForCrit.color)},0.12)`,
                               border: `1px solid rgba(${hexToRgb(winnerForCrit.color)},0.3)`,
                             }}>
-                              {winnerForCrit.label.split(':')[0].toUpperCase()}
+                              {teamChip(winnerForCrit.result.teamId, winnerForCrit.label)}
                             </span>
                           </div>
                         </div>
@@ -1168,6 +1209,38 @@ function ScoreDrawer({
                     );
                   });
                 })()}
+
+                {/* Per-judge breakdown: the cross-vendor panel (or an adversarial pair) */}
+                {teamDisplays.some(td => td.result.judges && !td.result.agentFailure) && (
+                  <div style={{ borderTop: `2px solid ${BORDER_MID}`, background: BG_HEADER, padding: '0.6rem 1rem' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 800, color: ACCENT_CYAN, letterSpacing: '1px', fontFamily: MONOSPACE_FONT, marginBottom: '0.45rem' }}>
+                      {(teamDisplays.find(td => td.result.judges)?.result.judges?.label ?? 'Judges').toUpperCase()}
+                    </div>
+                    {teamDisplays.filter(td => td.result.judges && !td.result.agentFailure).map(({ result: tr, label, color }) => (
+                      <div key={`judges-${tr.teamId}`} style={{
+                        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem 0.9rem',
+                        padding: '0.35rem 0', borderBottom: `1px solid ${BORDER_DIM}`, fontSize: '0.66rem', fontFamily: BODY_FONT,
+                      }}>
+                        <span style={{ color, fontWeight: 700, minWidth: '9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                        {tr.judges!.rows.map((j) => (
+                          <span key={j.judgeId} title={j.judgeId} style={{ color: TEXT_MUTED, whiteSpace: 'nowrap' }}>
+                            <span style={{ color: getModelColor(j.provider), fontWeight: 700 }}>{JUDGE_PROVIDER_NAMES[j.provider] ?? j.provider}</span>
+                            <span style={{ color: TEXT_DIM }}> {j.model} </span>
+                            {j.overallScore === null
+                              ? <span style={{ color: HEURISTIC_COLOR }}>failed{j.failure ? ` (${j.failure})` : ''}</span>
+                              : <strong style={{ fontFamily: 'monospace' }}>{Math.round(j.overallScore * 100)}%</strong>}
+                          </span>
+                        ))}
+                        <span style={{ marginLeft: 'auto', color: TEXT_MUTED, whiteSpace: 'nowrap' }}>
+                          avg{' '}
+                          <strong style={{ fontFamily: 'monospace', color: ACCENT_CYAN }}>
+                            {tr.judges!.average === null ? 'n/a' : `${Math.round(tr.judges!.average * 100)}%`}
+                          </strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {result.summary && (
                   <div style={{ padding: '0.75rem 1rem', fontSize: BODY_FONT_SIZE, color: '#4a8fa8', lineHeight: 1.7, borderTop: '1px solid #0a2235', fontFamily: BODY_FONT }}>
@@ -1213,7 +1286,7 @@ function ScoreDrawer({
                 }}>
                   {result.presentations!.map((pres, presIdx) => {
                     const label = resolveTeamLabel(teams, pres.teamId, pres.teamId);
-                    const color = LANE_COLORS[presIdx] ?? '#4a8fa8';
+                    const color = teamColor(pres.teamId);
                     const rgb = hexToRgb(color);
                     const isWinner = pres.teamId === result.winnerId;
 
@@ -1334,7 +1407,7 @@ function ScoreDrawer({
                     }}>
                       {result.deliverables!.map((td, tdIdx) => {
                         const label = resolveTeamLabel(teams, td.teamId, td.teamId);
-                        const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
+                        const color = teamColor(td.teamId);
                         const rgb = hexToRgb(color);
                         return (
                           <div
@@ -1413,8 +1486,7 @@ function ScoreDrawer({
                       const teamDel = result.deliverables!.find(td => td.teamId === selectedFileKey.teamId);
                       const file = teamDel?.files.find(f => f.path === selectedFileKey.path);
                       if (!file) return null;
-                      const teamIdx = result.deliverables!.findIndex(td => td.teamId === selectedFileKey.teamId);
-                      const color = LANE_COLORS[teamIdx] ?? '#4a8fa8';
+                      const color = teamColor(selectedFileKey.teamId);
                       const rgb = hexToRgb(color);
                       const label = resolveTeamLabel(teams, selectedFileKey.teamId, selectedFileKey.teamId);
                       return (
@@ -1501,7 +1573,7 @@ function ScoreDrawer({
                       }}>
                         {fileEventsByTeam.map((teamFiles, tdIdx) => {
                           const label = resolveTeamLabel(teams, teamFiles.teamId, teamFiles.teamId);
-                          const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
+                          const color = teamColor(teamFiles.teamId);
                           const rgb = hexToRgb(color);
                           return (
                             <div key={teamFiles.teamId} className="arena-scrollbar" style={{ borderRight: tdIdx < fileEventsByTeam.length - 1 ? '1px solid #0a2235' : 'none', overflowY: 'auto' }}>
@@ -1559,7 +1631,7 @@ function ScoreDrawer({
                       {/* Criterion rows */}
                       {(result.synthesis.perCriterion ?? []).map((entry) => {
                         const winnerTeam = teams.find(t => t.id === entry.teamId);
-                        const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
+                        const winnerColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
                         const wLabel = resolveTeamLabel(teams, entry.teamId, entry.teamId);
                         const isOpen = selectedSynthCriterionId === entry.criterionId;
 
@@ -1584,9 +1656,9 @@ function ScoreDrawer({
                               <div style={{ textAlign: 'center' }}>
                                 <span style={{
                                   fontSize: '0.62rem', fontWeight: 800, padding: '0.12rem 0.4rem', borderRadius: '3px',
-                                  color: teamColor, background: `rgba(${hexToRgb(teamColor)},0.12)`,
+                                  color: winnerColor, background: `rgba(${hexToRgb(winnerColor)},0.12)`,
                                 }}>
-                                  {wLabel.split(':')[0].toUpperCase()}
+                                  {teamChip(entry.teamId, wLabel)}
                                 </span>
                               </div>
                             </div>
@@ -2316,18 +2388,20 @@ export default function CompetitionPage() {
         if (data.result) {
           // DB result has `scorecards` + `winnerId`; frontend expects `teams` + `winnerId`
           const raw = data.result;
-          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
+          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgePanel?: Array<{ provider: string; model: string; judgeId: string; failure?: string }>; judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; overallScore?: number; provider?: string; model?: string; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
           const normalized: CompetitionResult = {
             winnerId: (raw.winnerId as string) ?? null,
             teams: scorecards.map((sc) => ({
               teamId: sc.teamId,
               totalScore: sc.finalScore,
-              criteriaScores: sc.judgeResults?.[0]?.scores?.map(s => ({
-                criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary ?? '',
-              })) ?? [],
+              // Mean across the team's AI judges, so it matches the multi-judge total.
+              criteriaScores: teamCriterionScores(sc).map(s => ({
+                criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary,
+              })),
               rank: sc.rank,
               ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
               ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
+              ...((() => { const judges = judgeBreakdown(sc); return judges ? { judges } : {}; })()),
             })),
             summary: raw.summary as string | undefined,
             synthesis: raw.synthesis as SynthesisResult | null | undefined,
@@ -2400,7 +2474,7 @@ export default function CompetitionPage() {
         const existing = next.get(teamId) ?? [];
         const updated = [...existing, ev];
         if (updated.length > 600) {
-          // Keep all important events (TOOL_CALL, FILE_CREATE, ERROR); trim only REASONING
+          // Keep every non-REASONING event (TOOL_CALL, FILE_CREATE, ERROR, SUB_AGENT_*); trim only REASONING
           const important = updated.filter((e) => e.type !== 'REASONING');
           const reasoning = updated.filter((e) => e.type === 'REASONING');
           next.set(teamId, [...important, ...reasoning.slice(-Math.max(200, 500 - important.length))]);
@@ -3065,6 +3139,7 @@ export default function CompetitionPage() {
               scores={result?.teams?.map((t) => ({ teamId: t.teamId, finalScore: t.totalScore })) ?? undefined}
               winnerId={result?.winnerId ?? undefined}
               deliverables={result?.deliverables ?? undefined}
+              deliverableNames={brief?.deliverables}
               view3d={effectiveView === '3d'}
             />
           </div>
@@ -3082,7 +3157,7 @@ export default function CompetitionPage() {
                 .slice()
                 .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-              const color = LANE_COLORS[i] ?? '#4a8fa8';
+              const color = getModelColor(team.model);
 
               return (
                 <LanePanel

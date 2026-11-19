@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { streamUrl } from '../../../../lib/stream-url';
 import { useParams } from 'next/navigation';
 import { LANE_COLORS, getStateStyle, hexToRgb, MODEL_BADGE_COLORS, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../../lib/design-tokens';
-import { isHeuristicScore } from '@arena/shared';
+import { teamDisplayName, isHeuristicScore, teamCriterionScores } from '@arena/shared';
 import { classifyEvent } from '../../../../lib/EventRow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -42,8 +42,7 @@ function getModelName(model: string): string {
 function resolveTeamLabel(teams: Team[], teamId: string, fallback: string): string {
   const team = teams.find((t) => t.id === teamId);
   if (!team) return fallback;
-  const base = team.model;
-  return team.persona ? `${base}:${team.persona}` : base;
+  return teamDisplayName(team.model, team.persona);
 }
 
 // ─── Global CSS ──────────────────────────────────────────────────────────────
@@ -296,12 +295,13 @@ export default function SpectatePage() {
               teamId: sc.teamId,
               totalScore: sc.finalScore,
               ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
-              criteriaScores: sc.judgeResults?.[0]?.scores?.map((s) => ({
+              // Mean across the team's AI judges, so it matches the multi-judge total.
+              criteriaScores: teamCriterionScores(sc).map((s) => ({
                 criterionId: s.criterionId,
                 score: s.score,
                 maxScore: s.maxScore ?? 10,
-                commentary: s.commentary ?? '',
-              })) ?? [],
+                commentary: s.commentary,
+              })),
             })),
             summary: raw.summary as string | undefined,
           });
@@ -326,7 +326,7 @@ export default function SpectatePage() {
         const next = new Map(prev);
         const existing = next.get(teamId) ?? [];
         const updated = [...existing, ev];
-        // Cap at 600 per team, preserving important events
+        // Cap at 600 per team; every non-REASONING event (incl. SUB_AGENT_*) is kept
         if (updated.length > 600) {
           const important = updated.filter((e) => e.type !== 'REASONING');
           const reasoning = updated.filter((e) => e.type === 'REASONING');

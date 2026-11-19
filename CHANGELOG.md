@@ -2,6 +2,52 @@
 
 Newest first. Each entry says what changed, why, how it was verified, and what was left open.
 
+## 2026-11-18 — agent squads (branch `feat/agent-squads`)
+
+Competitor CLIs spawn sub-agents of their own. Arena saw none of it: the files they wrote
+appeared from nowhere, the judge saw a lead's partial work, and the arena drew one robot per team.
+
+**What was wrong**
+- Sub-agent activity was invisible or mis-attributed: no spawn or finish events existed, and the
+  Codex text-mode parser had nothing to follow child threads with.
+- Competitors inherited the operator's MCP servers, plugins and hooks.
+- Judging and collection ignored which files a brief named, and big briefs hit fixed limits.
+- A reconnecting WebSocket client could miss events emitted while it read history.
+
+**What changed**
+- Event contract: `SUB_AGENT_SPAWN` / `SUB_AGENT_DONE`, `metadata.agentId`, `metadata.squad`,
+  `capabilityFor().subagentAttribution`. Claude, Codex (`--json`, V1 collab tools, web access,
+  spawn cap) and Gemini (`invoke_agent`) normalizers emit them; every lifecycle is closed.
+- Workdir watcher (`opSource: 'watch'`), squad limits (6 concurrent, depth 1), `[SQUAD]` prompt.
+- Competitor isolation flags and an env scrub; `dev/isolation-smoke.ts` checks them.
+- Named-deliverable-first collection and judge context, 24K/240K judge budget, 3 h ceiling,
+  scaled helper timeouts, one judge retry. The leaderboard credits the lead's model.
+- Arena: squad world model, squad chips, deliverable strips and file-only momentum in the HUD,
+  `↳ label` log rows, isometric markers, and squad robots in the 3D view (spawn, work,
+  salute, fade). Labels show at arrival, exit and for the most active member; for providers
+  without attribution, the most recently spawned open member.
+- The 3-team phase chip no longer overlaps the header row.
+- WebSocket: subscribe before reading history, dedupe by event id.
+- `dev/seed-squad-demo.ts` seeds a synthetic three-team match for judging the visuals.
+
+- Final review fixes: per-band grid capacity measured (the middle band at N=3 lost x=0);
+  Codex `--json` crash reasons (`error`, `turn.failed`) reach `agentFailure`; Codex sub-agent
+  states map to failed / killed / unknown honestly; a throwing normalizer costs one line, not the
+  server; competitors lose the IDE / bridge / port handles the sandbox already blocks; replay
+  pause holds its frame and resumes from the playhead; the jumbotron says REPLAY for a finished
+  match and names FAILED / CANCELLED instead of SCORED; watch-only teams get their own legend
+  note; a ⛶ Theater mode for recording; the watcher polls every 2 s, skips binaries, caps a scan
+  and flushes once at shutdown; a rate-limited judge waits 15 s before its retry, and a
+  recovered judge failure is logged; squad labels skip leading filler.
+
+**Verified**: orchestrator, shared tests, orchestrator typecheck, web tsc and the video build
+(see the task report for counts). Browser (Chrome, foreground, 1510×833, the three-team squad
+replay): median 8.3 ms/frame (120 fps); squad robots visible mid-replay; headers count live.
+
+**Left open**: Gemini has no spawn cap; Codex and Gemini cannot say which member wrote a file;
+the persistence-lag window in the WebSocket replay; Codex `--ignore-user-config` ignores the
+operator's `config.toml`. See CLAUDE.md Known Issues.
+
 ## 2026-11-18 — honest fallback scores (branch `fix/honest-fallback-scorer`)
 
 **What was wrong**

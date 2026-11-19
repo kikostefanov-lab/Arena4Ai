@@ -68,6 +68,21 @@ describe('GET /leaderboard', () => {
     expect(res.body).toEqual([]);
   });
 
+  it('ignores a competition whose brief is tagged synthetic-demo', async () => {
+    const teams = [{ id: 'team-a', model: 'claude', persona: 'architect' }, { id: 'team-b', model: 'gemini', persona: 'speedrunner' }];
+    mockList.mockResolvedValue([
+      { id: 'demo', state: 'COMPLETE', teams, brief: { tags: ['synthetic-demo'] } },
+    ]);
+    mockListResults.mockResolvedValue([
+      { competitionId: 'demo', winnerId: 'team-a', scorecards: [
+        { teamId: 'team-a', finalScore: 0.9, rank: 1 }, { teamId: 'team-b', finalScore: 0.5, rank: 2 }] },
+    ]);
+
+    const res = await request(app).get('/leaderboard');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
   it('returns correct stats for a single completed competition', async () => {
     mockList.mockResolvedValue([
       {

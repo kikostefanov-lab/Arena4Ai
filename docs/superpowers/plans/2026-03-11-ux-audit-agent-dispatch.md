@@ -35,7 +35,7 @@
 - [ ] **Step 0: Verify all source files and output directory exist**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 ls marketing/index.html \
    packages/web/app/globals.css \
    packages/web/lib/design-tokens.ts \
@@ -62,7 +62,7 @@ You are the Senior UX Orchestrator for the Arena4Ai design audit team.
 Your job is to read the marketing landing page and all web app key files,
 then produce structured domain briefs for 3 specialist agents.
 
-Project root: /Users/kstefano/Personal Projects/agentarena
+Project root: <repo>
 
 READ THESE FILES IN ORDER:
 
@@ -165,7 +165,7 @@ Each agent uses `subagent_type: Explore`. All agents are **read-only** — no fi
 ```
 You are Agent 1 — Background Systems UX Specialist for the Arena4Ai audit.
 
-Project root: /Users/kstefano/Personal Projects/agentarena
+Project root: <repo>
 
 YOUR DOMAIN BRIEF FROM THE SENIOR ORCHESTRATOR:
 [INSERT DOMAIN BRIEF 1 HERE]
@@ -216,7 +216,7 @@ Do not speculate — only report what the files contain.
 ```
 You are Agent 2 — Typography & Badges UX Specialist for the Arena4Ai audit.
 
-Project root: /Users/kstefano/Personal Projects/agentarena
+Project root: <repo>
 
 YOUR DOMAIN BRIEF FROM THE SENIOR ORCHESTRATOR:
 [INSERT DOMAIN BRIEF 2 HERE]
@@ -273,7 +273,7 @@ Do not speculate — only report what the files contain.
 ```
 You are Agent 3 — Pages & Components UX Specialist for the Arena4Ai audit.
 
-Project root: /Users/kstefano/Personal Projects/agentarena
+Project root: <repo>
 
 YOUR DOMAIN BRIEF FROM THE SENIOR ORCHESTRATOR:
 [INSERT DOMAIN BRIEF 3 HERE]
@@ -377,7 +377,7 @@ Use Agent tool with `subagent_type: general-purpose` and this exact prompt (embe
 ```
 You are the Senior UX Orchestrator performing final synthesis for the Arena4Ai design audit.
 
-Project root: /Users/kstefano/Personal Projects/agentarena
+Project root: <repo>
 Spec: docs/superpowers/specs/2026-03-11-ux-audit-agent-team-design.md
 
 You have received reports from 3 specialist agents. Your job is to:
@@ -386,7 +386,7 @@ You have received reports from 3 specialist agents. Your job is to:
    more detailed version; discard the less detailed one and note the merge.
 2. Assign final severity ratings (Critical / Major / Minor)
 3. Write docs/ux-audit.md (the committed markdown report)
-4. Write a visual HTML file to: /Users/kstefano/Personal Projects/agentarena/.superpowers/brainstorm/98181-1773254965/ux-audit-report.html
+4. Write a visual HTML file to: <repo>/.superpowers/brainstorm/98181-1773254965/ux-audit-report.html
 
 ---
 SPECIALIST REPORT 1 — BACKGROUND SYSTEMS:
@@ -412,7 +412,7 @@ SEVERITY DEFINITIONS (final):
 TASK A: Write docs/ux-audit.md
 
 Use the Write tool to create this file at:
-/Users/kstefano/Personal Projects/agentarena/docs/ux-audit.md
+<repo>/docs/ux-audit.md
 
 Structure:
 # Arena4Ai UX Audit
@@ -463,7 +463,7 @@ Structure:
 TASK B: Write the visual HTML report
 
 Use the Write tool to create this file at:
-/Users/kstefano/Personal Projects/agentarena/.superpowers/brainstorm/98181-1773254965/ux-audit-report.html
+<repo>/.superpowers/brainstorm/98181-1773254965/ux-audit-report.html
 
 The HTML file must be a FULL HTML DOCUMENT (starts with <!DOCTYPE html>).
 Style it in the Arena4Ai TRON aesthetic (background #000408, cyan #00f0ff, orange #ff6600, grid background).
@@ -491,7 +491,7 @@ After writing both files, confirm:
 - [ ] **Step 6: Verify both deliverables exist and no source files were modified**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 ls -la "docs/ux-audit.md" \
        ".superpowers/brainstorm/98181-1773254965/ux-audit-report.html"
 ```
@@ -508,7 +508,7 @@ Expected: empty output (no lines). If any source files show as modified, investi
 - [ ] **Step 7: Commit the markdown report**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add docs/ux-audit.md
 git commit -m "docs: add UX audit report — web app vs marketing design gaps
 
@@ -524,7 +524,7 @@ Inform the user:
 - Markdown report: `docs/ux-audit.md` (committed to git)
 - Visual report: check if the visual companion server is running:
   ```bash
-  curl -s http://localhost:53996 > /dev/null && echo "Server running" || echo "Server not running — restart with: bash /Users/kstefano/.claude/plugins/cache/superpowers-marketplace/superpowers/5.0.1/skills/brainstorming/scripts/start-server.sh --project-dir '/Users/kstefano/Personal Projects/agentarena'"
+  curl -s http://localhost:53996 > /dev/null && echo "Server running" || echo "Server not running — restart with: bash ~/.claude/plugins/cache/superpowers-marketplace/superpowers/5.0.1/skills/brainstorming/scripts/start-server.sh --project-dir '<repo>'"
   ```
   Then open **http://localhost:53996** — `ux-audit-report.html` will be served as the newest file.
 - Ask: "Review the findings and let me know which ones to implement. We can tackle Critical issues first in a separate session using the frontend-design skill."

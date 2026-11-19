@@ -3,7 +3,7 @@ import { extname } from 'node:path';
 import { writeFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
-import { HEURISTIC_CEILING } from '@arena/shared';
+import { HEURISTIC_CEILING, expectedFileName } from '@arena/shared';
 import { normalizeOutput } from '../adapters/normalizer-utils.js';
 import { computeOverallScore } from './score-aggregator.js';
 
@@ -220,7 +220,7 @@ async function scoreByExecution(
 export const HEURISTIC_PREFIX = 'HEURISTIC:';
 
 /** Highest share of a criterion's maxScore the completeness heuristic can award (lives in @arena/shared so UI copy matches). */
-export { HEURISTIC_CEILING };
+export { HEURISTIC_CEILING, expectedFileName };
 
 /**
  * A file with fewer non-whitespace characters than this is treated as a
@@ -231,18 +231,6 @@ export const MIN_SUBSTANTIVE_CHARS = 40;
 
 /** Credit for a named deliverable that exists but is only a placeholder. */
 const PLACEHOLDER_CREDIT = 0.2;
-
-/** A leading token that looks like a file name: `README.md`, `src/cli.ts`, `scorer.py`. */
-const FILENAME_TOKEN = /^`?((?:[\w.-]+\/)*[\w-][\w.-]*\.[A-Za-z][A-Za-z0-9]{0,7})`?(?=$|[\s,:;(—–-])/;
-
-/**
- * The file name a brief deliverable names, or null when the entry only describes
- * one ("A runnable solution file (any language)") and so cannot be checked.
- */
-export function expectedFileName(entry: string): string | null {
-  const match = FILENAME_TOKEN.exec(entry.trim());
-  return match ? match[1].replace(/^\.?\//, '') : null;
-}
 
 function nonWhitespaceLength(content: string): number {
   return content.replace(/\s+/g, '').length;

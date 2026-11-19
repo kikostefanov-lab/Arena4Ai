@@ -24,8 +24,21 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { providerOf } from '@arena/shared';
-import type { World, Structure } from '@arena/shared';
+import { SimplifyModifier } from 'three/examples/jsm/modifiers/SimplifyModifier.js';
+import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { providerOf, capabilityFor, momentumShares, squadSlotCells, SQUAD_SLOTS } from '@arena/shared';
+import type { World, Structure, SquadMember, RecentActivity, TeamState } from '@arena/shared';
+
+/**
+ * Jumbotron team name. Arena3DTeam carries no persona, so a model that already
+ * holds one ("claude:architect") shows as given; a repeated trailing segment
+ * ("claude:architect:architect") is collapsed. Pure.
+ */
+export function jumboName(model: string): string {
+  const parts = model.split(':');
+  while (parts.length > 1 && parts[parts.length - 1].toLowerCase() === parts[parts.length - 2].toLowerCase()) parts.pop();
+  return parts.join(':').toUpperCase();
+}
 
 export interface Arena3DTeam { id: string; model: string; color: string }
 export interface Arena3DOptions {
@@ -74,12 +87,38 @@ const POSES: Record<PoseName, number[]> = {
 const JOINTS = ['hips', 'spine', 'head', 'shL', 'elL', 'shR', 'elR', 'hipL', 'knL', 'hipR', 'knR'] as const;
 type JointName = typeof JOINTS[number];
 
-interface Fighter {
-  id: string; color: THREE.Color; root: THREE.Object3D; j: Record<JointName, THREE.Object3D>; disc: THREE.Object3D | null;
+interface Posable { j: Record<JointName, THREE.Object3D>; cur: number[]; hipsY: number }
+interface Fighter extends Posable {
+  id: string; color: THREE.Color; root: THREE.Object3D; disc: THREE.Object3D | null;
   glow: THREE.MeshStandardMaterial | null; base: THREE.Color; flareC: THREE.Color; flare: number;
-  aura: THREE.Mesh; hipsY: number; cur: number[]; basePose: PoseName; flash: PoseName | null; flashT: number; thinkT: number;
+  aura: THREE.Mesh; basePose: PoseName; flash: PoseName | null; flashT: number; thinkT: number;
   energy: number; light: THREE.PointLight; beams: THREE.ShaderMaterial[];
+  /** Model-space height of this robot, for placing things above its head. */
+  height: number;
+  /** The squad pool: `SQUAD_SLOTS` low-detail robots built in `load()`. */
+  squad: SquadBot[];
+  /** "+N" above the lead: open members with no slot, counted but not drawn. */
+  badge: Tag;
 }
+
+/**
+ * One sub-agent robot. Each team has a fixed pool, built in `load()` and bound
+ * to members by `placeSquad()` every frame; nothing is cloned at runtime.
+ */
+interface SquadBot extends Posable {
+  root: THREE.Object3D;
+  label: THREE.Sprite; labelText: string; labelCtx: CanvasRenderingContext2D; labelTex: THREE.CanvasTexture;
+  /** A reaction set by `reactActor()` (live only; drawFrame derives its own). */
+  flash: PoseName | null; flashT: number;
+  /** The member this bot drew last frame. A different member drops the flash. */
+  memberId: string | null;
+  body: THREE.MeshStandardMaterial; glow: THREE.MeshStandardMaterial;
+  aura: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
+  beam: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+}
+interface Tag { sprite: THREE.Sprite; ctx: CanvasRenderingContext2D; tex: THREE.CanvasTexture; text: string }
+/** One decimated mesh of a robot, in the space of the joint that carries it. */
+interface LodPiece { joint: string; cls: string; geo: THREE.BufferGeometry; color: THREE.Color }
 interface Block { group: THREE.Group; cap: THREE.MeshBasicMaterial | null; fill: THREE.MeshStandardMaterial; edge: THREE.LineBasicMaterial | THREE.LineDashedMaterial; depth: string; color: THREE.Color }
 
 const P = 44; // city block period
@@ -90,6 +129,55 @@ const ALERT = new THREE.Color('#ff3b3b');
 const GRID = new THREE.Color('#00f0ff');
 const WHITE = new THREE.Color(1, 1, 1);
 const MAX_PULSES = 6;
+const UP = new THREE.Vector3(0, 1, 0);
+
+// Squad robots.
+/** A squad robot's size relative to its lead. */
+const SQUAD_SCALE = 0.55;
+/** World-ms a new member takes to travel from the lead to its slot, scaling in. */
+const SPAWN_MS = 600;
+/** World-ms an ended member stays on its cell, saluting or hit, while it fades. */
+const EXIT_MS = 900;
+/** Seconds a live reaction (power / strike / hit) lasts on a squad robot. */
+const SQUAD_FLASH_S = 0.7;
+/** World-ms a new member's label stays up, and how long one stays up after its member acts. */
+const LABEL_SPAWN_MS = 2500;
+const LABEL_ACTIVE_MS = 3000;
+/** Label height as a fraction of the view (labels keep their size at any distance). */
+const LABEL_H = 0.03;
+/** Model-space height of a robot's chest, where beams attach. */
+const CHEST = 6.2;
+/** Vertices the decimated squad robot keeps, and the mesh size below which decimating is not worth the tearing. */
+const LOD_KEEP = 0.25;
+const LOD_MIN_VERTS = 400;
+/** How the jumbotron names a match that ended without a verdict. */
+const NO_VERDICT_LABEL: Readonly<Record<string, string>> = { FAILED: 'MATCH FAILED', CANCELLED: 'CANCELLED' };
+
+/** Seconds the "DEPLOYS SQUAD" banner holds before the live banner returns. */
+const SQUAD_JUMBO_S = 6;
+/**
+ * Events older than this (world-ms) do not react. A forward seek hands `sync`
+ * everything between the old and the new playhead; replaying it would fire a
+ * burst of effects for things that happened long ago.
+ */
+const REACT_STALE_MS = 2000;
+/** How far the momentum seam swings for a team holding every file event in the window. */
+const SEAM_SWING = 0.6;
+
+const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
+const smooth = (v: number): number => v * v * (3 - 2 * v);
+/** A reaction's strength `a` (0..1) of the way through it: a quick rise, a long fall. */
+const envelope = (a: number): number => { const e = a < 0.25 ? a / 0.25 : 1 - (a - 0.25) / 0.75; const c = clamp01(e); return smooth(c); };
+/** Blend `cur` toward `to` by `w`, in place. */
+function blendPose(cur: number[], to: number[], w: number): void { for (let i = 0; i < cur.length; i++) cur[i] += (to[i] - cur[i]) * w; }
+/**
+ * Give the event loop a turn. A message, not `setTimeout(0)`: browsers throttle
+ * timers in a background tab to one a second, which would stretch a load that
+ * yields a few dozen times into minutes.
+ */
+function yieldTask(): Promise<void> {
+  return new Promise((resolve) => { const ch = new MessageChannel(); ch.port1.onmessage = () => { ch.port1.close(); resolve(); }; ch.port2.postMessage(0); });
+}
 
 function mulberry(a: number): () => number {
   return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
@@ -104,6 +192,10 @@ export class Arena3D {
   private fighters: Fighter[] = [];
   private blocks = new Map<string, Block>();
   private blockRoot = new THREE.Group();
+  /** Every squad robot, beam, label and badge: one switch hides them all from the mirror. */
+  private squadRoot = new THREE.Group();
+  private tagTextures: THREE.CanvasTexture[] = [];
+  private jumboUntil = 0;
   private arena = new THREE.Group();
   private floorMat!: THREE.ShaderMaterial;
   private groundMat!: THREE.ShaderMaterial;
@@ -123,6 +215,7 @@ export class Arena3D {
   private seam = 0;
   private disposed = false;
   private tmp = new THREE.Vector3();
+  private tmp2 = new THREE.Vector3();
   // particles
   private PN = 1600; private pPos!: Float32Array; private pCol!: Float32Array; private pSize!: Float32Array;
   private pVel!: Float32Array; private pLife!: Float32Array; private pMax!: Float32Array; private pGrav!: Float32Array;
@@ -154,6 +247,7 @@ export class Arena3D {
     this.buildParticles();
     this.scene.add(this.arena);
     this.arena.add(this.blockRoot);
+    this.arena.add(this.squadRoot);
     this.scene.add(new THREE.HemisphereLight(0x8fa8ff, 0x180822, 0.7));
     const sun = new THREE.DirectionalLight(0xff4f8a, 1.4); sun.position.set(0, 30, -200); this.scene.add(sun);
     const fill = new THREE.DirectionalLight(0x35d6ff, 1.1); fill.position.set(0, 80, 160); this.scene.add(fill);
@@ -166,6 +260,8 @@ export class Arena3D {
     if (this.disposed) return;
     this.free.r = this.R * 2.3;
     this.buildDeck();
+    // One decimation per robot model, shared by every team that uses it.
+    const lod = new Map<string, Promise<LodPiece[]>>();
     for (const spec of this.opts.teams) {
       const st = world.teams.get(spec.id);
       const provider = providerOf(spec.model);
@@ -193,10 +289,20 @@ export class Arena3D {
       this.arena.add(root);
       const light = new THREE.PointLight(color, 100, 70, 1.8); this.scene.add(light);
       const glowMat = glow as THREE.MeshStandardMaterial | null;
+
+      let pieces = lod.get(prefix);
+      if (!pieces) lod.set(prefix, (pieces = this.lowDetailPieces(src)));
+      const template = this.squadTemplate(src, await pieces, color);
+      if (this.disposed) return;
+      const squad = Array.from({ length: SQUAD_SLOTS }, () => this.makeBot(template, prefix, color));
+      const badge = this.makeTag(192, 96);
+      const bb = new THREE.Box3().setFromObject(src);
+
       this.fighters.push({
         id: spec.id, color, root, j, disc: root.getObjectByName(`${prefix}_disc`) ?? null, glow: glowMat,
         base: glowMat ? glowMat.emissive.clone() : color.clone(), flareC: new THREE.Color(1, 1, 1), flare: 0, aura, hipsY: j.hips.position.y,
         cur: POSES.idle.slice(), basePose: 'idle', flash: null, flashT: 0, thinkT: 0, energy: 0, light, beams: [],
+        height: Math.max(1, bb.max.y - bb.min.y), squad, badge,
       });
     }
     this.layout(world);
@@ -226,6 +332,289 @@ export class Arena3D {
   }
   private laidOut = false;
 
+  // ───────────────────────────────────────────────────────────── squad robots
+
+  /**
+   * Decimate one robot model for its squad.
+   *
+   * The shipped robots are ~52 meshes and ~137K triangles each; three squads of
+   * six full clones would be ~1,000 draw calls and 2.5M triangles. Each mesh is
+   * welded and run through three's SimplifyModifier down to `LOD_KEEP` of its
+   * vertices (small meshes are kept whole: they are cheap, and collapsing a
+   * 100-vertex trim tears it), which takes the robot to ~37K triangles. The
+   * robot is a rigid joint hierarchy, not a skinned mesh, so decimating each
+   * part in its own joint's space keeps the jointed look: nothing stretches
+   * across a joint. Normals are dropped and the bot is flat-shaded, which reads
+   * as deliberate low-poly armour rather than a smoothed-over blob.
+   *
+   * Runs once per model at load (~0.7 s), yielding every ~24 ms of work so the
+   * page stays responsive while it runs.
+   */
+  private async lowDetailPieces(src: THREE.Object3D): Promise<LodPiece[]> {
+    src.updateMatrixWorld(true);
+    const joints = new Set(JOINTS.map((n) => `${src.name}_${n}`));
+    const meshes: THREE.Mesh[] = [];
+    src.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+    const simplify = new SimplifyModifier();
+    const rel = new THREE.Matrix4();
+    const pieces: LodPiece[] = [];
+    let slice = performance.now();
+    for (const m of meshes) {
+      if (performance.now() - slice > 24) { await yieldTask(); slice = performance.now(); if (this.disposed) break; }
+      let joint: THREE.Object3D = m.parent ?? src;
+      while (joint !== src && joint.parent && !joints.has(joint.name)) joint = joint.parent;
+      rel.copy(joint.matrixWorld).invert().multiply(m.matrixWorld);
+      let geo = new THREE.BufferGeometry().setAttribute('position', m.geometry.getAttribute('position').clone());
+      if (m.geometry.index) geo.setIndex(m.geometry.index.clone());
+      geo.applyMatrix4(rel);
+      geo = mergeVertices(geo);
+      const n = geo.getAttribute('position').count;
+      if (n > LOD_MIN_VERTS) geo = simplify.modify(geo, Math.floor(n * (1 - LOD_KEEP)));
+      const mat = m.material as THREE.MeshStandardMaterial;
+      pieces.push({ joint: joint.name, cls: mat.name.slice(mat.name.lastIndexOf('_') + 1), geo, color: mat.color.clone() });
+    }
+    return pieces;
+  }
+
+  /**
+   * A team's squad robot, from the decimated pieces: the team robot's joint
+   * hierarchy with two meshes per joint, a body whose materials are baked into
+   * vertex colours (the paint in the team colour) and the glow strips. Two
+   * draw calls per joint instead of five.
+   */
+  private squadTemplate(src: THREE.Object3D, pieces: LodPiece[], color: THREE.Color): THREE.Object3D {
+    const root = src.clone(true);
+    const old: THREE.Object3D[] = [];
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) old.push(o); });
+    for (const o of old) o.removeFromParent();
+    // The disc of the Claude robot stays, merged into the spine: at this size
+    // it is still what tells a Claude squad from a Gemini one, but it does not spin.
+    const paint = color.clone().multiplyScalar(0.62);
+    const byJoint = new Map<string, { body: THREE.BufferGeometry[]; glow: THREE.BufferGeometry[] }>();
+    for (const p of pieces) {
+      let g = byJoint.get(p.joint);
+      if (!g) byJoint.set(p.joint, (g = { body: [], glow: [] }));
+      if (p.cls === 'glow') { g.glow.push(p.geo); continue; }
+      // Lift the near-black armour a touch: a third of the size, it would otherwise read as a hole.
+      const c = p.cls === 'paint' ? paint : p.color.clone().multiplyScalar(1.6);
+      const geo = p.geo.clone(), n = geo.getAttribute('position').count, a = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) c.toArray(a, i * 3);
+      geo.setAttribute('color', new THREE.BufferAttribute(a, 3));
+      g.body.push(geo);
+    }
+    for (const [name, g] of byJoint) {
+      const joint = name === src.name ? root : root.getObjectByName(name);
+      if (!joint) continue;
+      for (const [list, part] of [[g.body, 'body'], [g.glow, 'glow']] as const) {
+        const merged = list.length ? mergeGeometries(list as THREE.BufferGeometry[]) : null;
+        if (!merged) continue;
+        merged.computeVertexNormals();
+        const mesh = new THREE.Mesh(merged); mesh.name = part; joint.add(mesh);
+      }
+    }
+    return root;
+  }
+
+  private makeBot(template: THREE.Object3D, prefix: string, color: THREE.Color): SquadBot {
+    const root = template.clone(true);
+    const body = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.7, roughness: 0.36, envMapIntensity: 1.3, flatShading: true });
+    const glow = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: color.clone(), roughness: 0.4, metalness: 0 });
+    root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh) m.material = m.name === 'glow' ? glow : body; });
+    const j = {} as Record<JointName, THREE.Object3D>;
+    for (const n of JOINTS) j[n] = root.getObjectByName(`${prefix}_${n}`) ?? new THREE.Object3D();
+    // A smaller, fainter aura than the lead's.
+    const aura = new THREE.Mesh(Arena3D.squadAuraGeo, new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(2), transparent: true, opacity: 0, toneMapped: false, depthWrite: false }));
+    aura.rotation.x = -Math.PI / 2; aura.position.y = 0.06; root.add(aura);
+    const beam = new THREE.Mesh(Arena3D.beamGeo, new THREE.MeshBasicMaterial({ color: color.clone().multiplyScalar(2.4), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }));
+    const tag = this.makeTag(512, 96);
+    root.visible = false; beam.visible = false;
+    this.squadRoot.add(root, beam);
+    return {
+      root, j, hipsY: j.hips.position.y, cur: POSES.idle.slice(), flash: null, flashT: 0, memberId: null,
+      label: tag.sprite, labelText: '', labelCtx: tag.ctx, labelTex: tag.tex, body, glow, aura, beam,
+    };
+  }
+  private static squadAuraGeo = new THREE.RingGeometry(2.2, 2.45, 40);
+  private static beamGeo = (() => { const g = new THREE.CylinderGeometry(0.16, 0.16, 1, 6, 1, true); g.translate(0, 0.5, 0); return g; })();
+
+  /** A camera-facing text tag that keeps its on-screen size at any distance. */
+  private makeTag(w: number, h: number): Tag {
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, sizeAttenuation: false }));
+    sprite.renderOrder = 10; sprite.visible = false;
+    this.tagTextures.push(tex);
+    this.squadRoot.add(sprite);
+    return { sprite, ctx: cv.getContext('2d') as CanvasRenderingContext2D, tex, text: '' };
+  }
+
+  private drawTag(ctx: CanvasRenderingContext2D, tex: THREE.CanvasTexture, text: string, color: THREE.Color): void {
+    const w = ctx.canvas.width, h = ctx.canvas.height, pad = h * 0.36;
+    ctx.clearRect(0, 0, w, h);
+    let size = Math.round(h * 0.46);
+    ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`;
+    let tw = ctx.measureText(text).width;
+    if (tw > w - pad * 2) { size = Math.floor(size * (w - pad * 2) / tw); ctx.font = `600 ${size}px ui-sans-serif, system-ui, sans-serif`; tw = ctx.measureText(text).width; }
+    const bw = Math.min(w - 4, tw + pad * 2), x0 = (w - bw) / 2, y0 = h * 0.14, bh = h * 0.72, r = bh / 2;
+    ctx.beginPath();
+    ctx.moveTo(x0 + r, y0); ctx.lineTo(x0 + bw - r, y0); ctx.arc(x0 + bw - r, y0 + r, r, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(x0 + r, y0 + bh); ctx.arc(x0 + r, y0 + r, r, Math.PI / 2, Math.PI * 1.5); ctx.closePath();
+    ctx.fillStyle = 'rgba(3,7,16,0.84)'; ctx.fill();
+    ctx.strokeStyle = `#${color.getHexString()}`; ctx.lineWidth = Math.max(2, h * 0.045); ctx.stroke();
+    ctx.fillStyle = '#eaf7ff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, w / 2, h / 2 + 1);
+    tex.needsUpdate = true;
+  }
+
+  /**
+   * Bind each team's pool to its squad and pose it: a pure function of `world`,
+   * with `now` (scene seconds) only for the ambient breathing and working loop.
+   * Called by both `sync()` and `drawFrame()`.
+   *
+   * A member with a slot is drawn from `spawnedAt` until `endedAt + EXIT_MS`.
+   * It scales in over `SPAWN_MS`, travelling from the lead to its slot cell on
+   * a beam; works there; then salutes (completed) or takes a hit with a red fade
+   * (failed, killed, unknown). Every age is the playhead minus the member's own
+   * event times, so a seek lands on the same picture as playing up to it.
+   *
+   * A provider that cannot attribute events to a member gets a looping working
+   * pose, because the picture must not invent which member did what.
+   *
+   * `flashWin` is drawFrame's reaction window (world-ms): given, a robot's
+   * reaction is derived from its own recent events; omitted, it is the live
+   * flash `reactActor()` set.
+   */
+  private placeSquad(world: World, now: number, flashWin?: number): void {
+    const C = this.C, k45 = C / 4.5, active = world.phase === 'active';
+    for (const f of this.fighters) {
+      const st = world.teams.get(f.id);
+      const bound: Array<SquadMember | null> = f.squad.map(() => null);
+      let overflow = 0;
+      const cells = st && active ? squadSlotCells(st.band) : [];
+      if (st && active) {
+        const fading: SquadMember[] = [];
+        for (const m of st.squad.values()) {
+          if (m.spawnedAt > world.t) continue;
+          const open = m.endedAt === undefined || m.endedAt > world.t;
+          const drawn = m.slot !== null && m.slot < Math.min(bound.length, cells.length);
+          if (open) { if (drawn) bound[m.slot!] = m; else overflow++; }
+          else if (drawn && world.t - m.endedAt! < EXIT_MS) fading.push(m);
+        }
+        // An ended member keeps its slot number for its exit, but the slot is
+        // free for the next spawn at once. When one has taken it, the exit plays
+        // on a spare bot on the same cell (the newcomer is still travelling out
+        // from the lead), or is cut short when all six are busy.
+        for (const m of fading) {
+          const i = bound[m.slot!] ? bound.indexOf(null) : m.slot!;
+          if (i >= 0) bound[i] = m;
+        }
+      }
+      const attributed = st ? capabilityFor(st.model).subagentAttribution : false;
+      const lead = f.root.position, ls = f.root.scale.x;
+      // Labels: new arrivals, exits, and only the single most recently active
+      // member, so three squads never bury the floor in text.
+      let talker: SquadMember | null = null;
+      for (const m of bound) {
+        if (!m || m.endedAt !== undefined && m.endedAt <= world.t || m.spawnedAt > world.t) continue;
+        if (!attributed) {
+          // No per-member attribution (codex, gemini): lastActiveAt never moves,
+          // so the most recently SPAWNED open member keeps the team's label.
+          if (!talker || m.spawnedAt > talker.spawnedAt) talker = m;
+          continue;
+        }
+        if (m.lastActiveAt <= m.spawnedAt || m.lastActiveAt > world.t) continue;
+        if (world.t - m.lastActiveAt < LABEL_ACTIVE_MS && (!talker || m.lastActiveAt > talker.lastActiveAt)) talker = m;
+      }
+
+      f.squad.forEach((b, i) => {
+        const m = bound[i];
+        if (!m) { b.root.visible = b.beam.visible = b.label.visible = false; b.memberId = null; b.flash = null; return; }
+        if (b.memberId !== m.id) { b.memberId = m.id; b.flash = null; b.flashT = 0; }
+        const cell = cells[m.slot!];
+        const age = world.t - m.spawnedAt, k = smooth(clamp01(age / SPAWN_MS));
+        const ended = m.endedAt !== undefined && m.endedAt <= world.t;
+        const x = ended ? clamp01((world.t - m.endedAt!) / EXIT_MS) : 0;
+        const ok = m.status === 'completed';
+        const s = ls * SQUAD_SCALE * Math.max(0.02, k);
+
+        // Out of the lead's chest, down onto the slot.
+        const px = lead.x + (cell.x * C - lead.x) * k, pz = lead.z + (cell.z * C - lead.z) * k;
+        const py = 3.84 + (1 - k) * CHEST * ls * 0.8;
+        b.root.visible = true;
+        b.root.position.set(px, py, pz);
+        b.root.scale.setScalar(s);
+        b.root.rotation.y = lead.x <= 0 ? Math.PI / 2 : -Math.PI / 2;
+
+        // Pose: idle, or the working loop; a reaction on top; the exit pose last.
+        const c = b.cur;
+        for (let q = 0; q < c.length; q++) c[q] = POSES.idle[q];
+        if (!attributed && !ended && k >= 1) blendPose(c, POSES.strike, this.reduced ? 0.3 : 0.32 + 0.28 * Math.sin(now * 5.2 + m.slot! * 1.7));
+        let fl: PoseName | null = null, e = 0;
+        if (!ended && flashWin !== undefined) {
+          for (let r = world.recent.length - 1; r >= 0; r--) {
+            const a = world.recent[r];
+            if (world.t - a.t > flashWin) break;
+            if (a.t > world.t || a.agentId !== m.id || (a.kind !== 'file' && a.kind !== 'tool' && a.kind !== 'error')) continue;
+            fl = a.kind === 'file' ? 'strike' : a.kind === 'error' ? 'hit' : 'power';
+            e = envelope((world.t - a.t) / flashWin);
+            break;
+          }
+        } else if (!ended && b.flash) { fl = b.flash; e = envelope(1 - b.flashT / SQUAD_FLASH_S); }
+        if (fl) blendPose(c, POSES[fl], e);
+        if (ended) blendPose(c, POSES[ok ? 'salute' : 'hit'], smooth(clamp01(x / 0.3)));
+        this.applyJoints(b, this.reduced ? 0 : Math.sin(now * 1.9 + m.slot! * 2.1) * 0.03);
+
+        // Look: fade out on exit, red for anything but a clean finish.
+        const alpha = 1 - x, red = ended && !ok ? clamp01(x * 3) : 0;
+        // Opaque until the fade, and no depth writes during it. A transparent
+        // body that writes depth was measured to differ by a few dozen pixels
+        // between identical drawFrame calls, which a reel rendered out of order
+        // would show as flicker; without depth writes it is stable (and a
+        // fading robot reads as a ghost, which is the point).
+        const fading = x > 0;
+        if (b.body.transparent !== fading) {
+          b.body.transparent = b.glow.transparent = fading;
+          b.body.depthWrite = b.glow.depthWrite = !fading;
+          b.body.needsUpdate = b.glow.needsUpdate = true;
+        }
+        b.body.opacity = b.glow.opacity = alpha;
+        b.body.emissive.copy(ALERT).multiplyScalar(red * 0.5);
+        b.glow.emissive.copy(f.color).lerp(fl === 'hit' ? ALERT : WHITE, e * 0.7).lerp(ALERT, red);
+        b.aura.material.opacity = (0.22 + e * 0.4) * alpha * k;
+
+        // The beam: lead to robot while it travels out, robot back to lead as a finished member reports in.
+        const bi = k < 1 ? Math.sin(k * Math.PI) : ended && ok ? Math.sin(x * Math.PI) * 0.8 : 0;
+        if (bi > 0.02) {
+          const ay = 3.84 + CHEST * ls, v = this.tmp2.set(px - lead.x, py + CHEST * s - ay, pz - lead.z), len = v.length();
+          b.beam.visible = len > 0.2;
+          b.beam.position.set(lead.x, ay, lead.z);
+          if (len > 0.2) b.beam.quaternion.setFromUnitVectors(UP, v.divideScalar(len));
+          b.beam.scale.set(k45, len, k45);
+          b.beam.material.opacity = bi;
+        } else b.beam.visible = false;
+
+        const talk = m !== talker ? 0 : attributed ? clamp01((LABEL_ACTIVE_MS - (world.t - m.lastActiveAt)) / 500) : 1;
+        const la = Math.max(clamp01((LABEL_SPAWN_MS - age) / 500), talk, ended ? 1 : 0) * alpha * clamp01(k * 2);
+        if (la > 0.01) {
+          if (b.labelText !== m.label) { b.labelText = m.label; this.drawTag(b.labelCtx, b.labelTex, m.label, f.color); }
+          b.label.visible = true;
+          b.label.material.opacity = la;
+          b.label.position.set(px, py + f.height * s + 1.1 * k45, pz);
+          b.label.scale.set(LABEL_H * 512 / 96, LABEL_H, 1);
+        } else b.label.visible = false;
+      });
+
+      const badge = f.badge;
+      if (overflow > 0) {
+        const text = `+${overflow}`;
+        if (badge.text !== text) { badge.text = text; this.drawTag(badge.ctx, badge.tex, text, f.color); }
+        badge.sprite.visible = true;
+        badge.sprite.position.set(lead.x, lead.y + f.height * ls + 2.2 * k45, lead.z);
+        badge.sprite.scale.set(LABEL_H * 1.2 * 2, LABEL_H * 1.2, 1);
+      } else badge.sprite.visible = false;
+    }
+  }
+
   // ───────────────────────────────────────────────────────────── world sync
 
   /** Mirror the truth model into the scene. Called once per frame by the host. */
@@ -234,26 +623,45 @@ export class Arena3D {
     this.layout(world);
 
     this.syncBlocks(world);
+    // Squad first, so a member spawned this frame has a robot to react with.
+    this.placeSquad(world, now);
+    for (const f of this.fighters) for (const b of f.squad) if (b.flash && (b.flashT -= dt) <= 0) b.flash = null;
 
-    // Per-event choreography, from the world's own recent-activity window.
+    // Per-event choreography, from the world's own recent-activity window,
+    // coalesced per actor: each robot (lead, member, or the unnamed squad)
+    // plays only its newest fresh event, so a burst of activity never stacks
+    // effects and never has to be dropped wholesale. Lifecycle (spawn / done)
+    // is its own channel, so a member's first tool call cannot swallow its
+    // arrival; and narration never displaces an action in the same frame.
     if (world.t < this.lastT) this.lastT = world.t;       // scrubbed backwards: no effects
-    const fresh = world.recent.filter((r) => r.t > this.lastT && r.t <= world.t);
-    if (fresh.length > 0 && fresh.length <= 10) for (const r of fresh) this.react(world, r.teamId, r.kind);
+    const since = Math.max(this.lastT, world.t - REACT_STALE_MS);
+    const acts = new Map<string, RecentActivity>();
+    for (const r of world.recent) {
+      if (r.t <= since || r.t > world.t) continue;
+      const life = r.kind === 'spawn' || r.kind === 'agentDone';
+      const actor = `${r.teamId}|${r.agentId ?? (r.squad ? '#squad' : '#lead')}${life ? '|life' : ''}`;
+      const prev = acts.get(actor);
+      if (prev && r.kind === 'reasoning' && prev.kind !== 'reasoning') continue;
+      acts.set(actor, r);
+    }
+    for (const r of acts.values()) this.reactActor(world, r.teamId, r.agentId, r.kind, r.key, !!r.squad);
     this.lastT = world.t;
+    if (this.jumboUntil > 0 && now >= this.jumboUntil) {
+      this.jumboUntil = 0;
+      if (world.phase === 'active') this.setJumbo(this.liveBanner(world), '#00f0ff');
+    }
 
     // Phase.
-    const phaseKey = `${world.phase}:${world.winnerId ?? ''}`;
+    const phaseKey = `${world.phase}:${world.winnerId ?? ''}:${world.replayOf ?? ''}`;
     if (phaseKey !== this.lastPhase) { this.onPhase(world); this.lastPhase = phaseKey; }
     this.phaseCol.lerp(world.phase === 'judging' ? JUDGE : new THREE.Color(0, 0, 0), Math.min(1, dt * 3));
     this.floorMat.uniforms.uPhase.value.copy(this.phaseCol);
     this.groundMat.uniforms.uPhase.value.copy(this.phaseCol);
 
-    // Momentum (10s window) → the seam between two territories.
+    // Momentum (10s window of file events, as the HUD bar) → the seam between two territories.
     let target = 0;
     if (this.fighters.length === 2) {
-      let a = 0, b = 0;
-      for (const r of world.recent) { if (world.t - r.t >= 10_000) continue; if (r.teamId === this.fighters[0].id) a++; else if (r.teamId === this.fighters[1].id) b++; }
-      target = (a - b) / (a + b + 3);
+      target = this.seamFor(world, 10_000);
       if (world.phase === 'reveal' && world.winnerId) target = world.winnerId === this.fighters[0].id ? 0.8 : -0.8;
       if (world.phase === 'judging' || world.phase === 'freeze') target = 0;
     }
@@ -331,8 +739,9 @@ export class Arena3D {
       if (age > 2.2) break;
       if (age < 0 || r.kind === 'reasoning') continue;
       const f = this.fighters.find((x) => x.id === r.teamId); if (!f) continue;
-      this.pulses[pi].set(f.root.position.x, 0, o.t - age * 0.7, 0);
-      this.pulseColors[pi].copy(r.kind === 'error' ? ALERT : f.color); pi++;
+      const at = this.pulseAt(world, r, f);
+      this.pulses[pi].set(at.x, at.z, o.t - age * 0.7, 0);
+      this.pulseColors[pi].copy(r.kind === 'error' || (r.kind === 'agentDone' && !this.endedClean(world, r)) ? ALERT : f.color); pi++;
     }
 
     const winner = world.phase === 'reveal' ? this.fighters.find((f) => f.id === world.winnerId) : undefined;
@@ -343,8 +752,13 @@ export class Arena3D {
       for (let i = recent.length - 1; i >= 0; i--) {
         const r = recent[i]; if (world.t - r.t > win * 6) break;
         if (r.teamId !== f.id || r.t > world.t) continue;
-        counts[fi]++; newest = newest ?? r.kind;
-        if (!last && r.kind !== 'reasoning' && world.t - r.t <= win) last = r;
+        counts[fi]++;
+        // The squad's own events move the squad, not the lead. Its one part in
+        // them is the spawn: the lead deploys the member.
+        const own = !r.agentId && !r.squad;
+        if (!own && r.kind !== 'spawn') continue;
+        if (own) newest = newest ?? r.kind;
+        if (!last && r.kind !== 'reasoning' && r.kind !== 'agentDone' && world.t - r.t <= win) last = r;
       }
       f.energy = winner ? (f === winner ? 1 : 0) : Math.min(1, counts[fi] / 8);
       const staged = ov?.pose;
@@ -354,7 +768,7 @@ export class Arena3D {
         const A0 = POSES[staged.from], B0 = POSES[staged.to], m = Math.min(1, Math.max(0, staged.mix));
         for (let i = 0; i < f.cur.length; i++) f.cur[i] = A0[i] + (B0[i] - A0[i]) * m;
       } else if (last && !staged && !winner) {
-        const a = (world.t - last.t) / win; e = a < 0.25 ? a / 0.25 : 1 - (a - 0.25) / 0.75; e = e * e * (3 - 2 * e);
+        e = envelope((world.t - last.t) / win);
         flash = last.kind === 'file' ? 'strike' : last.kind === 'error' ? 'hit' : 'power';
         f.flareC.copy(last.kind === 'error' ? ALERT : WHITE);
       }
@@ -373,17 +787,18 @@ export class Arena3D {
       for (const bm of f.beams) bm.uniforms.uI.value = 0.12 + f.energy * 0.75;
     });
 
+    this.placeSquad(world, o.t, win);
+
     let seam = 0;
     if (this.fighters.length === 2) {
-      seam = (counts[0] - counts[1]) / (counts[0] + counts[1] + 3);
+      seam = this.seamFor(world, win * 6);
       if (winner) seam = winner === this.fighters[0] ? 0.8 : -0.8; else if (judging || world.phase === 'freeze') seam = 0;
     }
     this.floorMat.uniforms.uSeam.value = seam * Math.abs(this.fighters[0]?.root.position.x ?? 0) * 0.5;
 
     this.spot.visible = !!winner && (o.reveal ?? 0) > 0;
     if (winner) { this.spot.position.x = winner.root.position.x; this.spot.material.uniforms.uC.value = winner.color; this.spot.material.uniforms.uI.value = o.reveal ?? 0; }
-    const names = this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ');
-    this.setJumbo(o.banner?.text ?? `LIVE  ·  ${names}`, o.banner?.color ?? '#00f0ff');
+    this.setJumbo(o.banner?.text ?? this.liveBanner(world), o.banner?.color ?? '#00f0ff');
     this.jumbo.tex.offset.x = o.t * 0.03;
     this.placeCars(o.t);
     this.pSize.fill(0); this.pGeo.attributes.size.needsUpdate = true;
@@ -424,15 +839,121 @@ export class Arena3D {
     });
     this.scene.environment?.dispose();
     this.jumbo?.tex.dispose();
+    for (const t of this.tagTextures) t.dispose();
     this.composer.dispose();
     this.renderer.dispose();
   }
 
   // ───────────────────────────────────────────────────────────── reactions
 
-  private react(world: World, teamId: string, kind: string): void {
+  /**
+   * Play one actor's reaction to its newest fresh event (live only).
+   *
+   * The actor is the squad robot `agentId` names. With no `agentId`, a file an
+   * unnamed squad member wrote (`squad`, from the workdir watcher) only pulses
+   * its block, because nobody on the floor can honestly be shown writing it;
+   * anything else is the lead's. A file spark aims at the block `key` names.
+   */
+  private reactActor(world: World, teamId: string, agentId: string | undefined, kind: string, key: string | undefined, squad = false): void {
     const f = this.fighters.find((x) => x.id === teamId);
-    if (!f) return;
+    const st = world.teams.get(teamId);
+    if (!f || !st) return;
+    if (kind === 'spawn' || kind === 'agentDone') { this.reactLifecycle(world, f, st, agentId, kind); return; }
+    const block = key ? world.structures.get(`${teamId}|${key}`) : undefined;
+    const top = block ? new THREE.Vector3(block.x * this.C, 3.86 + block.h * this.C, block.z * this.C) : null;
+    if (!agentId && !squad) { this.reactLead(f, kind, top); return; }
+    if (kind === 'reasoning') return;
+    f.energy = Math.min(1, f.energy + 0.1);
+    const bot = agentId ? f.squad.find((b) => b.memberId === agentId && b.root.visible) : undefined;
+    if (!bot) {
+      // An unnamed member, or one past the six drawn: the block lights, no robot acts.
+      if (top) this.pulse(top.x, top.z, kind === 'error' ? ALERT : f.color);
+      return;
+    }
+    if (kind === 'tool') {
+      bot.flash = 'power';
+      this.spark(this.headOf(bot), f.color, 10, 6, 0.6, 0, 4, 0.35);
+    } else if (kind === 'file') {
+      bot.flash = 'strike';
+      const hand = this.handOf(bot);
+      this.spark(hand, f.color, 12, 8, 0.5, 10, 2, 0.4);
+      if (top) { this.sparkLine(hand, top, f.color, 3); this.pulse(top.x, top.z, f.color); }
+    } else if (kind === 'error') {
+      bot.flash = 'hit';
+      this.spark(this.headOf(bot), ALERT, 22, 10, 0.7, 14, 2, 0.45);
+    } else return;
+    bot.flashT = SQUAD_FLASH_S;
+  }
+
+  /** A member arrives (the lead deploys it, the jumbotron calls it) or reports in. */
+  private reactLifecycle(world: World, f: Fighter, st: TeamState, agentId: string | undefined, kind: string): void {
+    const m = agentId ? st.squad.get(agentId) : undefined;
+    if (!m || world.phase !== 'active') return;
+    const chest = this.tmp2.copy(f.root.position); chest.y += CHEST * f.root.scale.x;
+    if (kind === 'spawn') {
+      f.flash = 'power'; f.flashT = 0.6; f.flare = 0.7; f.flareC.set(1, 1, 1);
+      f.energy = Math.min(1, f.energy + 0.22);
+      this.pulse(f.root.position.x, f.root.position.z, f.color);
+      const cell = m.slot !== null ? squadSlotCells(st.band)[m.slot] : undefined;
+      if (cell) {
+        const to = new THREE.Vector3(cell.x * this.C, 3.84 + CHEST * f.root.scale.x * SQUAD_SCALE * 0.5, cell.z * this.C);
+        this.sparkLine(chest, to, f.color, 2);
+        this.spark(to, f.color, 26, 7, 0.8, 6, 3, 0.5);
+      }
+      let open = 0;
+      for (const x of st.squad.values()) if (x.endedAt === undefined) open++;
+      this.setJumbo(`${providerOf(st.model).toUpperCase()} DEPLOYS SQUAD · ${open} ACTIVE`, `#${f.color.getHexString()}`);
+      this.jumboUntil = this.time.value + SQUAD_JUMBO_S;
+      return;
+    }
+    const bot = f.squad.find((b) => b.memberId === agentId && b.root.visible);
+    if (!bot) return;
+    const at = this.headOf(bot);
+    if (m.status === 'completed') { this.sparkLine(at, chest, f.color, 2); this.spark(at, f.color, 16, 5, 0.6, 0, 4, 0.4); }
+    else this.spark(at, ALERT, 30, 10, 0.7, 14, 2, 0.5);
+  }
+
+  /** A trail of sparks arcing from `from` to `to`. */
+  private sparkLine(from: THREE.Vector3, to: THREE.Vector3, c: THREE.Color, arc = 5): void {
+    const a = from.clone(), b = to.clone();
+    for (let i = 1; i <= 14; i++) { this.tmp.lerpVectors(a, b, i / 14); this.tmp.y += Math.sin((i / 14) * Math.PI) * arc; this.spark(this.tmp, c, 2, 1.2, 0.5 + i * 0.03, 0, 0, 0.4); }
+  }
+
+  /** Where a `recent` entry's floor pulse goes: its block, else the member's slot, else the lead. */
+  private pulseAt(world: World, r: RecentActivity, f: Fighter): { x: number; z: number } {
+    const s = r.key ? world.structures.get(`${r.teamId}|${r.key}`) : undefined;
+    if (s) return { x: s.x * this.C, z: s.z * this.C };
+    const st = world.teams.get(r.teamId), m = r.agentId && r.kind !== 'spawn' ? st?.squad.get(r.agentId) : undefined;
+    const cell = st && m && m.slot !== null ? squadSlotCells(st.band)[m.slot] : undefined;
+    if (cell) return { x: cell.x * this.C, z: cell.z * this.C };
+    return { x: f.root.position.x, z: f.root.position.z };
+  }
+
+  private endedClean(world: World, r: RecentActivity): boolean {
+    return !!r.agentId && world.teams.get(r.teamId)?.squad.get(r.agentId)?.status === 'completed';
+  }
+
+  /** Two-team seam offset from the file-event momentum shares (the same measure as the HUD bar). */
+  private seamFor(world: World, windowMs: number): number {
+    const sh = momentumShares(world, windowMs);
+    return ((sh.get(this.fighters[0].id) ?? 0) - (sh.get(this.fighters[1].id) ?? 0)) * SEAM_SWING;
+  }
+
+  /**
+   * The jumbotron's resting text, from the world alone (drawFrame stays pure):
+   * LIVE while live, REPLAY when the world replays a finished match, and the
+   * way a match ended without a verdict named honestly. A world with no
+   * `replayOf` (every reel) keeps the LIVE text it always had.
+   */
+  private liveBanner(world: World): string {
+    const names = this.opts.teams.map((t) => jumboName(t.model)).join('  vs  ');
+    if (!world.replayOf) return `LIVE  ·  ${names}`;
+    const ending = NO_VERDICT_LABEL[world.replayOf];
+    return ending ? `REPLAY  ·  ${ending}  ·  ${names}` : `REPLAY  ·  ${names}`;
+  }
+
+  /** The lead's own reaction: unchanged choreography, but a file spark now aims at the block it wrote. */
+  private reactLead(f: Fighter, kind: string, top: THREE.Vector3 | null): void {
     f.energy = Math.min(1, f.energy + 0.22);
     const x = f.root.position.x;
     if (kind === 'tool') {
@@ -444,13 +965,7 @@ export class Arena3D {
       const hand = this.handOf(f);
       this.spark(hand, f.color, 22, 12, 0.6, 12, 2, 0.5);
       // Trace a spark line from the hand to the block that was just written.
-      let best: Structure | null = null;
-      for (const s of world.structures.values()) if (s.teamId === teamId && (!best || s.flash > best.flash)) best = s;
-      if (best) {
-        const to = new THREE.Vector3(best.x * this.C, 3.86 + best.h * this.C, best.z * this.C);
-        for (let i = 1; i <= 14; i++) { this.tmp.lerpVectors(hand, to, i / 14); this.tmp.y += Math.sin((i / 14) * Math.PI) * 5; this.spark(this.tmp, f.color, 2, 1.2, 0.5 + i * 0.03, 0, 0, 0.4); }
-        this.pulse(to.x, to.z, f.color);
-      }
+      if (top) { this.sparkLine(hand, top, f.color); this.pulse(top.x, top.z, f.color); }
     } else if (kind === 'error') {
       f.flash = 'hit'; f.flashT = 0.9; f.flare = 1.4; f.flareC.copy(ALERT);
       this.pulse(x, 0, ALERT);
@@ -462,19 +977,25 @@ export class Arena3D {
   }
 
   private onPhase(world: World): void {
-    const names = this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ');
+    const names = this.opts.teams.map((t) => jumboName(t.model)).join('  vs  ');
     this.spot.visible = false; this.spot.material.uniforms.uI.value = 0; this.revealAt = -1;
-    for (const f of this.fighters) { f.basePose = 'idle'; f.flash = null; }
-    if (world.phase === 'active') { this.setJumbo(`LIVE  ·  ${names}`, '#00f0ff'); this.cut(0); }
+    this.jumboUntil = 0;
+    for (const f of this.fighters) { f.basePose = 'idle'; f.flash = null; for (const b of f.squad) b.flash = null; }
+    if (world.phase === 'active') { this.setJumbo(this.liveBanner(world), '#00f0ff'); this.cut(0); }
     else if (world.phase === 'freeze') { this.setJumbo('TIME UP  ·  COLLECTING DELIVERABLES', '#ffd23c'); this.cut(3); }
     else if (world.phase === 'judging') { for (const f of this.fighters) f.basePose = 'salute'; this.setJumbo('CROSS-JUDGE READING THE FILES', '#b06bff'); this.cut(0); }
     else {
       const w = this.fighters.find((f) => f.id === world.winnerId);
-      if (!w) { this.setJumbo(`SCORED  ·  ${names}`, '#00f0ff'); return; }
+      if (!w) {
+        const ending = NO_VERDICT_LABEL[world.compState];
+        this.setJumbo(ending ? `${ending}  ·  ${names}` : `SCORED  ·  ${names}`, ending ? '#ffd23c' : '#00f0ff');
+        return;
+      }
       for (const f of this.fighters) { f.basePose = f === w ? 'triumph' : 'kneel'; f.energy = f === w ? 1 : 0; }
       this.spot.visible = true; this.spot.position.x = w.root.position.x; this.spot.material.uniforms.uC.value = w.color;
       this.revealAt = this.time.value;
-      const name = this.opts.teams.find((t) => t.id === w.id)?.model.toUpperCase() ?? '';
+      const found = this.opts.teams.find((t) => t.id === w.id)?.model;
+      const name = found ? jumboName(found) : '';
       this.setJumbo(`VERDICT  ·  ${name} WINS`, `#${w.color.getHexString()}`);
       this.cut(1 + this.fighters.indexOf(w) % 2);
     }
@@ -496,7 +1017,7 @@ export class Arena3D {
     for (const bm of f.beams) bm.uniforms.uI.value += ((0.12 + f.energy * 0.75) - bm.uniforms.uI.value) * Math.min(1, dt * 4);
   }
 
-  private applyJoints(f: Fighter, br: number): void {
+  private applyJoints(f: Posable, br: number): void {
     const j = f.j, c = f.cur;
     j.spine.rotation.set(c[0] + br, c[1], 0); j.head.rotation.x = c[2];
     j.shL.rotation.set(c[3], 0, c[4]); j.elL.rotation.x = c[5];
@@ -505,8 +1026,8 @@ export class Arena3D {
     j.hips.position.set(0, f.hipsY + c[13] + br * 2, c[14]);
   }
 
-  private handOf(f: Fighter): THREE.Vector3 { return f.j.elR.localToWorld(new THREE.Vector3(0, -1.9, 0)); }
-  private headOf(f: Fighter): THREE.Vector3 { return f.j.head.localToWorld(new THREE.Vector3(0, 1.6, 0)); }
+  private handOf(f: Posable): THREE.Vector3 { return f.j.elR.localToWorld(new THREE.Vector3(0, -1.9, 0)); }
+  private headOf(f: Posable): THREE.Vector3 { return f.j.head.localToWorld(new THREE.Vector3(0, 1.6, 0)); }
 
   private makeBlock(s: Structure, world: World): Block {
     const color = new THREE.Color(world.teams.get(s.teamId)?.color ?? '#00f0ff');
@@ -726,6 +1247,17 @@ export class Arena3D {
 
     this.mirror = new Reflector(new THREE.CircleGeometry(R, 64), { textureWidth: 1024, textureHeight: 1024, color: 0x99aabb, clipBias: 0.003 });
     this.mirror.rotation.x = -Math.PI / 2; this.mirror.position.y = 3.81; this.arena.add(this.mirror);
+    // The squad is left out of the reflection: eighteen extra robots in a
+    // second pass would double their cost for a picture nobody reads, and their
+    // fixed-size labels would mirror as stray tags under the deck. The
+    // Reflector renders its pass inside its own onBeforeRender, so hiding the
+    // squad around that call removes it from the mirror and nothing else.
+    const reflect = this.mirror.onBeforeRender.bind(this.mirror);
+    this.mirror.onBeforeRender = (...args: Parameters<Reflector['onBeforeRender']>) => {
+      const was = this.squadRoot.visible;
+      this.squadRoot.visible = false;
+      try { reflect(...args); } finally { this.squadRoot.visible = was; }
+    };
 
     const two = this.opts.teams.length === 2;
     const a = new THREE.Color(this.opts.teams[0]?.color ?? '#00f0ff'), b = new THREE.Color(this.opts.teams[1]?.color ?? '#00f0ff');

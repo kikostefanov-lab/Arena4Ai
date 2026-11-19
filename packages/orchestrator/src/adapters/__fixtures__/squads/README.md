@@ -1,0 +1,1 @@
+Squad fixtures: real sub-agent transcripts captured on 2026-11-18 from Claude Code 2.1.325, Codex CLI 0.169.0 and Gemini CLI 0.68.0, trimmed and scrubbed (paths rewritten to `/tmp/arena-team-a-x/`, init tool, plugin and MCP lists replaced with built-in-only ones, hook and thinking noise dropped, ids and field order kept as captured); do not add raw transcripts.

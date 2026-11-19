@@ -1,13 +1,16 @@
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
-import { readdir, readFile, stat, rm } from 'node:fs/promises';
+import { readdir, lstat, rm } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { EventType, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
+import { EventType, expectedFileName, isVendoredPath, type ArenaEvent, type Brief, type Deliverable, type ModelAdapter } from '@arena/shared';
 import type { SandboxManager } from '../sandbox/sandbox-manager.js';
-import { stripAnsi } from './normalizer-utils.js';
+import { stripAnsi, makeEvent, makeFileEvent } from './normalizer-utils.js';
+import { squadLimits } from './squad-limits.js';
+import { WorkdirWatcher, type WatchedFile } from './workdir-watcher.js';
+import { readRegularFile } from './safe-read.js';
 
-const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
+export const MAX_FILE_BYTES = 500 * 1024;   // 500 KB per file
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024; // 5 MB across all files
 
 /** stderr lines kept per agent for a crash report. */
@@ -55,8 +58,10 @@ export function summarizeAgentError(lines: string[]): string | undefined {
     if (m) return fromJson(m[1]!).trim();
   }
   // Nothing labelled as an error (gemini's "not running in a trusted directory"
-  // isn't): a CLI that exits non-zero usually says why on its last line.
-  return lines.at(-1);
+  // isn't): a CLI that exits non-zero usually says why on its last line. Arena's
+  // own notes (`[arena] …`) are context, not the CLI's reason.
+  const own = lines.filter((l) => !l.startsWith('[arena]'));
+  return own.at(-1);
 }
 
 /** Default time an agent gets to exit after SIGTERM before it is SIGKILLed. */
@@ -73,33 +78,79 @@ const DELIVERABLE_GUIDE: Record<string, string> = {
   mixed:        'Produce whichever combination of code and documents best addresses the brief.',
 };
 
-/** Recursively walk `dir`, returning all text files under size limits. */
+interface WalkedFile { path: string; size: number; full: string }
+
+/**
+ * Recursively list the candidate files under `dir`. Dot-directories (`.git`, ...)
+ * are skipped silently. Vendored and generated paths (`node_modules`, `dist`,
+ * `out`, ...) are skipped and reported in `excluded`, with one exception: a
+ * deliverable the brief names by a path (`out/report.md`) is still reached, by
+ * descending into the vendored directory only along that path. A bare file name
+ * is not searched for inside vendored directories, since it would match every
+ * package's README there.
+ */
 async function walkDir(
   dir: string,
   base: string,
-  budget: { remaining: number },
-): Promise<Array<{ path: string; content: string }>> {
-  const results: Array<{ path: string; content: string }> = [];
+  excluded: NonNullable<Deliverable['excluded']>,
+  namedPaths: string[],
+  inVendored = false,
+): Promise<WalkedFile[]> {
+  const results: WalkedFile[] = [];
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {
     return results;
   }
+  // The tree is agent-controlled: Dirent types and lstat never follow a
+  // symlink, so symlinks, FIFOs and devices are skipped here, and a directory
+  // swapped for a symlink since readdir is not descended into.
   for (const entry of entries) {
     const full = join(dir, entry.name);
+    const rel = relative(base, full);
+    const lower = rel.toLowerCase();
     if (entry.isDirectory()) {
-      results.push(...await walkDir(full, base, budget));
+      if (entry.name.startsWith('.')) continue;
+      const dirInfo = await lstat(full).catch(() => null);
+      if (!dirInfo?.isDirectory()) continue;
+      const vendored = inVendored || isVendoredPath(rel);
+      if (!vendored) {
+        results.push(...await walkDir(full, base, excluded, namedPaths));
+      } else if (namedPaths.some((n) => n.startsWith(`${lower}/`))) {
+        if (!inVendored) excluded.push({ path: rel, reason: 'vendored' });
+        results.push(...await walkDir(full, base, excluded, namedPaths, true));
+      } else if (!inVendored) {
+        excluded.push({ path: rel, reason: 'vendored' });
+      }
     } else if (entry.isFile()) {
-      const info = await stat(full).catch(() => null);
-      if (!info || info.size > MAX_FILE_BYTES || info.size > budget.remaining) continue;
-      const content = await readFile(full, 'utf-8').catch(() => null);
-      if (content === null || content.includes('\0')) continue; // skip binary
-      budget.remaining -= info.size;
-      results.push({ path: relative(base, full), content });
+      if (inVendored || isVendoredPath(rel)) {
+        if (!namedPaths.includes(lower)) {
+          if (!inVendored) excluded.push({ path: rel, reason: 'vendored' });
+          continue;
+        }
+      }
+      const info = await lstat(full).catch(() => null);
+      if (info?.isFile()) results.push({ path: rel, size: info.size, full });
     }
   }
   return results;
+}
+
+/**
+ * Sort rank of `path` among the named deliverables (lower first, -1 for none):
+ * the first name it satisfies, by exact path or by basename when the name has
+ * no `/`, with the exact path ahead of a basename match for the same name.
+ */
+export function namedRank(path: string, names: string[]): number {
+  const lower = path.toLowerCase();
+  const base = lower.split('/').pop()!;
+  const i = names.findIndex((n) => (n.includes('/') ? lower === n : base === n));
+  if (i < 0) return -1;
+  // Within one name, the exact path outranks a nested basename match: for a
+  // bare `report.md`, the top-level file is the deliverable, `docs/report.md`
+  // only a stand-in (and it sorts first alphabetically, so it must lose here).
+  return i * 2 + (lower === names[i] ? 0 : 1);
 }
 
 /**
@@ -167,6 +218,12 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   /** Grace period between SIGTERM and SIGKILL in shutdown(). */
   shutdownGraceMs = Number(process.env.ARENA_SHUTDOWN_GRACE_MS) || DEFAULT_SHUTDOWN_GRACE_MS;
 
+  private readonly openSubAgents = new Set<string>();
+  private readonly closedSubAgents = new Set<string>();
+  /** Set once shutdown() has run its final close: no new sub-agent may open. */
+  private sealed = false;
+  private watcher: WorkdirWatcher | null = null;
+
   constructor(teamId: string, workdir: string, competitionId: string, sandbox?: SandboxManager) {
     super();
     this.teamId = teamId;
@@ -196,6 +253,16 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       'You are an autonomous AI agent in a timed competition. There is NO human to interact with.',
       'Do NOT ask clarifying questions — no one will answer. Make reasonable assumptions and start working immediately.',
       'Your ONLY goal is to produce deliverable files in the current working directory before time runs out.',
+      [
+        '[SQUAD]',
+        `You are the lead of a squad. Delegate independent parts of this brief to sub-agents running`,
+        `in parallel (up to ${squadLimits().maxConcurrent} at a time), and integrate their results yourself.`,
+        '1. First, write a skeleton of every named deliverable, so something exists if time runs out.',
+        '2. Give each sub-agent one clear task, the file it must write, and a time box well inside',
+        '   the time limit. Sub-agents work in this same directory.',
+        '3. Finish integrating and writing final deliverables before 80% of the time limit.',
+        'Only files in this directory are judged.',
+      ].join('\n'),
       `[BRIEF: ${brief.title}]`,
       brief.problem,
       constraints,
@@ -216,14 +283,45 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     return Promise.resolve();
   }
 
-  async collectDeliverables(): Promise<Deliverable> {
+  /**
+   * Collect the workdir's text files, the brief's named deliverables first so a
+   * big research directory cannot crowd them out of the 5 MB budget. `named`
+   * holds brief deliverable entries; those that name no file are ignored.
+   */
+  async collectDeliverables(named: string[] = []): Promise<Deliverable> {
+    const excluded: NonNullable<Deliverable['excluded']> = [];
+    const wanted = named
+      .map((n) => expectedFileName(n))
+      .filter((n): n is string => n !== null)
+      .map((n) => n.toLowerCase());
+
+    const walked = await walkDir(this.workdir, this.workdir, excluded, wanted.filter((n) => n.includes('/')));
+    const ranked = walked
+      .map((f) => ({ f, rank: namedRank(f.path, wanted) }))
+      .sort((a, b) => {
+        const ra = a.rank < 0 ? Number.MAX_SAFE_INTEGER : a.rank;
+        const rb = b.rank < 0 ? Number.MAX_SAFE_INTEGER : b.rank;
+        return ra - rb || (a.f.path < b.f.path ? -1 : 1);
+      });
+
     const budget = { remaining: MAX_TOTAL_BYTES };
-    const files = await walkDir(this.workdir, this.workdir, budget);
+    const files: Array<{ path: string; content: string }> = [];
+    for (const { f } of ranked) {
+      if (f.size > MAX_FILE_BYTES) { excluded.push({ path: f.path, reason: 'size' }); continue; }
+      if (f.size > budget.remaining) { excluded.push({ path: f.path, reason: 'budget' }); continue; }
+      // No symlink follow, no blocking on a FIFO swapped in since the walk,
+      // and the caps re-checked against the file actually opened.
+      const read = await readRegularFile(f.full, Math.min(MAX_FILE_BYTES, budget.remaining));
+      if (read === null || read.data.includes(0)) continue; // not a regular file, or binary
+      budget.remaining -= read.size;
+      files.push({ path: f.path, content: read.data.toString('utf-8') });
+    }
 
     return {
       teamId: this.teamId,
       files,
       collectedAt: new Date().toISOString(),
+      ...(excluded.length > 0 ? { excluded } : {}),
     };
   }
 
@@ -238,12 +336,19 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
    */
   async shutdown(): Promise<void> {
     this.stopping = true;
+    this.watcher?.stop();
     if (this.sandbox) {
       // Kills the container; the `docker run` client process is handled below.
       await this.sandbox.killContainer(this.teamId).catch(() => {});
     }
     const child = this.process;
-    if (!child) { liveAdapters.delete(this); return; }
+    if (!child) {
+      liveAdapters.delete(this);
+      this.finalWatchFlush();
+      this.closeOpenSubAgents('killed', 'deadline');
+      this.sealed = true;
+      return;
+    }
 
     const hasExited = () => child.exitCode !== null || child.signalCode !== null;
     const exited = new Promise<void>((resolve) => {
@@ -268,6 +373,20 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     this.signalProcess(child, 'SIGKILL', true);
     this.process = null;
     liveAdapters.delete(this);
+    this.finalWatchFlush();
+    this.closeOpenSubAgents('killed', 'deadline');
+    this.sealed = true;
+  }
+
+  /**
+   * One last watcher scan once the agent is gone and before collection, so
+   * files sub-agents wrote in the final seconds still appear. Runs before the
+   * squad is closed, so those files keep their squad tag. Once only.
+   */
+  private finalWatchFlush(): void {
+    const watcher = this.watcher;
+    this.watcher = null;
+    watcher?.finalFlush();
   }
 
   /** Signal the process group when we own one (`detached` spawn), else just the child. */
@@ -294,12 +413,29 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
   }
 
   /**
+   * Run one output line through a normalizer. A normalizer bug must cost that
+   * line, not the server: a throw out of a readline 'line' handler is an
+   * uncaught exception that takes the whole orchestrator down mid-match.
+   */
+  protected normalizeSafely(line: string, normalize: (line: string) => ArenaEvent | ArenaEvent[]): ArenaEvent[] {
+    try {
+      const out = normalize(line);
+      return Array.isArray(out) ? out : [out];
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.noteStderr(`[arena] skipped an output line the normalizer could not read (${reason.slice(0, 120)})`);
+      return [];
+    }
+  }
+
+  /**
    * Handle the agent CLI's exit. A non-zero exit before shutdown() is recorded
    * as `failure` and reported as an ERROR event (stage 'agent') naming the CLI's
    * own message. `done` still resolves: the failure is data the runner reads,
    * not a rejection nobody awaits.
    */
   protected settleExit(code: number | null, cliName: string, resolve: () => void): void {
+    if (!this.stopping) this.closeOpenSubAgents('unknown', 'lead exited without reporting');
     if (code === 0 || code === null || this.stopping) {
       resolve();
       return;
@@ -331,7 +467,59 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
 
   /** Convenience: emit a typed ArenaEvent to all listeners. */
   protected emitArenaEvent(event: ArenaEvent): void {
+    // Each sub-agent gets exactly one SPAWN and one DONE, whatever the CLI reports.
+    if (event.type === EventType.SUB_AGENT_SPAWN) {
+      const id = (event.payload as { agentId: string }).agentId;
+      // Trailing stdout after shutdown must not open a member nothing will close.
+      if (this.sealed || this.openSubAgents.has(id) || this.closedSubAgents.has(id)) return;
+      this.openSubAgents.add(id);
+    } else if (event.type === EventType.SUB_AGENT_DONE) {
+      const id = (event.payload as { agentId: string }).agentId;
+      if (this.closedSubAgents.has(id)) return;
+      this.openSubAgents.delete(id);
+      this.closedSubAgents.add(id);
+    }
+    if (
+      (event.type === EventType.FILE_CREATE || event.type === EventType.FILE_MODIFY) &&
+      (event.payload as { opSource?: string }).opSource !== 'watch'
+    ) {
+      const path = (event.payload as { path?: string }).path;
+      if (path) this.watcher?.noteStreamPath(path);
+    }
     this.emit('arenaEvent', event);
+  }
+
+  /**
+   * Poll the workdir for files the CLI's stream never reports (sub-agents write
+   * straight to disk). Call right after spawning; shutdown() stops it.
+   */
+  protected startWorkdirWatch(): void {
+    if (this.sealed || this.stopping) return;
+    this.watcher?.stop();
+    this.watcher = new WorkdirWatcher({ root: this.workdir, onFile: (f) => this.onWatchedFile(f) });
+    this.watcher.start();
+  }
+
+  protected onWatchedFile(f: WatchedFile): void {
+    const event = makeFileEvent(
+      { op: f.op, opSource: 'watch', path: f.path, text: f.path },
+      { competitionId: this.competitionId, teamId: this.teamId },
+    );
+    if (this.openSubAgentCount > 0) event.metadata.squad = true;
+    this.emitArenaEvent(event);
+  }
+
+  /** Sub-agents spawned and not yet reported done. */
+  get openSubAgentCount(): number {
+    return this.openSubAgents.size;
+  }
+
+  /** Emit a DONE for every sub-agent still open, so no lifecycle is left dangling. */
+  protected closeOpenSubAgents(status: 'killed' | 'unknown', reason: string): void {
+    const ctx = { competitionId: this.competitionId, teamId: this.teamId };
+    for (const agentId of [...this.openSubAgents]) {
+      this.emitArenaEvent(makeEvent(EventType.SUB_AGENT_DONE, { agentId, status, reason }, ctx));
+    }
   }
 
   /**

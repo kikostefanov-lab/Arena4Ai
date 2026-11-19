@@ -85,6 +85,25 @@ describe('parseBrief()', () => {
     expect(brief.timeLimitMs).toBe(3_600_000);
   });
 
+  // The published brief of the public three-way match: readers rerun it from
+  // the repo, and the API seeds it into the library from briefs/ on startup.
+  it('parses the published briefs/first-paying-customer.yml', async () => {
+    const path = resolve(__dirname, '../../../../briefs/first-paying-customer.yml');
+    const brief = await parseBrief(path);
+    expect(brief.id).toBe('first-paying-customer-001');
+    expect(brief.format).toBe(CompetitionFormat.HACKATHON);
+    expect(brief.deliverables).toEqual(['decision.md', 'demo.html']);
+    expect(brief.rubric.criteria.map((c) => c.id)).toEqual([
+      'buyer-and-evidence', 'working-demo', 'paid-validation', 'economics', 'judgment',
+    ]);
+    const totalWeight = brief.rubric.criteria.reduce((s, c) => s + c.weight, 0);
+    expect(totalWeight).toBeCloseTo(1, 5);
+    // Public sources only: every link in it is https.
+    const links = JSON.stringify(brief).match(/\b[a-z]+:\/\/[^\s"]+/gi) ?? [];
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) expect(link).toMatch(/^https:\/\//);
+  });
+
   it('throws a descriptive error for a missing file', async () => {
     await expect(parseBrief('/no/such/file.yml')).rejects.toThrow(/failed to parse brief/i);
   });
@@ -122,14 +141,14 @@ describe('parseBrief()', () => {
     });
   });
 
-  it('throws when timeLimitMs exceeds 1 hour (3600001 ms)', async () => {
-    await withTempBrief(minimalBriefYaml({ timeLimitMs: 3_600_001 }), async (path) => {
-      await expect(parseBrief(path)).rejects.toThrow('timeLimitMs cannot exceed 1 hour');
+  it('throws when timeLimitMs exceeds 3 hours (10800001 ms)', async () => {
+    await withTempBrief(minimalBriefYaml({ timeLimitMs: 10_800_001 }), async (path) => {
+      await expect(parseBrief(path)).rejects.toThrow('timeLimitMs cannot exceed 3 hours');
     });
   });
 
-  it('does not throw when timeLimitMs is exactly 1 hour (3600000 ms, upper bound)', async () => {
-    await withTempBrief(minimalBriefYaml({ timeLimitMs: 3_600_000 }), async (path) => {
+  it('does not throw when timeLimitMs is exactly 3 hours (10800000 ms, upper bound)', async () => {
+    await withTempBrief(minimalBriefYaml({ timeLimitMs: 10_800_000 }), async (path) => {
       await expect(parseBrief(path)).resolves.toBeDefined();
     });
   });

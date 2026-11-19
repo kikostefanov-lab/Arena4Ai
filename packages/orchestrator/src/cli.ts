@@ -8,6 +8,7 @@ import { TournamentRunner } from './engine/tournament-runner.js';
 import { CompetitionFormat } from '@arena/shared';
 import type { Team } from '@arena/shared';
 import { shutdownAllAdapters } from './adapters/base-adapter.js';
+import { runOptionsFromCli } from './cli-run-options.js';
 
 // Agents run in their own process groups, so Ctrl-C does not reach them on its
 // own. Stop them before this process exits; a second signal exits immediately.
@@ -43,6 +44,7 @@ program
   .option('--time-limit <ms>', 'Override brief time limit in milliseconds')
   .option('--commentary', 'Enable live AI commentary during the competition')
   .option('--adversarial-judge', 'Enable dual judging with adversarial cross-check')
+  .option('--judge-panel', 'Cross-vendor judge panel: Claude, Codex and Gemini each judge every team (replaces --adversarial-judge)')
   .option('--model-a <model>', 'Model variant for team A (e.g. claude-opus-5)')
   .option('--model-b <model>', 'Model variant for team B')
   .option('--model-c <model>', 'Model variant for team C')
@@ -58,6 +60,7 @@ program
     timeLimit?: string;
     commentary?: boolean;
     adversarialJudge?: boolean;
+    judgePanel?: boolean;
     modelA?: string;
     modelB?: string;
     modelC?: string;
@@ -91,18 +94,7 @@ program
             makeTeam('team-b', opts.teamB, opts.modelB),
           ];
 
-      const runner = new CompetitionRunner(
-        brief,
-        teams,
-        {
-          logDir: opts.logDir,
-          claudeBin: opts.claudeBin,
-          printResults: opts.print,
-          skipSandbox: opts.skipSandbox ?? false,
-          commentary: opts.commentary ?? false,
-          adversarialJudge: opts.adversarialJudge ?? false,
-        },
-      );
+      const runner = new CompetitionRunner(brief, teams, runOptionsFromCli(opts));
 
       // Persist to DB when DATABASE_URL is available
       // arenaEvents are fire-and-forget (collected into pendingEvents for final drain).
@@ -247,9 +239,12 @@ program
 
     let ids: string[];
     if (opts.all) {
+      const { isSyntheticCompetition } = await import('@arena/shared');
       const comps = await repo.list();
+      // A seeded demo has no real deliverables to re-judge; skip it as
+      // seed-quality-signals does.
       ids = comps
-        .filter((c: any) => c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE')
+        .filter((c: any) => !isSyntheticCompetition(c) && (c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE'))
         .map((c: any) => c.id);
     } else if (competitionId) {
       ids = [competitionId];
@@ -353,8 +348,9 @@ program
 
     const repo = new CompetitionRepository(db);
     const comps = await repo.list(500);
+    const { isSyntheticCompetition } = await import('@arena/shared');
     const completed = comps.filter(
-      (c: any) => c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE' || c.state === 'SCORED',
+      (c: any) => !isSyntheticCompetition(c) && (c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE' || c.state === 'SCORED'),
     );
 
     console.log(`[arena] found ${completed.length} completed competitions`);

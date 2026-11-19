@@ -1,12 +1,12 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { IsoArenaRenderer, stepStructures, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
+import { useRef, useEffect, useMemo, useState, useCallback, Fragment } from 'react';
+import { teamDisplayName, IsoArenaRenderer, finishedReplay, rendererAction, advanceClock, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
 import type { Arena3D } from '@arena/video/dist/arena3d/scene';
-import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
+import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT, BG_DARK } from '../lib/design-tokens';
 
 /**
  * AA-066 — the arena is now drawn by `IsoArenaRenderer` from @arena/shared.
@@ -67,12 +67,25 @@ interface ArenaViewerV2Props {
    * changes. Falls back to the isometric canvas if WebGL is unavailable.
    */
   view3d?: boolean;
+  /**
+   * The brief's `deliverables` entries, raw. The world reduces them to file
+   * names and checks each off per team as a file event lands, which feeds the
+   * strip under every header.
+   */
+  deliverableNames?: string[];
 }
+
+interface SquadSummary { active: number; spawned: number; failed: number; models: string[] }
+interface DeliveredItem { name: string; done: boolean }
+interface MomentumShare { id: string; label: string; color: string; share: number }
+
+const NO_SQUAD: SquadSummary = { active: 0, spawned: 0, failed: 0, models: [] };
 
 // ── HUD subcomponents ───────────────────────────────────────────
 
-function LaneHeader({ team, color, align, latest }: {
+function LaneHeader({ team, color, align, latest, squad, delivered }: {
   team: Team; color: string; align: 'left' | 'right'; latest: string;
+  squad: SquadSummary; delivered: DeliveredItem[];
 }) {
   const rgb = hexToRgb(color);
   return (
@@ -80,6 +93,8 @@ function LaneHeader({ team, color, align, latest }: {
       display: 'flex', flexDirection: 'column', gap: 4,
       alignItems: align === 'right' ? 'flex-end' : 'flex-start',
       fontFamily: BODY_FONT,
+      // A grid item: without this a one-line latest widens its column instead of clipping.
+      minWidth: 0,
     }}>
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -94,22 +109,45 @@ function LaneHeader({ team, color, align, latest }: {
           width: 8, height: 8, borderRadius: '50%',
           background: color, boxShadow: `0 0 10px ${color}`,
         }}/>
-        {team.model}{team.persona ? `:${team.persona}` : ''}
+        {teamDisplayName(team.model, team.persona)}
       </div>
-      <div style={{
+      {/* One line: an agent's narration can be a paragraph. The full text is the tooltip. */}
+      <div title={latest || undefined} style={{
         color: `rgba(${rgb},0.55)`, fontSize: 10, letterSpacing: 1.5, minHeight: 14,
+        maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
         {latest || '—'}
       </div>
+      {squad.spawned > 0 && (
+        <div
+          title={squad.models.length ? `Squad models: ${squad.models.join(', ')}` : 'Squad'}
+          style={{
+            fontFamily: MONOSPACE_FONT, fontSize: 10, fontWeight: 700, letterSpacing: 1.5,
+            color: `rgba(${rgb},0.8)`, textTransform: 'uppercase',
+          }}
+        >
+          ◆ {squad.active} active · {squad.spawned} spawned{squad.failed > 0 ? ` · ${squad.failed} failed` : ''}
+        </div>
+      )}
+      {delivered.length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '2px 10px',
+          justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+          fontFamily: MONOSPACE_FONT, fontSize: 10, letterSpacing: 0.5,
+        }}>
+          {delivered.map((d) => (
+            <span key={d.name} style={{ color: d.done ? color : '#4a8fa8', opacity: d.done ? 1 : 0.7 }}>
+              {d.done ? '✓' : '·'} {d.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function MomentumMeter({ momentum, teamA, teamB, colorA, colorB }: {
-  momentum: number; teamA: Team; teamB: Team; colorA: string; colorB: string;
-}) {
-  const rgbA = hexToRgb(colorA);
-  const rgbB = hexToRgb(colorB);
+function MomentumMeter({ shares }: { shares: MomentumShare[] }) {
+  const total = shares.reduce((n, x) => n + x.share, 0);
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 6,
@@ -120,33 +158,26 @@ function MomentumMeter({ momentum, teamA, teamB, colorA, colorB }: {
       fontFamily: BODY_FONT,
     }}>
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
         fontFamily: MONOSPACE_FONT, fontSize: 9, fontWeight: 800,
         letterSpacing: 2, textTransform: 'uppercase',
       }}>
-        <span style={{ color: colorA }}>◀ {teamA.model}</span>
+        <span style={{ color: shares[0].color }}>◀ {shares[0].label}</span>
         <span style={{ color: '#4a8fa8' }}>MOMENTUM · last 10s</span>
-        <span style={{ color: colorB }}>{teamB.model} ▶</span>
+        <span style={{ color: shares[shares.length - 1].color }}>{shares[shares.length - 1].label} ▶</span>
       </div>
       <div style={{
-        position: 'relative', height: 10,
+        position: 'relative', display: 'flex', height: 10,
         background: '#01060c', borderRadius: 2,
         border: '1px solid #0a2235', overflow: 'hidden',
       }}>
-        <div style={{
-          position: 'absolute', top: 0, bottom: 0,
-          left: momentum < 0 ? `${50 + momentum * 50}%` : '50%',
-          width: `${Math.abs(momentum) * 50}%`,
-          background: momentum < 0
-            ? `linear-gradient(90deg, ${colorA}, rgba(${rgbA},0.5))`
-            : `linear-gradient(90deg, rgba(${rgbB},0.5), ${colorB})`,
-          boxShadow: `0 0 12px ${momentum < 0 ? colorA : colorB}`,
-          transition: 'left 180ms ease, width 180ms ease',
-        }}/>
-        <div style={{
-          position: 'absolute', top: -2, bottom: -2, left: '50%',
-          width: 1, background: '#4a8fa8', opacity: 0.6,
-        }}/>
+        {total > 0 && shares.map((x) => (
+          <div key={x.id} title={`${x.label} ${Math.round(x.share * 100)}%`} style={{
+            width: `${x.share * 100}%`, height: '100%',
+            background: x.color, boxShadow: `0 0 12px ${x.color}`,
+            transition: 'width 180ms ease',
+          }}/>
+        ))}
       </div>
     </div>
   );
@@ -231,7 +262,7 @@ function WinnerBanner({ visible, winner, color, scores, teams }: {
                 letterSpacing: 1,
               }}>
                 <span style={{ color: c, minWidth: 80, textAlign: 'left' }}>
-                  {t.model}{t.persona ? `:${t.persona}` : ''}
+                  {teamDisplayName(t.model, t.persona)}
                 </span>
                 <div style={{
                   flex: 1, height: 5, background: '#0a2235',
@@ -285,11 +316,41 @@ const HUD_INSETS = { top: 18, right: 24, bottom: 34, left: 24 };
 /** Playback speeds offered when reviewing a finished competition. */
 const SPEEDS = [1, 3, 8] as const;
 
+/** Above the TopBar (z 100) and the page's fixed HUD corners. */
+const THEATER_Z = 1000;
+
 export default function ArenaViewerV2({
-  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables, view3d,
+  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables, view3d, deliverableNames: deliverableNamesProp,
 }: ArenaViewerV2Props) {
+  // A re-fetched brief is a new array with the same entries; keep the identity
+  // stable so it does not rebuild the renderer.
+  const namesKey = (deliverableNamesProp ?? []).join('\n');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const deliverableNames = useMemo(() => deliverableNamesProp, [namesKey]);
   const [glFailed, setGlFailed] = useState(false);
   const use3d = !!view3d && !glFailed;
+  /**
+   * Theater: the arena alone, over the whole viewport, for recording. Only
+   * styles change between the two modes, never the element tree, so the canvas
+   * and its renderer and WebGL scene survive the switch; the box's
+   * ResizeObserver resizes the backing store.
+   */
+  const [theater, setTheater] = useState(false);
+  useEffect(() => {
+    if (!theater) return;
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setTheater(false); };
+    window.addEventListener('keydown', onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // The site chrome (TopBar, HUD corners) is fixed above <main>'s stacking
+    // context, which holds the arena; globals.css hides it under this class.
+    document.body.classList.add('arena-theater');
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+      document.body.classList.remove('arena-theater');
+    };
+  }, [theater]);
   const sceneRef = useRef<Arena3D | null>(null);
   const lastFrameRef = useRef(0);
   const [sceneReady, setSceneReady] = useState(false);
@@ -349,10 +410,14 @@ export default function ArenaViewerV2({
   const originRef = useRef<number | null>(null);
   /** Current winner, so a renderer rebuilt mid-flight does not lose the verdict. */
   const winnerRef = useRef<string | null>(null);
-  /** End of stream the paused view is currently parked on. */
-  const parkedAtRef = useRef<number | null>(null);
+  /** The final state of a FINISHED competition (null while live), for the same reason. */
+  const finalStateRef = useRef<string | null>(null);
+  /** The current renderer has been fed while the match was live (see `ingest`). */
+  const fedLiveRef = useRef(false);
 
-  const [momentum, setMomentum] = useState(0);
+  const [shares, setShares] = useState<MomentumShare[]>([]);
+  const [squads, setSquads] = useState<Record<string, SquadSummary>>({});
+  const [delivered, setDelivered] = useState<Record<string, DeliveredItem[]>>({});
   const [latest, setLatest] = useState<Record<string, string>>({});
   const [orbit, setOrbit] = useState(true);
   const [playing, setPlaying] = useState(true);
@@ -369,6 +434,16 @@ export default function ArenaViewerV2({
    * the arena follows the real clock. Camera orbit is offered in both.
    */
   const isLive = phase === 'active' || phase === 'freeze' || phase === 'judging';
+
+  /**
+   * A replay plays as a match: the renderer's world is 'active' until the
+   * playhead reaches the end and only then reveals the verdict. The HUD follows
+   * that, not the final `state` prop, or the VICTOR panel would sit over the
+   * whole replay. Live, the prop is the truth and this is not consulted.
+   */
+  const [playheadPhase, setPlayheadPhase] = useState<ArenaPhase | null>(null);
+  const playheadPhaseRef = useRef<ArenaPhase | null>(null);
+  const hudPhase: ArenaPhase = isLive ? phase : (playheadPhase ?? phase);
 
   const teamsKey = useMemo(
     () => teams.map((t) => `${t.id}|${t.model}|${t.persona ?? ''}`).join('::'),
@@ -387,16 +462,20 @@ export default function ArenaViewerV2({
       teams: specs,
       events: [],
       timeLimitMs,
+      deliverables: deliverableNames,
       reducedMotion:
         typeof window !== 'undefined' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     });
+    r.setWinner(winnerRef.current);
+    r.setFinalState(finalStateRef.current);
     rendererRef.current = r;
     consumedRef.current = 0;
     lastIdRef.current = null;
     originRef.current = null;
+    fedLiveRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamsKey, timeLimitMs]);
+  }, [teamsKey, timeLimitMs, deliverableNames]);
 
   // ── Track the box the arena has to live inside ────────────────
   useEffect(() => {
@@ -515,15 +594,28 @@ export default function ArenaViewerV2({
      * caveat until playback happened to reach the evidence. We already know the
      * whole stream; a viewer who screenshots the first five seconds must not get
      * a picture with the caveat still missing from it.
+     *
+     * That includes a match this page watched live: `rendererAction` rebuilds
+     * a live-fed renderer as a parked replay once the match is over (see there
+     * for why keeping it showed 7adcd4df mid-match).
      */
-    if (!isLive && consumedRef.current === 0 && events.length > 0) {
+    const consumed = consumedRef.current;
+    const action = rendererAction({
+      isLive,
+      fedLive: fedLiveRef.current,
+      consumed,
+      eventsLength: events.length,
+      prefixIntact: consumed === 0 ||
+        (events.length >= consumed && events[consumed - 1]?.eventId === lastIdRef.current),
+    });
+    if (action === 'keep') return;
+
+    if (action === 'rebuild-replay') {
       // toFrameEvents (plural) sorts; toFrameEvent (singular) does not. The
       // renderer walks its list with a monotonic cursor, so an unsorted list
       // stalls at the first out-of-order timestamp.
       const all = loadFrames(events, origin);
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
-      const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
-      replay.setWinner(winnerRef.current);
       /**
        * Open a FINISHED competition on its finished state, not on an empty floor.
        *
@@ -534,35 +626,44 @@ export default function ArenaViewerV2({
        * city is the result; someone opening a finished match wants to see what
        * was built, and can then rewind deliberately with the transport.
        */
-      replay.seek(replay.totalMs);
+      const replay = finishedReplay(
+        { teams: specs, events: all, timeLimitMs, deliverables: deliverableNames },
+        winnerRef.current,
+        finalStateRef.current,
+      );
       rendererRef.current = replay;
+      fedLiveRef.current = false;
       setPlaying(false);
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
       return;
     }
 
-    const consumed = consumedRef.current;
-    const prefixIntact =
-      consumed === 0 ||
-      (events.length >= consumed && events[consumed - 1]?.eventId === lastIdRef.current);
+    if (isLive) fedLiveRef.current = true;
 
-    if (!prefixIntact) {
+    if (action === 'rebuild') {
       // A reorder: the only coherent response is to rebuild from scratch.
       // Rare, and cheaper to do correctly than to patch up incrementally.
       const all = loadFrames(events, origin);
+      // A replay keeps its playhead across the rebuild: the end if it was
+      // parked there, else the same moment.
+      const at = r.world.t;
+      const wasAtEnd = at >= r.totalMs;
       r.appendEvents([]);
       r.seek(0);
       rendererRef.current = null;
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
-      const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
+      const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
+      rebuilt.setWinner(winnerRef.current);
+      rebuilt.setFinalState(finalStateRef.current);
+      if (!isLive) rebuilt.seek(wasAtEnd ? rebuilt.totalMs : Math.min(at, rebuilt.totalMs));
       rendererRef.current = rebuilt;
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
       return;
     }
 
-    if (events.length === consumed) return;
+    // action === 'append'
     const fresh: FrameEvent[] = [];
     for (let i = consumed; i < events.length; i++) {
       fresh.push(toFrameEvent(events[i] as never, origin));
@@ -573,13 +674,15 @@ export default function ArenaViewerV2({
     r.appendEvents(fresh);
     consumedRef.current = events.length;
     lastIdRef.current = events[events.length - 1]?.eventId ?? null;
-  }, [events, teams, timeLimitMs, isLive, loadFrames]);
+  }, [events, teams, timeLimitMs, isLive, loadFrames, deliverableNames]);
 
   // ── Winner / terminal poses ───────────────────────────────────
   useEffect(() => {
     winnerRef.current = phase === 'reveal' ? (winnerId ?? null) : null;
+    finalStateRef.current = isLive ? null : state;
     rendererRef.current?.setWinner(winnerRef.current);
-  }, [phase, winnerId]);
+    rendererRef.current?.setFinalState(finalStateRef.current);
+  }, [phase, winnerId, isLive, state]);
 
   // ── The single animation loop ─────────────────────────────────
   //
@@ -594,39 +697,31 @@ export default function ArenaViewerV2({
     let hudAcc = 0;
 
     const step = (): void => {
-      const r = rendererRef.current;
       const canvas = canvasRef.current;
-      if (r && canvas) {
+      if (rendererRef.current && canvas) {
         // A WebGL canvas has no 2D context; the 3D branch never asks for one.
         const ctx = use3d ? null : canvas.getContext('2d');
         if (use3d || ctx) {
           ingest();
+          // Read the renderer AFTER ingest: it can replace it, and the rest of
+          // the frame must not run on the one it replaced (see advanceClock).
+          const r = rendererRef.current;
+          if (!r) { raf = requestAnimationFrame(step); return; }
 
-          if (isLive) {
-            // The host owns the clock: the competition's real elapsed time.
-            r.setTime(elapsedMs);
-          } else if (playing) {
-            r.tick(16.7 * speed);
-            parkedAtRef.current = null;
-          } else if (r.totalMs !== parkedAtRef.current) {
-            /**
-             * A finished competition parks on its END STATE, and re-parks
-             * whenever the stream grows.
-             *
-             * Seeking once at construction is not enough: the page delivers its
-             * events progressively, so the first batch can be a single event.
-             * The renderer then gets built from that one-event snapshot — end of
-             * stream 2,000ms — and everything afterwards is appended, so the
-             * view stays parked two seconds into an 831-second competition and
-             * the floor is bare. That is the empty arena. Re-parking on each
-             * change of totalMs converges on the real end as the list fills, and
-             * costs one seek per change rather than one per frame.
-             */
-            r.seek(r.totalMs);
-            parkedAtRef.current = r.totalMs;
+          // Live: the competition's real elapsed time. A replay plays, or,
+          // paused, holds its frame or follows the end as the history arrives.
+          advanceClock(r, { isLive, playing, elapsedMs, dtMs: 16.7 * speed });
+
+          // A replay's phase lives in the world. Mirror it into React only when
+          // it changes, never per frame.
+          if (!isLive && r.world.phase !== playheadPhaseRef.current) {
+            playheadPhaseRef.current = r.world.phase;
+            setPlayheadPhase(r.world.phase);
           }
 
-          if (orbit && phase !== 'reveal') {
+          // Live is never 'reveal' (that is what makes it live); a replay holds
+          // the orbit off only once its playhead has reached the verdict.
+          if (orbit && !(!isLive && r.world.phase === 'reveal')) {
             r.camera.tyaw = -0.62 + Math.sin(performance.now() / 9000) * 0.14;
           }
 
@@ -658,17 +753,18 @@ export default function ArenaViewerV2({
             const next: Record<string, string> = {};
             for (const team of r.world.teams.values()) next[team.id] = team.latest;
             setLatest(next);
-            if (teams.length === 2) {
-              const now = r.world.t;
-              let a = 0;
-              let b = 0;
-              for (const rec of r.world.recent) {
-                if (now - rec.t >= 10_000) continue;
-                if (rec.teamId === teams[0].id) a++;
-                else if (rec.teamId === teams[1].id) b++;
-              }
-              setMomentum(a + b === 0 ? 0 : (b - a) / (a + b));
+            const nextSquads: Record<string, SquadSummary> = {};
+            const nextDelivered: Record<string, DeliveredItem[]> = {};
+            for (const team of r.world.teams.values()) {
+              nextSquads[team.id] = squadSummary(team);
+              nextDelivered[team.id] = deliveredList(r.world, team.id);
             }
+            setSquads(nextSquads);
+            setDelivered(nextDelivered);
+            const share = momentumShares(r.world);
+            setShares(teams.map((t) => ({
+              id: t.id, label: t.model, color: teamColors[t.id], share: share.get(t.id) ?? 0,
+            })));
           }
         }
       }
@@ -676,27 +772,58 @@ export default function ArenaViewerV2({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams, use3d]);
+  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams, teamColors, use3d]);
 
   const notes = rendererRef.current?.honestyNotes ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
-      {teams.length === 2 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'start', gap: 12 }}>
-          <LaneHeader
-            team={teams[0]} color={teamColors[teams[0].id]} align="left"
-            latest={latest[teams[0].id] ?? ''}
-          />
-          <PhaseChip phase={phase} />
-          <LaneHeader
-            team={teams[1]} color={teamColors[teams[1].id]} align="right"
-            latest={latest[teams[1].id] ?? ''}
-          />
-        </div>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0,
+      ...(theater ? {
+        position: 'fixed', inset: 0, zIndex: THEATER_Z, height: 'auto',
+        padding: 16, boxSizing: 'border-box', background: BG_DARK,
+      } : {}),
+    }}>
+      {teams.length >= 2 && (
+        <>
+          {teams.length > 2 && (
+            <div style={{ position: 'relative', height: 48 }}><PhaseChip phase={hudPhase} /></div>
+          )}
+          <div style={{
+            display: 'grid', alignItems: 'start', gap: 12,
+            gridTemplateColumns: teams.length === 2 ? '1fr auto 1fr' : `repeat(${teams.length}, 1fr)`,
+          }}>
+            {teams.map((t, i) => (
+              <Fragment key={t.id}>
+                {teams.length === 2 && i === 1 && <PhaseChip phase={hudPhase} />}
+                <LaneHeader
+                  team={t} color={teamColors[t.id]}
+                  align={teams.length === 2 ? (i === 0 ? 'left' : 'right') : 'left'}
+                  latest={latest[t.id] ?? ''}
+                  squad={squads[t.id] ?? NO_SQUAD}
+                  delivered={delivered[t.id] ?? []}
+                />
+              </Fragment>
+            ))}
+          </div>
+        </>
       )}
 
-      <div ref={boxRef} style={{ position: 'relative', width: '100%', flex: 1, minHeight: 240 }}>
+      {/*
+        The stage. In theater it is a size container and the box inside it is
+        the largest 16:9 rectangle that fits; otherwise the box fills it.
+      */}
+      <div style={{
+        display: 'flex', justifyContent: 'center', alignItems: theater ? 'center' : 'stretch',
+        width: '100%', flex: 1, minHeight: theater ? 0 : 240,
+        containerType: theater ? 'size' : 'normal',
+      }}>
+      <div ref={boxRef} style={{
+        position: 'relative',
+        ...(theater
+          ? { flex: 'none', width: 'min(100cqw, calc(100cqh * 16 / 9))', aspectRatio: '16 / 9' }
+          : { flex: 1, minHeight: 240 }),
+      }}>
         <canvas
           // A canvas can only ever hand out one kind of context, so switching
           // between the 2D and WebGL pictures needs a fresh element.
@@ -723,7 +850,9 @@ export default function ArenaViewerV2({
           }}>
             <div>EACH BLOCK IS A FILE · HEIGHT IS ITS EDIT COUNT</div>
             <div>SOLID EDGE measured · DASHED inferred · HOLLOW provider cannot report edits</div>
-            {notes.length > 0 && <div style={{ color: '#ffd700' }}>⚠ {notes.length} telemetry caveat{notes.length > 1 ? 's' : ''} below</div>}
+            {/* Theater hides the notes below, so the caveats travel inside the frame. */}
+            {notes.length > 0 && !theater && <div style={{ color: '#ffd700' }}>⚠ {notes.length} telemetry caveat{notes.length > 1 ? 's' : ''} below</div>}
+            {theater && [...new Set(notes)].map((n) => <div key={n} style={{ color: '#ffd700' }}>⚠ {n}</div>)}
           </div>
         )}
         {use3d && !sceneReady && (
@@ -735,7 +864,7 @@ export default function ArenaViewerV2({
           </div>
         )}
         <WinnerBanner
-          visible={phase === 'reveal' && !!winnerId}
+          visible={hudPhase === 'reveal' && !!winnerId}
           winner={teams.find((t) => t.id === winnerId)}
           color={winnerId ? teamColors[winnerId] : '#00f0ff'}
           scores={scores}
@@ -753,14 +882,9 @@ export default function ArenaViewerV2({
           />
         ))}
       </div>
+      </div>
 
-      {teams.length === 2 && (
-        <MomentumMeter
-          momentum={momentum}
-          teamA={teams[0]} teamB={teams[1]}
-          colorA={teamColors[teams[0].id]} colorB={teamColors[teams[1].id]}
-        />
-      )}
+      {teams.length >= 2 && shares.length === teams.length && <MomentumMeter shares={shares} />}
 
       {/* Controls. Transport only once the history exists to scrub. */}
       <div style={{
@@ -773,13 +897,14 @@ export default function ArenaViewerV2({
               type="button"
               onClick={() => {
                 const r = rendererRef.current;
-                // Sitting on the final frame, Play means "watch it again".
+                // Sitting on the final frame, Play means "watch it again";
+                // anywhere else it resumes from the playhead.
                 if (r && !playing && r.world.t >= r.totalMs) r.seek(0);
                 setPlaying((p) => !p);
               }}
               style={ctrlStyle(playing)}
             >
-              {playing ? 'Pause' : 'Replay'}
+              {transportLabel(playing, rendererRef.current)}
             </button>
             {SPEEDS.map((s) => (
               <button key={s} type="button" onClick={() => setSpeed(s)} style={ctrlStyle(speed === s)}>
@@ -801,6 +926,15 @@ export default function ArenaViewerV2({
         <button type="button" onClick={() => setOrbit((o) => !o)} style={ctrlStyle(orbit)}>
           {use3d ? (orbit ? 'Director cam' : 'Free cam') : 'Cam'}
         </button>
+        <button
+          type="button"
+          onClick={() => setTheater((t) => !t)}
+          style={ctrlStyle(theater)}
+          aria-pressed={theater}
+          title={theater ? 'Exit theater (Esc)' : 'Fill the screen with the arena, for recording'}
+        >
+          {theater ? '⛶ Exit theater' : '⛶ Theater'}
+        </button>
       </div>
 
       {/*
@@ -809,7 +943,7 @@ export default function ArenaViewerV2({
         repeated here as selectable text because a screenshot is not accessible
         and a caveat nobody can copy is a caveat nobody quotes.
       */}
-      {notes.length > 0 && (
+      {notes.length > 0 && !theater && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {[...new Set(notes)].map((n) => (
             <div key={n} style={{
@@ -824,6 +958,13 @@ export default function ArenaViewerV2({
       )}
     </div>
   );
+}
+
+/** Pause while playing; Replay on the final frame; Play at the start, Resume mid-match. */
+function transportLabel(playing: boolean, r: IsoArenaRenderer | null): string {
+  if (playing) return 'Pause';
+  if (!r || r.world.t >= r.totalMs) return 'Replay';
+  return r.world.t <= 0 ? 'Play' : 'Resume';
 }
 
 function ctrlStyle(active: boolean): React.CSSProperties {

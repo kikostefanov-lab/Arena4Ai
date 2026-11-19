@@ -193,3 +193,31 @@ describe('POST /competitions — agent identity', () => {
     expect(options.logDir).toBe(process.env.ARENA_LOG_DIR);
   });
 });
+
+describe('POST /competitions — judge options', () => {
+  let app: Application;
+  const twoTeams = [
+    { id: 'team-a', model: 'claude', persona: 'architect' },
+    { id: 'team-b', model: 'codex', persona: 'standard' },
+  ];
+
+  beforeEach(() => {
+    captured.calls.length = 0;
+    app = createApp();
+  });
+
+  it('passes judgePanel: true through to the runner', async () => {
+    const res = await request(app).post('/competitions').send({ brief: validBrief, teams: twoTeams, judgePanel: true });
+    expect(res.status).toBe(201);
+    expect(captured.calls[0]!.options.judgePanel).toBe(true);
+  });
+
+  it('leaves the panel off unless the body says exactly true', async () => {
+    for (const judgePanel of [undefined, false, 'true', 1]) {
+      captured.calls.length = 0;
+      const res = await request(app).post('/competitions').send({ brief: validBrief, teams: twoTeams, judgePanel });
+      expect(res.status).toBe(201);
+      expect(captured.calls[0]!.options.judgePanel).toBe(false);
+    }
+  });
+});

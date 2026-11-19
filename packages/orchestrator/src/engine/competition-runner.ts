@@ -11,9 +11,11 @@ import {
   type Brief,
   type Competition,
   type Deliverable,
+  type JudgePanelSeat,
   type ScoreCard,
   type Team,
   type TeamPresentation,
+  teamDisplayName,
 } from '@arena/shared';
 
 import { transition } from './state-machine.js';
@@ -26,10 +28,12 @@ import { resolvePersona } from '../adapters/claude/claude-personas.js';
 import { SandboxManager } from '../sandbox/sandbox-manager.js';
 import { EventLogger } from '../events/event-logger.js';
 import { scoreDeliverable } from '../judging/rubric-scorer.js';
-import { aiJudge, JUDGE_IDS, type AiJudgeResult } from '../judging/ai-judge.js';
+import { aiJudge, judgeIdFor, JUDGE_IDS, type AiJudgeResult, type JudgeProvider } from '../judging/ai-judge.js';
+import { resolveJudgeModel } from '../adapters/model-registry.js';
 import {
   findMissingClis, formatMissingCliError, findUnavailableModels, formatUnavailableModelError,
 } from '../utils/cli-preflight.js';
+import { stageTimeoutMs } from '../utils/stage-timeout.js';
 import { aggregate } from '../judging/score-aggregator.js';
 import { resolveOutcome } from '../judging/outcome.js';
 import { printResults } from '../judging/results-reporter.js';
@@ -68,6 +72,13 @@ export interface RunOptions {
   aiJudgeCount?: 1 | 2;
   /** Enable adversarial (dual) judging */
   adversarialJudge?: boolean;
+  /**
+   * Cross-vendor judge panel: Claude, Codex and Gemini each judge every team,
+   * and finalScore is the mean of the judges that succeeded. Takes the place
+   * of the single (or adversarial pair of) Claude judges: adding a second
+   * Claude judge to the panel would tilt it back toward one vendor.
+   */
+  judgePanel?: boolean;
   /** Enable live AI commentary during the competition. Default false. */
   commentary?: boolean;
   /** Optional agent repository for DB-based persona resolution and stats updates after SCORED. */
@@ -89,6 +100,28 @@ export interface CompetitionResult {
   presentations: TeamPresentation[];      // human-readable per-team findings
   synthesis: SynthesisResult | null;      // synthesized hybrid solution
   deliverables: TeamDeliverable[];
+}
+
+/** The unpausable stop fires this many times the time limit after the start. */
+const WALL_CLOCK_FACTOR = 1.5;
+
+/** Judge failures worth one more try; auth, a missing CLI or a retired model will not fix themselves. */
+const RETRYABLE_JUDGE_FAILURES = new Set<string>(['timeout', 'rate-limit', 'cli-error', 'bad-output']);
+
+/** A rate-limited judge waits this long before its one retry: an instant retry hits the same limit. */
+export const JUDGE_RATE_LIMIT_RETRY_DELAY_MS = 15_000;
+
+/** The cross-vendor panel: every provider whose model competes also judges. */
+export const JUDGE_PANEL_PROVIDERS: readonly JudgeProvider[] = ['claude', 'codex', 'gemini'];
+
+/** One judge to run on every deliverable. */
+interface JudgeSeat {
+  judgeId: string;
+  provider: JudgeProvider;
+  /** Pinned model; undefined lets aiJudge resolve it from the judgeId (legacy seats). */
+  model?: string;
+  /** Panel seats are relabelled `ai-<provider>/<model it actually ran on>`. */
+  panel: boolean;
 }
 
 /**
@@ -138,7 +171,11 @@ export class CompetitionRunner extends EventEmitter {
       aiJudgeCount: options.aiJudgeCount ?? 1,
       commentary: options.commentary ?? false,
       adversarialJudge: options.adversarialJudge ?? false,
+      judgePanel: options.judgePanel ?? false,
     };
+    if (this.options.judgePanel && this.options.adversarialJudge) {
+      console.warn('[arena] --judge-panel replaces --adversarial-judge; judging with the cross-vendor panel only.');
+    }
   }
 
   /** The competition's unique ID — same value embedded in every ArenaEvent. */
@@ -281,8 +318,12 @@ export class CompetitionRunner extends EventEmitter {
       // Preflight: a self-hoster will rarely have all three agent CLIs. Find out
       // BEFORE launching, and say which binary is missing and how to get it —
       // rather than failing halfway through with a spawn ENOENT.
+      // The panel's judges need their CLIs too; find out now, not after the match.
       const missingClis = await findMissingClis(
-        teams.map(t => t.model.split(':')[0] || 'claude'),
+        [
+          ...teams.map(t => t.model.split(':')[0] || 'claude'),
+          ...(this.options.judgePanel ? JUDGE_PANEL_PROVIDERS : []),
+        ],
         {
           claude: this.options.claudeBin,
           codex: this.options.codexBin,
@@ -311,7 +352,7 @@ export class CompetitionRunner extends EventEmitter {
       const badModels = await findUnavailableModels(
         teams.map((t) => ({
           teamId: t.id,
-          label: t.model.includes(':') ? t.model : `${t.model}:${t.persona ?? ''}`,
+          label: teamDisplayName(t.model, t.persona),
           provider: t.model.split(':')[0] || 'claude',
           modelVariant: resolvedTeams.get(t.id)?.modelVariant,
         })),
@@ -434,7 +475,20 @@ export class CompetitionRunner extends EventEmitter {
       const cancelPromise = new Promise<void>((resolve) => {
         this._cancelResolve = resolve;
       });
-      await Promise.race([raceFinished, allAdaptersDone, cancelPromise]);
+      // The clock can be paused, so it alone cannot bound a run. This real-time
+      // stop cannot be paused: 1.5x the limit after the start, whatever happens.
+      let wallClockTimer: NodeJS.Timeout | undefined;
+      const wallClockStop = new Promise<void>((resolve) => {
+        wallClockTimer = setTimeout(() => {
+          console.error(`[arena] wall-clock limit (${WALL_CLOCK_FACTOR}x the time limit) reached — stopping the agents.`);
+          resolve();
+        }, brief.timeLimitMs * WALL_CLOCK_FACTOR);
+      });
+      try {
+        await Promise.race([raceFinished, allAdaptersDone, cancelPromise, wallClockStop]);
+      } finally {
+        clearTimeout(wallClockTimer);
+      }
 
       // ── TIME_UP / COLLECTING ─────────────────────────────────────────────
       this.advance(CompetitionState.TIME_UP);
@@ -449,7 +503,7 @@ export class CompetitionRunner extends EventEmitter {
       this.assertNotCancelled();
 
       const allDeliverables: Deliverable[] = await Promise.all(
-        adapters.map((a) => a.collectDeliverables()),
+        adapters.map((a) => a.collectDeliverables(brief.deliverables)),
       );
       this.assertNotCancelled();
 
@@ -476,6 +530,11 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.PRESENTING);
       console.log('[arena] generating human-readable presentations...');
 
+      // Judge and presenter read the same files, so one input size scales both timeouts.
+      const totalChars = deliverables.reduce(
+        (sum, d) => sum + d.files.reduce((s, f) => s + f.content.length, 0), 0);
+      const helperTimeoutMs = stageTimeoutMs(totalChars);
+
       const teamModels = new Map(teams.map((t) => [t.id, t.model]));
       let presentations: TeamPresentation[] = [];
       try {
@@ -483,7 +542,7 @@ export class CompetitionRunner extends EventEmitter {
           brief,
           deliverables,
           teamModels,
-          { claudeBin: this.options.claudeBin },
+          { claudeBin: this.options.claudeBin, timeoutMs: helperTimeoutMs },
         );
       } catch (err) {
         console.error('[arena] presentation generation failed:', (err as Error).message);
@@ -508,20 +567,71 @@ export class CompetitionRunner extends EventEmitter {
       this.advance(CompetitionState.JUDGING);
 
       // Run AI cross-judge (primary) + automated scorer (fallback) in parallel
-      console.log('[arena] judging with AI cross-judge (automated scorer as fallback)...');
-      const aiJudgePromises: Promise<AiJudgeResult>[] = deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
-        judgeId: JUDGE_IDS.aiClaude,
-        claudeBin: this.options.claudeBin,
-      }));
-
-      if (this.options.aiJudgeCount >= 2) {
-        aiJudgePromises.push(
-          ...deliverables.map((d) => aiJudge(brief, d, brief.rubric, {
-            judgeId: JUDGE_IDS.aiAdversarial,
-            claudeBin: this.options.claudeBin,
-          })),
-        );
-      }
+      const seats: JudgeSeat[] = this.options.judgePanel
+        ? JUDGE_PANEL_PROVIDERS.map((provider) => {
+            const model = resolveJudgeModel(`ai-${provider}`, provider);
+            return { provider, model, judgeId: judgeIdFor(provider, model), panel: true };
+          })
+        : [
+            { judgeId: JUDGE_IDS.aiClaude, provider: 'claude', panel: false },
+            ...(this.options.aiJudgeCount >= 2
+              ? [{ judgeId: JUDGE_IDS.aiAdversarial, provider: 'claude' as const, panel: false }]
+              : []),
+          ];
+      console.log(this.options.judgePanel
+        ? `[arena] judging with the cross-vendor panel (${seats.map((j) => j.judgeId).join(', ')}; automated scorer as fallback)...`
+        : '[arena] judging with AI cross-judge (automated scorer as fallback)...');
+      const judgeBin: Record<JudgeProvider, string> = {
+        claude: this.options.claudeBin,
+        codex: this.options.codexBin,
+        gemini: this.options.geminiBin,
+      };
+      const judgeOnce = async (d: Deliverable, seat: JudgeSeat): Promise<AiJudgeResult> => {
+        const run = async () => {
+          const r = await aiJudge(brief, d, brief.rubric, {
+            judgeId: seat.judgeId,
+            provider: seat.provider,
+            ...(seat.model ? { model: seat.model } : {}),
+            claudeBin: judgeBin[seat.provider],
+            timeoutMs: helperTimeoutMs,
+          });
+          // A panel judge on its CLI default is named after the model the CLI
+          // reports, so the scorecard says which model produced the number.
+          return seat.panel ? { ...r, judgeId: judgeIdFor(seat.provider, r.model ?? seat.model!) } : r;
+        };
+        const first = await run();
+        if (!first.failure || !RETRYABLE_JUDGE_FAILURES.has(first.failure.kind)) return first;
+        this.assertNotCancelled();
+        console.error(`[arena] AI judge ${seat.judgeId} failed for ${d.teamId} (${first.failure.kind}) — retrying once.`);
+        if (first.failure.kind === 'rate-limit') {
+          await new Promise((r) => setTimeout(r, JUDGE_RATE_LIMIT_RETRY_DELAY_MS));
+          this.assertNotCancelled();
+        }
+        const second = await run();
+        if (!second.failure) {
+          // The retry saved it, but a flaky judge is still worth seeing in the log.
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: d.teamId,
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: {
+              stage: 'judging',
+              recovered: true,
+              judgeId: second.judgeId,
+              provider: seat.provider,
+              model: first.model,
+              kind: first.failure.kind,
+              message: `${first.failure.message} (recovered on retry)`,
+            },
+            metadata: {},
+          });
+        }
+        return second;
+      };
+      const aiJudgePromises: Promise<AiJudgeResult>[] = seats.flatMap((seat) =>
+        deliverables.map((d) => judgeOnce(d, seat)));
 
       // Run both in parallel — automated results are only used if AI judge fails
       const automatedResults = await Promise.all(
@@ -540,6 +650,7 @@ export class CompetitionRunner extends EventEmitter {
         existing.push(r);
         aiByTeam.set(r.teamId, existing);
       }
+      const panelByTeam = new Map<string, JudgePanelSeat[]>();
 
       for (const automated of automatedResults) {
         const aiForTeam = aiByTeam.get(automated.teamId) ?? [];
@@ -556,13 +667,25 @@ export class CompetitionRunner extends EventEmitter {
             payload: {
               stage: 'judging',
               judgeId: failed.judgeId,
+              provider: failed.provider ?? 'claude',
               model: failed.model,
               kind: failed.failure!.kind,
               message: failed.failure!.message,
               detail: failed.failure!.detail?.slice(0, 2000),
+              failure: { kind: failed.failure!.kind, message: failed.failure!.message },
             },
             metadata: {},
           });
+        }
+
+        if (this.options.judgePanel) {
+          // Which judges this team's score averages, and which dropped out.
+          panelByTeam.set(automated.teamId, aiForTeam.map((r) => ({
+            provider: r.provider ?? 'claude',
+            model: r.model ?? 'unknown',
+            judgeId: r.judgeId,
+            ...(r.failure ? { failure: r.failure.kind } : {}),
+          })));
         }
 
         if (usable.length > 0) {
@@ -574,7 +697,12 @@ export class CompetitionRunner extends EventEmitter {
         }
       }
 
-      const judgedCards = aggregate(judgeResults);
+      // finalScore = mean of the judges that succeeded (same averaging and tie
+      // tolerance as the adversarial pair).
+      const judgedCards = aggregate(judgeResults).map((card) => {
+        const panel = panelByTeam.get(card.teamId);
+        return panel ? { ...card, judgePanel: panel } : card;
+      });
       const lastRank = judgedCards.reduce((max, c) => Math.max(max, c.rank), 0);
       const scorecards = [
         ...judgedCards,

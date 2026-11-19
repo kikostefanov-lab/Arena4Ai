@@ -1,5 +1,5 @@
-import type { ArenaEvent, FileOperation, FileOpSource, ProviderFileCapability } from '../types/event.js';
-import { PROVIDER_FILE_CAPABILITIES } from '../types/event.js';
+import type { ArenaEvent, FileOperation, FileOpSource, ProviderFileCapability, SubAgentStatus } from '../types/event.js';
+import { PROVIDER_FILE_CAPABILITIES, squadLabel, CLAUDE_TASK_STATUS } from '../types/event.js';
 
 /**
  * Turns raw ArenaEvents into the small, honest shape the renderer draws from.
@@ -30,6 +30,8 @@ export const UNKNOWN_PROVIDER_CAPABILITY: ProviderFileCapability = {
   opSource: 'first-sighting',
   tool: false,
   input: false,
+  subagentAttribution: false,
+  subagentLifecycle: 'collected',
 };
 
 /**
@@ -54,7 +56,14 @@ export function capabilityFor(model: string): ProviderFileCapability {
 
 // ─── the normalized frame event ──────────────────────────────────────────────
 
-export type FrameEventKind = 'file' | 'tool' | 'error' | 'reasoning' | 'state' | 'commentary' | 'other';
+export type FrameEventKind =
+  | 'file' | 'tool' | 'error' | 'reasoning' | 'state' | 'commentary'
+  /** A sub-agent joined the team's squad. */
+  | 'spawn'
+  /** A sub-agent ended (see `agentStatus`). */
+  | 'agentDone'
+  /** Not the agent's activity (a harness error, PRESENTATION_READY, …): never applied to a team. */
+  | 'other';
 
 export interface FrameEvent {
   /** Milliseconds from the start of the competition. */
@@ -83,6 +92,24 @@ export interface FrameEvent {
    * `measured` — see `telemetryFromStats`.
    */
   recovered?: boolean;
+  /**
+   * The sub-agent this event belongs to. On `spawn` / `agentDone` it is the
+   * member itself; on any other kind it is the member that produced the event
+   * (`metadata.agentId`). Absent means the lead, or unknown.
+   */
+  agentId?: string;
+  /** A file written while a squad was open, by a member we cannot name (`metadata.squad`). */
+  squad?: boolean;
+  /** `spawn` only: the member's chip label (at most 18 chars). */
+  label?: string;
+  /** `spawn` only: the member's sub-agent type, when the provider names one. */
+  agentKind?: string;
+  /** `spawn` / `agentDone`: the member's model, when the stream reveals it. */
+  model?: string;
+  /** `agentDone` only: how the member ended. */
+  agentStatus?: SubAgentStatus;
+  /** `reasoning` only: Codex reported a squad it did not identify. */
+  squadUnidentified?: boolean;
 }
 
 // ─── legacy payload handling ─────────────────────────────────────────────────
@@ -135,11 +162,79 @@ function textOf(payload: Record<string, unknown>): string {
   return '';
 }
 
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+
+/**
+ * `ERROR.payload.stage` values raised by the harness rather than the agent.
+ * An error with no stage, or `stage: 'agent'`, is the agent's.
+ */
+export const HARNESS_ERROR_STAGES: ReadonlySet<string> = new Set([
+  'preflight', 'sandbox', 'collect', 'presentation', 'judging', 'synthesis',
+]);
+
+const SUB_AGENT_STATUSES: ReadonlySet<string> = new Set<SubAgentStatus>(['completed', 'failed', 'killed', 'unknown']);
+
+function subAgentStatus(v: unknown): SubAgentStatus {
+  return typeof v === 'string' && SUB_AGENT_STATUSES.has(v) ? (v as SubAgentStatus) : 'unknown';
+}
+
+/** The raw stream-json line a stored Claude REASONING event carries, if any. */
+function rawLineOf(ev: ArenaEvent, payload: Record<string, unknown>): Record<string, unknown> | undefined {
+  if (ev.type !== 'REASONING') return undefined;
+  const raw = payload.raw;
+  return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : undefined;
+}
+
+/**
+ * READ-TIME UPGRADE of a stored Claude squad line.
+ *
+ * Matches recorded before the squad normalizer kept Claude's `task_started` and
+ * `task_notification` system lines as REASONING with the line in `payload.raw`.
+ * They really did run squads, so the lifecycle is derived here rather than
+ * backfilled into the database. Only `local_agent` tasks are sub-agents:
+ * `task_started` also fires for long shell commands (`local_bash`). A
+ * notification is upgraded whatever its task type; the world ignores a done for
+ * a member it never saw spawn, which is what a shell task's notification is.
+ */
+function upgradeRawSquadLine(
+  raw: Record<string, unknown>,
+  base: { t: number; teamId: string | null; text: string },
+): FrameEvent | undefined {
+  if (raw.type !== 'system') return undefined;
+  const taskId = str(raw.task_id);
+  if (!taskId) return undefined;
+  if (raw.subtype === 'task_started' && raw.task_type === 'local_agent') {
+    const label = squadLabel(str(raw.description) ?? '');
+    return { ...base, kind: 'spawn', agentId: taskId, label, agentKind: str(raw.subagent_type), text: label, legacy: false };
+  }
+  if (raw.subtype === 'task_notification') {
+    const status = typeof raw.status === 'string' && Object.prototype.hasOwnProperty.call(CLAUDE_TASK_STATUS, raw.status)
+      ? CLAUDE_TASK_STATUS[raw.status]
+      : 'unknown';
+    return { ...base, kind: 'agentDone', agentId: taskId, agentStatus: status, text: status, legacy: false };
+  }
+  return undefined;
+}
+
 /**
  * Normalize one ArenaEvent. `originMs` is the competition start in epoch ms, so
  * the renderer works in elapsed time regardless of when the events were recorded.
+ *
+ * Squad metadata (`metadata.agentId`, `metadata.squad`) is copied onto every
+ * kind, so a view can tell whose event it is without re-reading the raw event.
  */
 export function toFrameEvent(ev: ArenaEvent, originMs: number): FrameEvent {
+  const f = classify(ev, originMs);
+  const meta = (ev.metadata ?? {}) as Record<string, unknown>;
+  // spawn / agentDone name their member from the payload; their metadata
+  // agentId, if any, would be the PARENT, so it is never copied onto them.
+  const agentId = str(meta.agentId);
+  if (agentId && f.kind !== 'spawn' && f.kind !== 'agentDone') f.agentId = agentId;
+  if (meta.squad === true) f.squad = true;
+  return f;
+}
+
+function classify(ev: ArenaEvent, originMs: number): FrameEvent {
   const payload = (ev.payload ?? {}) as Record<string, unknown>;
   const t = Math.max(0, Date.parse(ev.timestamp) - originMs);
   const base = { t, teamId: ev.teamId || null, text: textOf(payload) };
@@ -185,9 +280,52 @@ export function toFrameEvent(ev: ArenaEvent, originMs: number): FrameEvent {
         legacy: false,
       };
     case 'ERROR':
+      // An error from a stage the agent was not running (a judge rate-limited,
+      // a presentation call that failed) is stored under the team it concerns,
+      // but it is not the team's doing: on 7adcd4df Claude's header ended on
+      // "✕ AI judge unavailable" and its lead took a hit. The Log view lists
+      // every stored event; the arena applies only the agent's own.
+      if (typeof payload.stage === 'string' && HARNESS_ERROR_STAGES.has(payload.stage)) {
+        return { ...base, kind: 'other', legacy: false };
+      }
       return { ...base, kind: 'error', legacy: false };
-    case 'REASONING':
-      return { ...base, kind: 'reasoning', legacy: false };
+    case 'SUB_AGENT_SPAWN': {
+      const label = str(payload.label) ?? squadLabel(str(payload.description) ?? '');
+      return {
+        ...base,
+        kind: 'spawn',
+        agentId: str(payload.agentId),
+        label,
+        agentKind: str(payload.kind),
+        model: str(payload.model),
+        text: label,
+        legacy: false,
+      };
+    }
+    case 'SUB_AGENT_DONE': {
+      const status = subAgentStatus(payload.status);
+      const reason = str(payload.reason);
+      return {
+        ...base,
+        kind: 'agentDone',
+        agentId: str(payload.agentId),
+        agentStatus: status,
+        model: str(payload.model),
+        text: reason ? `${status} · ${reason}` : status,
+        legacy: false,
+      };
+    }
+    case 'REASONING': {
+      const raw = rawLineOf(ev, payload);
+      const upgraded = raw && upgradeRawSquadLine(raw, base);
+      if (upgraded) return upgraded;
+      return {
+        ...base,
+        kind: 'reasoning',
+        ...(payload.squadUnidentified === true ? { squadUnidentified: true } : {}),
+        legacy: false,
+      };
+    }
     case 'COMMENTARY':
       return { ...base, kind: 'commentary', legacy: false };
     default:
@@ -198,11 +336,75 @@ export function toFrameEvent(ev: ArenaEvent, originMs: number): FrameEvent {
   }
 }
 
-/** Normalize and sort a whole competition's events. */
+/**
+ * Normalize and sort a whole competition's events.
+ *
+ * Stored Claude matches also kept each sub-agent's own lines as REASONING with
+ * the raw line, tagged `parent_tool_use_id` (the spawning tool call), not the
+ * task id. One pass first maps `tool_use_id → task_id` from the stored
+ * `task_started(local_agent)` lines, so those lines are credited to their member.
+ * Only REASONING lines can be: stored tool and file events carry no raw line,
+ * which is why an old replay shows the squad's lifecycle but not who wrote what.
+ */
 export function toFrameEvents(events: ArenaEvent[], originMs?: number): FrameEvent[] {
   if (events.length === 0) return [];
   const origin = originMs ?? Math.min(...events.map((e) => Date.parse(e.timestamp)));
-  return events.map((e) => toFrameEvent(e, origin)).sort((a, b) => a.t - b.t);
+
+  const taskByToolUse = new Map<string, string>();
+  for (const e of events) {
+    const raw = rawLineOf(e, (e.payload ?? {}) as Record<string, unknown>);
+    if (!raw || raw.type !== 'system' || raw.subtype !== 'task_started' || raw.task_type !== 'local_agent') continue;
+    const toolUse = str(raw.tool_use_id);
+    const task = str(raw.task_id);
+    if (toolUse && task) taskByToolUse.set(toolUse, task);
+  }
+
+  return events.map((e) => {
+    const f = toFrameEvent(e, origin);
+    if (taskByToolUse.size && f.kind === 'reasoning' && f.agentId === undefined) {
+      const parent = str(rawLineOf(e, (e.payload ?? {}) as Record<string, unknown>)?.parent_tool_use_id);
+      const agentId = parent && taskByToolUse.get(parent);
+      if (agentId) f.agentId = agentId;
+    }
+    return f;
+  }).sort((a, b) => a.t - b.t);
+}
+
+/** "codex" → "Codex", for the squad notes. */
+function providerName(provider: string): string {
+  return provider ? provider[0].toUpperCase() + provider.slice(1) : 'This provider';
+}
+
+/** What a team's stream has shown about its squad. Folded as events become KNOWN, like `FileStats`. */
+export interface SquadSignals {
+  /** At least one sub-agent spawned. */
+  spawned: boolean;
+  /** Codex reported a squad it did not identify. */
+  unidentified: boolean;
+}
+
+/**
+ * The squad honesty notes for one team.
+ *
+ * Only a team that has had a squad gets the attribution and lifecycle caveats:
+ * a solo run has nothing to qualify. The unidentified-squad note stands on its
+ * own, because that case usually has no spawn at all, and without the note the
+ * team would read as solo while a squad worked unseen.
+ */
+export function squadNotes(model: string, signals: SquadSignals): string[] {
+  const notes: string[] = [];
+  const capability = capabilityFor(model);
+  const name = providerName(providerOf(model));
+  if (signals.spawned) {
+    if (!capability.subagentAttribution) {
+      notes.push(`${name} doesn't report which sub-agent wrote each file. Squad files appear as they land, unassigned.`);
+    }
+    if (capability.subagentLifecycle === 'collected') {
+      notes.push(`${name} finish times are when the lead collected the result, not when the sub-agent finished.`);
+    }
+  }
+  if (signals.unidentified) notes.push('Codex reported a squad it did not identify.');
+  return notes;
 }
 
 // ─── edit depth: the honest-absence decision ─────────────────────────────────
@@ -237,11 +439,19 @@ export interface TeamTelemetry {
  * provider that CAN report an operation still yields nothing on a historical
  * competition recorded before it did.
  */
+/** Legend note for a team whose every file came from the workdir watcher. */
+export function watchOnlyNote(provider: string): string {
+  return `${provider}: files observed on disk; the CLI did not report its edits, so block heights are inferred`;
+}
+
 export function resolveTelemetry(model: string, fileEvents: FrameEvent[]): TeamTelemetry {
   const provider = providerOf(model);
   const capability = capabilityFor(model);
   const anyLegacy = fileEvents.some((e) => e.legacy);
-  const anyContract = fileEvents.some((e) => !e.legacy && e.opSource);
+  // A watch sighting is evidence of a file, not the CLI reporting its edit:
+  // excluded here and in `foldFileStats` (world.ts), which must stay in step.
+  const anyContract = fileEvents.some((e) => !e.legacy && e.opSource && e.opSource !== 'watch');
+  const allWatched = fileEvents.length > 0 && fileEvents.every((e) => e.opSource === 'watch');
   const anyPath = fileEvents.some((e) => !!e.path);
 
   // A provider that structurally CANNOT report the operation is the primary
@@ -265,6 +475,9 @@ export function resolveTelemetry(model: string, fileEvents: FrameEvent[]): TeamT
   if (fileEvents.length === 0) {
     // No files at all is a fact about the run, not a gap in telemetry.
     return { provider, capability, editDepth: 'measured', legacy: false };
+  }
+  if (allWatched) {
+    return { provider, capability, editDepth: 'inferred', legacy: anyLegacy, note: watchOnlyNote(provider) };
   }
   if (anyPath) {
     return {

@@ -1,8 +1,10 @@
-import type { FrameEvent, TeamTelemetry, EditDepthMode } from './event-model.js';
-import { resolveTelemetry, providerOf, capabilityFor } from './event-model.js';
+import type { FrameEvent, TeamTelemetry, EditDepthMode, SquadSignals } from './event-model.js';
+import { resolveTelemetry, providerOf, capabilityFor, squadNotes, isVendoredPath, watchOnlyNote } from './event-model.js';
+import type { SubAgentStatus } from '../types/event.js';
+import { expectedFileName } from '../constants/scoring.js';
 import { getModelColor } from '../design/tokens.js';
 import type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
-import { planGrid, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM } from './layout.js';
+import { planGrid, DEFAULT_BASE_X, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, SQUAD_SLOTS } from './layout.js';
 
 /** What the renderer needs to know about one competitor. */
 export interface TeamSpec {
@@ -16,7 +18,16 @@ export interface TeamSpec {
 export type BlockKind = 'src' | 'test' | 'doc' | 'config';
 
 /** Running tallies over a team's file events. See `TeamState.fileStats`. */
-export interface FileStats { total: number; withContract: number; withPath: number; legacy: number; recovered: number }
+export interface FileStats {
+  total: number;
+  /** Events carrying the CLI's own operation (`op` + an opSource other than 'watch'). */
+  withContract: number;
+  withPath: number;
+  legacy: number;
+  recovered: number;
+  /** Events the workdir watcher saw on disk (`opSource: 'watch'`). */
+  watched: number;
+}
 
 /**
  * Fold one file event into a team's tallies.
@@ -35,10 +46,73 @@ export interface FileStats { total: number; withContract: number; withPath: numb
 export function foldFileStats(stats: FileStats, ev: FrameEvent): void {
   if (ev.kind !== 'file') return;
   stats.total++;
-  if (ev.opSource && ev.op) stats.withContract++;
+  // A watch sighting is evidence of a file, not the CLI reporting its edit, so
+  // it never makes a team's heights `measured`. Keep in step with
+  // `resolveTelemetry` in event-model.ts.
+  if (ev.opSource === 'watch') stats.watched++;
+  else if (ev.opSource && ev.op) stats.withContract++;
   if (ev.path) stats.withPath++;
   if (ev.legacy) stats.legacy++;
   if (ev.recovered) stats.recovered++;
+}
+
+/**
+ * Fold one event into a team's squad signals. Like `foldFileStats`, called when
+ * an event becomes KNOWN rather than when it is applied: the squad notes
+ * describe the stream, so scrubbing back before the first spawn must not hide
+ * them. Returns true when a signal changed, so a live host knows to refresh the
+ * notes.
+ */
+export function foldSquadSignals(signals: SquadSignals, ev: FrameEvent): boolean {
+  if (ev.kind === 'spawn' && !signals.spawned) { signals.spawned = true; return true; }
+  if (ev.kind === 'reasoning' && ev.squadUnidentified && !signals.unidentified) { signals.unidentified = true; return true; }
+  return false;
+}
+
+/**
+ * One sub-agent in a team's squad.
+ *
+ * Every time here is the EVENT's own time (`FrameEvent.t`), never `world.t`:
+ * `seek()` sets the clock to its destination before replaying history, so a
+ * world-clock stamp would make a seeked squad disagree with a played one. A view
+ * derives animation age as the playhead minus these.
+ */
+export interface SquadMember {
+  id: string;
+  label: string;
+  /** The provider's sub-agent type, when it names one. */
+  kind?: string;
+  model?: string;
+  spawnedAt: number;
+  endedAt?: number;
+  status: 'running' | SubAgentStatus;
+  /** File events attributed to this member. */
+  files: number;
+  /** Tool calls attributed to this member. */
+  tools: number;
+  /** Time of its last attributed file or tool event, or of its spawn. */
+  lastActiveAt: number;
+  /**
+   * Which of the `SQUAD_SLOTS` reserved cells it stands on, or null when every
+   * slot was taken at its spawn (counted, not drawn). Only OPEN members hold a
+   * slot for allocation; an ended member keeps the number so a view can play
+   * its exit where it stood, and the next spawn may reuse it.
+   */
+  slot: number | null;
+}
+
+/** One entry of `World.recent`. */
+export interface RecentActivity {
+  /** The event's own time. */
+  t: number;
+  teamId: string;
+  kind: string;
+  /** The sub-agent that produced it, when known. */
+  agentId?: string;
+  /** File events: the structure key it addressed. */
+  key?: string;
+  /** A file written by an unnamed member of an open squad. */
+  squad?: boolean;
 }
 
 export interface Structure {
@@ -99,6 +173,14 @@ export interface TeamState extends TeamSpec {
    * facts telemetry depends on are accumulated as events are applied instead.
    */
   fileStats: FileStats;
+  /** Sub-agents seen so far this playback, by agent id, in spawn order. */
+  squad: Map<string, SquadMember>;
+  /** `failed` counts members that ended `failed`; `peak` is the most open at once. */
+  squadTotals: { spawned: number; failed: number; peak: number };
+  /** Names from `World.deliverables` a file event has landed for. */
+  delivered: Set<string>;
+  /** What the stream has shown about this team's squad; survives `resetWorld`. */
+  squadSignals: SquadSignals;
 }
 
 export type Phase = 'active' | 'freeze' | 'judging' | 'reveal';
@@ -113,13 +195,22 @@ export interface World {
   compState: string;
   winnerId: string | null;
   /** Rolling window of recent activity, for the momentum channel. */
-  recent: Array<{ t: number; teamId: string; kind: string }>;
+  recent: RecentActivity[];
+  /** The file names the brief's deliverables name, from `expectedFileName()`. */
+  deliverables: string[];
   log: FrameEvent[];
   commentary: { text: string; until: number } | null;
   t: number;
   judgeScanZ: number;
   /** Every honest-absence note gathered from the teams, for the legend. */
   notes: string[];
+  /**
+   * The state a FINISHED match ended in when this world is a replay of it
+   * (e.g. 'COMPLETE', 'FAILED'); null while live. Lets a view say REPLAY rather
+   * than LIVE, and name a match that ended without a verdict. Survives
+   * `resetWorld`: scrubbing does not make a replay live.
+   */
+  replayOf: string | null;
 }
 
 const RECENT_CAP = 400;
@@ -140,8 +231,17 @@ function kindOf(p: string): BlockKind {
  * lazily: a floor that resized mid-replay would move every block already placed,
  * and the whole point of the block channel is that a file keeps its spot.
  */
-export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
-  const baseX = 6.2;
+export function createWorld(
+  teams: TeamSpec[],
+  events: FrameEvent[],
+  opts: { deliverables?: string[] } = {},
+): World {
+  const baseX = DEFAULT_BASE_X;
+  // Brief deliverables are free text ("README.md with run instructions"); an
+  // entry that names no file cannot be checked off, so it is dropped.
+  const deliverables = [...new Set(
+    (opts.deliverables ?? []).map(expectedFileName).filter((n): n is string => !!n),
+  )];
 
   // Distinct paths per team → how many blocks the busiest team will need.
   const perTeamPaths = new Map<string, Set<string>>();
@@ -173,7 +273,7 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     widest = Math.max(widest, blocks);
   }
 
-  const grid = planGrid(Math.max(widest, 1), teams.length);
+  const grid = planGrid(Math.max(widest, 1), teams.length, baseX);
 
   const world: World = {
     grid,
@@ -185,11 +285,13 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     compState: 'LAUNCHING',
     winnerId: null,
     recent: [],
+    deliverables,
     log: [],
     commentary: null,
     t: 0,
     judgeScanZ: 0,
     notes: [],
+    replayOf: null,
   };
 
   const bands = bandsFor(teams.length, grid, baseX);
@@ -200,6 +302,8 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
     const fileEvents = events.filter((e) => e.kind === 'file' && e.teamId === spec.id);
     const telemetry = resolveTelemetry(spec.model, fileEvents);
     const budget = budgets.get(spec.id)!;
+    const squadSignals: SquadSignals = { spawned: false, unidentified: false };
+    for (const e of events) if (e.teamId === spec.id) foldSquadSignals(squadSignals, e);
     world.teams.set(spec.id, {
       ...spec,
       side,
@@ -213,12 +317,15 @@ export function createWorld(teams: TeamSpec[], events: FrameEvent[]): World {
       budget,
       seen: new Set(),
       fileStats: fileEvents.reduce<FileStats>((acc, e) => { foldFileStats(acc, e); return acc; },
-        { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 }),
+        { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 }),
+      squad: new Map(),
+      squadTotals: { spawned: 0, failed: 0, peak: 0 },
+      delivered: new Set(),
+      squadSignals,
     });
-    if (telemetry.note) world.notes.push(telemetry.note);
-    if (budget.note) world.notes.push(budget.note);
   });
 
+  refreshNotes(world);
   return world;
 }
 
@@ -238,8 +345,12 @@ export function resetWorld(world: World): void {
     team.counts = { files: 0, edits: 0, tools: 0, errors: 0, reasoning: 0 };
     team.latest = '';
     team.seen.clear();
-    // fileStats deliberately survive: they describe the STREAM, so scrubbing to
-    // the start must not make a competition's honesty caveat disappear.
+    team.squad.clear();
+    team.squadTotals = { spawned: 0, failed: 0, peak: 0 };
+    team.delivered.clear();
+    // fileStats and squadSignals deliberately survive: they describe the STREAM,
+    // so scrubbing to the start must not make a competition's honesty caveat
+    // disappear.
   }
 }
 
@@ -318,7 +429,11 @@ export interface ApplyEffects {
  * scrubbing to the end would fire a thousand beams at once.
  */
 export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: ApplyEffects = {}): void {
-  const now = world.t;
+  // The EVENT's time, never `world.t`: `seek()` moves the clock to its
+  // destination before replaying history, so stamping with the clock would give
+  // every event the seek target's time and a seeked world would disagree with a
+  // played one.
+  const now = ev.t;
 
   if (ev.kind === 'state' && ev.state) {
     world.compState = ev.state;
@@ -331,15 +446,39 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
     return;
   }
 
+  // Not the agent's activity (see 'other' in FrameEventKind): no latest line,
+  // no momentum, no pulse or hit reaction in any view.
+  if (ev.kind === 'other') return;
+
   const team = ev.teamId ? world.teams.get(ev.teamId) : undefined;
   if (!team) return;
 
-  world.recent.push({ t: now, teamId: team.id, kind: ev.kind });
+  // A spawn for a member already known (a stored raw line and its normalized
+  // event both upgrade to one), or a done for a member never seen or already
+  // ended, changes nothing and is not recorded as activity either.
+  if (ev.kind === 'spawn' && !applySpawn(team, ev)) return;
+  if (ev.kind === 'agentDone' && !applyAgentDone(team, ev)) return;
+
+  const blockKey = ev.kind === 'file' && ev.path ? blockKeyFor(ev.path, team.budget.rolledUp) : undefined;
+  const member = ev.agentId ? team.squad.get(ev.agentId) : undefined;
+  const entry: RecentActivity = { t: now, teamId: team.id, kind: ev.kind };
+  if (ev.agentId) entry.agentId = ev.agentId;
+  if (blockKey) entry.key = blockKey;
+  if (ev.squad) entry.squad = true;
+  world.recent.push(entry);
   if (world.recent.length > RECENT_CAP) world.recent.splice(0, world.recent.length - RECENT_CAP);
   world.log.push(ev);
   if (world.log.length > LOG_CAP) world.log.shift();
 
   switch (ev.kind) {
+    case 'spawn':
+      team.latest = `squad + ${member?.label ?? ev.agentId}`;
+      break;
+
+    case 'agentDone':
+      team.latest = `squad ${member?.status ?? 'unknown'} · ${member?.label ?? ev.agentId}`;
+      break;
+
     case 'reasoning':
       team.counts.reasoning++;
       team.latest = `thinking · ${ev.text}`;
@@ -348,6 +487,7 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
 
     case 'tool':
       team.counts.tools++;
+      if (member) { member.tools++; member.lastActiveAt = now; }
       team.latest = ev.tool ? `${ev.tool} ${ev.text}`.trim() : ev.text;
       fx.onTool?.(team);
       break;
@@ -365,6 +505,7 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
     }
 
     case 'file': {
+      if (member) { member.files++; member.lastActiveAt = now; }
       if (!ev.path) {
         // A file event with no recoverable path cannot become a block. Counting
         // it as a file anyway would inflate the stat panel above what the floor
@@ -374,10 +515,17 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
         team.latest = ev.text || 'file write';
         break;
       }
-      const key = blockKeyFor(ev.path, team.budget.rolledUp);
+      markDelivered(world, team, ev.path);
+      const key = blockKey ?? blockKeyFor(ev.path, team.budget.rolledUp);
       const id = `${team.id}|${key}`;
-      const { modify, depth } = resolveOp(ev, team, key);
-      team.seen.add(key);
+      // A watch event is a filesystem notification, not an edit: it can place a
+      // block but never raises one, and a block it alone placed is a guess.
+      const watch = ev.opSource === 'watch';
+      const { modify, depth } = watch
+        ? { modify: false, depth: (team.telemetry.editDepth === 'unavailable' ? 'unavailable' : 'inferred') as EditDepthMode }
+        : resolveOp(ev, team, key);
+      // Nor does a watch sighting count towards first-sighting inference.
+      if (!watch) team.seen.add(key);
 
       let st = world.structures.get(id);
       if (!st) {
@@ -418,6 +566,99 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
       break;
     }
   }
+}
+
+/** Add a member to the squad. False when the id is missing or already known. */
+function applySpawn(team: TeamState, ev: FrameEvent): boolean {
+  const id = ev.agentId;
+  if (!id || team.squad.has(id)) return false;
+  const held = new Set<number>();
+  let open = 1;
+  for (const m of team.squad.values()) {
+    if (m.endedAt !== undefined) continue;
+    open++;
+    if (m.slot !== null) held.add(m.slot);
+  }
+  let slot: number | null = null;
+  for (let i = 0; i < SQUAD_SLOTS; i++) if (!held.has(i)) { slot = i; break; }
+  team.squad.set(id, {
+    id,
+    label: ev.label ?? id,
+    kind: ev.agentKind,
+    model: ev.model,
+    spawnedAt: ev.t,
+    status: 'running',
+    files: 0,
+    tools: 0,
+    lastActiveAt: ev.t,
+    slot,
+  });
+  team.squadTotals.spawned++;
+  team.squadTotals.peak = Math.max(team.squadTotals.peak, open);
+  return true;
+}
+
+/**
+ * End a member, freeing its slot. The FIRST terminal record wins: false when the
+ * member is unknown or has already ended.
+ */
+function applyAgentDone(team: TeamState, ev: FrameEvent): boolean {
+  const m = ev.agentId ? team.squad.get(ev.agentId) : undefined;
+  if (!m || m.endedAt !== undefined) return false;
+  m.endedAt = ev.t;
+  m.status = ev.agentStatus ?? 'unknown';
+  if (ev.model) m.model = ev.model;
+  if (m.status === 'failed') team.squadTotals.failed++;
+  return true;
+}
+
+/**
+ * Check off a deliverable a file event landed for, by the same rule collection
+ * and the judge use (`namedRank` / `truncateFiles`), so the strip never claims
+ * what the judge will not see or misses what it will:
+ *  - a path-qualified name (`research/kegs.md`) matches that exact path;
+ *  - a bare name (`decision.md`) matches the top-level file, else the same
+ *    basename nested anywhere collection walks (not inside a vendored or
+ *    dot-directory, which it skips for a bare name).
+ * Case-insensitive, as collection is.
+ */
+export function deliverableMatches(path: string, name: string): boolean {
+  const p = path.replace(/^\.?\//, '').toLowerCase();
+  const n = name.replace(/^\.?\//, '').toLowerCase();
+  if (n.includes('/')) return p === n;
+  if (p === n) return true;
+  const parts = p.split('/');
+  if (parts.pop() !== n) return false;
+  return !parts.some((d) => d.startsWith('.')) && !isVendoredPath(p);
+}
+
+function markDelivered(world: World, team: TeamState, path: string): void {
+  if (world.deliverables.length === 0) return;
+  for (const name of world.deliverables) {
+    if (deliverableMatches(path, name)) team.delivered.add(name);
+  }
+}
+
+/**
+ * Each team's share of the file events in `(world.t - windowMs, world.t]`.
+ *
+ * FILE EVENTS ONLY, stream and watch alike. Counting all telemetry would hand
+ * the bar to whichever CLI narrates most: a Claude sub-agent emits about six
+ * events per file it writes, a Gemini one none. Shares sum to 1, or are all 0
+ * when no team wrote a file in the window.
+ */
+export function momentumShares(world: World, windowMs = 10_000): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const id of world.teams.keys()) counts.set(id, 0);
+  let total = 0;
+  for (const r of world.recent) {
+    if (r.kind !== 'file' || r.t <= world.t - windowMs || r.t > world.t) continue;
+    if (!counts.has(r.teamId)) continue;
+    counts.set(r.teamId, counts.get(r.teamId)! + 1);
+    total++;
+  }
+  if (total > 0) for (const [id, n] of counts) counts.set(id, n / total);
+  return counts;
 }
 
 // ─── live mode ───────────────────────────────────────────────────────────────
@@ -461,6 +702,11 @@ export function telemetryFromStats(model: string, stats: TeamState['fileStats'])
   }
   if (stats.withContract > 0) return { provider, capability, editDepth: 'measured', legacy };
   if (stats.total === 0) return { provider, capability, editDepth: 'measured', legacy: false };
+  // Every file came from the watcher: its own reason, NOT the "predates
+  // telemetry" note, which would be false for a modern run.
+  if (stats.watched === stats.total) {
+    return { provider, capability, editDepth: 'inferred', legacy, note: watchOnlyNote(provider) };
+  }
   if (stats.withPath > 0) {
     return {
       provider, capability, editDepth: 'inferred', legacy,
@@ -479,6 +725,7 @@ export function refreshNotes(world: World): void {
   for (const team of world.teams.values()) {
     if (team.telemetry.note) world.notes.push(team.telemetry.note);
     if (team.budget.note) world.notes.push(team.budget.note);
+    world.notes.push(...squadNotes(team.model, team.squadSignals));
   }
 }
 
@@ -503,7 +750,7 @@ export function refreshNotes(world: World): void {
 export function ensureGridCapacity(world: World, needed: number): boolean {
   if (needed <= world.grid.capacity) return false;
 
-  const grid = planGrid(needed, world.teams.size);
+  const grid = planGrid(needed, world.teams.size, world.baseX);
   world.grid = grid;
 
   const bands = bandsFor(world.teams.size, grid, world.baseX);

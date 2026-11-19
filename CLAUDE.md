@@ -84,12 +84,66 @@ with `helperClaudeArgs()` and its env with `helperClaudeEnv()` / `helperEnv(prov
 `packages/orchestrator/src/utils/claude-helper.ts`: no tools, no MCP, an allowlisted
 environment. Never pass `--dangerously-skip-permissions` to a helper. Competitor agents
 (`src/adapters/`) keep broad permissions by design.
+Codex and Gemini judges use `helperCodexArgs()` / `helperGeminiArgs()` from the same file: codex
+runs `--ignore-user-config`, read-only, web search off, every tool-bearing feature disabled
+(`CODEX_HELPER_DISABLED_FEATURES`) and on a copy of its model catalog with the per-model tool
+fields neutralised (`CODEX_TOOL_LESS_MODEL_FIELDS`, `-c model_catalog_json`); it runs with
+`--json`, and any tool item in the stream fails that judge closed (`bad-output`). Check with
+`npx tsx packages/orchestrator/src/dev/codex-judge-tool-probe.ts`, which renders the offered tools
+(`codex debug prompt-input`; only `request_user_input` should remain). Gemini runs under an admin-tier deny-all policy
+(`GEMINI_DENY_ALL_POLICY`) with no extensions or MCP servers. Every judge runs in an empty
+scratch directory, never the orchestrator's checkout.
+
+### Agent-written paths
+A workdir is written by model code, which can plant a FIFO, a device or a symlink, or swap one in
+after a directory listing. Anything that reads a workdir (the collector, the watcher) must lstat,
+skip non-regular files, and read through `readRegularFile()` / `readRegularFileSync()` in
+`adapters/safe-read.ts` (O_NOFOLLOW | O_NONBLOCK, fstat on the fd, size cap, fd closed in finally).
+
+### Competitor environment
+`competitorEnv()` (`adapters/isolation.ts`) is what a host-run competitor (`ARENA_SKIP_SANDBOX=true`)
+gets. It drops the arena's own secrets (`DATABASE_URL`, `ARENA_*`, `PG*`; the shared list in
+`utils/claude-env.ts`, which the sandbox path uses too), plugin/MCP-injecting variables and
+handles to the operator's machine. Provider auth and the squad caps survive.
 
 ### Agent processes
 Agents are spawned `detached` (own process group). The runner shuts every adapter down at the
 deadline BEFORE collecting files, cancellation is terminal (`CompetitionCancelledError`), and
 `cli.ts` installs SIGINT/SIGTERM handlers that call `shutdownAllAdapters()`. Any new entry
 point that runs competitions must do the same, or Ctrl-C will leave agents running.
+
+### Agent squads (sub-agents)
+Competitor CLIs may spawn their own sub-agents; Arena records and draws them as robots.
+- **Event contract** (`@arena/shared` `types/event.ts`): `SUB_AGENT_SPAWN` (`agentId`, `label`,
+  `description`, `kind?`, `model?`, `background?`, `depth`) and `SUB_AGENT_DONE` (`agentId`,
+  `status: completed|failed|killed|unknown`, `reason?`, `summary?`, `usage?`). `metadata.agentId`
+  attributes any event to its sub-agent (absent = the lead). `metadata.squad: true` marks a file
+  written while a squad was open when the member is unknown. `capabilityFor(model)` carries
+  `subagentAttribution` and `subagentLifecycle` per provider.
+- **Lifecycle closure rule:** every spawn gets a DONE. At shutdown `closeOpenSubAgents()` emits
+  `killed` / `unknown` DONEs for anything still open, so no robot is left standing.
+- **Workdir watcher** (`adapters/workdir-watcher.ts`): polls the workdir for files the stream
+  never reports (sub-agents write straight to disk) and emits file events with
+  `opSource: 'watch'`. It is evidence of a file, not of who wrote it, so it never makes a
+  team's heights `measured`: a team whose every file came from the watcher is drawn `inferred`
+  with its own legend note ("files observed on disk; the CLI did not report its edits"). It
+  polls every 2 s, skips binaries, caps one scan at 5,000 files, and flushes once more at
+  shutdown so files from the final seconds still appear.
+- **Limits:** 6 concurrent sub-agents and depth 1 per team (`ARENA_SQUAD_MAX_CONCURRENT`,
+  `ARENA_SQUAD_MAX_DEPTH`, `adapters/squad-limits.ts`), told to the agent by a `[SQUAD]` prompt block.
+- **Isolation:** competitors see only their CLI's built-ins (`adapters/isolation.ts`): Claude
+  `--strict-mcp-config --setting-sources project`, Codex `--ignore-user-config`, Gemini
+  `--extensions none --allowed-mcp-server-names arena-none`, plus a scrub of plugin/MCP-injecting
+  env vars. Login and workdir permissions are untouched. `dev/isolation-smoke.ts` re-checks it.
+- **Codex** now runs `codex exec --json` with network access, `web_search=live`, multi-agent V1
+  pinned (`features.multi_agent_v2=false`, whose collab tools expose receiver ids) and
+  `agents.max_concurrent_threads_per_session` set to the squad cap.
+- **Leaderboard** credits the lead agent's model, not its sub-agents'.
+- **Demo:** `npx tsx packages/orchestrator/src/dev/seed-squad-demo.ts [--brief file.yml]` seeds a
+  COMPLETE three-team match titled "[DEMO] Squads — synthetic replay" from the committed fixtures
+  (real normalizers, re-timed, replayed several times) and prints its id. Synthetic: not a result. Its brief is tagged `synthetic-demo` (`isSyntheticCompetition()`
+  in `@arena/shared`); leaderboard, analytics, compare, criteria and `seed-quality-signals` skip it.
+  `seed-squad-demo.ts --remove` deletes every synthetic competition and nothing else.
 
 ## Tests
 
@@ -129,12 +183,14 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 - `gemini:*` → GeminiAdapter
 
 ### CLI flags (critical — wrong flags = broken agent)
-- **Claude**: `claude --print <prompt> --output-format stream-json --verbose --dangerously-skip-permissions`
-- **Codex**: `codex exec --skip-git-repo-check -s workspace-write <prompt>` (`-s workspace-write` required)
-- **Gemini**: `gemini -p <prompt> --yolo` (`--yolo` required — auto-approves tool calls)
+The source of truth is the code: `claudeArgs` in `claude-adapter.ts`, `codexArgs()` in
+`codex-adapter.ts`, the gemini args in `gemini-adapter.ts`, and `adapters/isolation.ts`. Shape:
+- **Claude**: `claude --print - --output-format stream-json --verbose --dangerously-skip-permissions --strict-mcp-config --setting-sources project [--model <m>]` (prompt on stdin)
+- **Codex**: `codex exec --json --skip-git-repo-check -s workspace-write --ignore-user-config -c features.multi_agent_v2=false -c sandbox_workspace_write.network_access=true -c web_search=live -c agents.max_concurrent_threads_per_session=<cap> [-m <m>] <prompt>` (`-s workspace-write` required)
+- **Gemini**: `gemini -p <prompt> --yolo -o stream-json --extensions none --allowed-mcp-server-names arena-none [--model <m>]` (`--yolo` required — auto-approves tool calls)
 
 ### HTTP API (Express, port 3000)
-- `POST /competitions` — start competition → `{ competitionId }`
+- `POST /competitions` — start competition → `{ competitionId }`; body `{ brief, teams, adversarialJudge?, judgePanel?, options?: { commentary } }`
 - `GET /competitions/:id` — status snapshot
 - `GET /competitions/:id/events` — event list (DB-backed)
 - `WS ws://localhost:3000/competitions/:id/stream` — live event stream
@@ -196,7 +252,11 @@ AgentBuilder UI offers a preset dropdown + freeform custom id.
 (`claude-sonnet-5`) pin the judge so scores stay comparable across time, and so
 `--adversarial-judge` is a genuinely different model rather than the same model with a
 different prompt. Override per-run with `ARENA_JUDGE_MODEL` / `ARENA_ADVERSARIAL_JUDGE_MODEL`
-(useful when reproducing an old score).
+(useful when reproducing an old score). Those two apply to Claude judges only: the Codex and
+Gemini judges of the cross-vendor panel run on `cli-default` unless `ARENA_JUDGE_MODEL_CODEX` /
+`ARENA_JUDGE_MODEL_GEMINI` names a model, and `AiJudgeResult.model` records the model the CLI
+ran on: gemini's `-o json` stats, or for codex the catalog default the judge pins with `-m`
+(codex's `--json` stream does not name its model).
 
 **Stage pinning** — every other `claude` call (synthesis, presentations, commentary, forge,
 brief intake/generation) passes `--model resolveStageModel()` (`DEFAULT_STAGE_MODEL`,
@@ -213,14 +273,29 @@ for that match. If every agent crashed, the competition ends `FAILED`. Never inf
 zero score; branch on `agentFailure`.
 
 ### Judging pipeline
-1. **AI cross-judge** (`ai-judge.ts`) — PRIMARY scorer. Claude reads actual deliverables and scores against rubric criteria.
+1. **AI cross-judge** (`ai-judge.ts`) — PRIMARY scorer. Claude (or, with the panel, Claude + Codex + Gemini) reads actual deliverables and scores against rubric criteria.
 2. **Automated scorer** (`rubric-scorer.ts`) — FALLBACK only, per-team when the AI judge fails. Executes deliverables (`.py`/`.js`/`.rb`/`.sh` via stdin, `.ts` via tsx temp file); 100KB input / 512KB stdout / 10s timeout limits. Otherwise it scores completeness only (named `brief.deliverables` present and not placeholders), capped at `HEURISTIC_CEILING` (50%), and sets `heuristic: true`; the UI labels those scores. Never treat length as quality there.
 3. **Aggregation** (`score-aggregator.ts`) — weighted average; tie-breaking within 0.005 tolerance. Only AI judge scores are aggregated when the AI judge succeeds.
+   Limits for big briefs: time limit ceiling 3 h (`brief/parser.ts`); the judge reads up to 24K chars
+   per file and 240K in total (`JUDGE_CONTEXT`), named deliverables first; helper timeouts scale with
+   input size (`stageTimeoutMs`, 2-10 min); a judge failure of kind timeout / rate-limit / cli-error /
+   bad-output is retried once.
 4. **Synthesis** (`merge-engine.ts`) — returns `SynthesisResult { synthesis: string, perCriterion[] }` with per-criterion winner attribution. On-demand only.
 
 **Adversarial mode** — `adversarialJudge: true` in the `POST /competitions` body or
 `--adversarial-judge` runs standard + adversarial judges. Toggle lives in New Battle →
 Advanced; completed competitions have a "Re-judge (adversarial)" button on the Scores tab.
+
+**Cross-vendor judge panel** — `judgePanel: true` in the `POST /competitions` body,
+`run --judge-panel`, or New Battle → Advanced "Cross-vendor judge panel". Claude, Codex and
+Gemini each judge every team in parallel (same prompt and rubric, one retry each); the panel
+replaces the adversarial pair. Each result is stored in `judgeResults` as
+`ai-<provider>/<model it ran on>`, `finalScore` is the mean of the judges that succeeded (the same
+`aggregate()` averaging and tie tolerance), and `ScoreCard.judgePanel` lists every seat with its
+`failure` kind if it dropped out. A failed judge emits an `ERROR` event
+`{ stage: 'judging', provider, failure }`; if all three fail, the heuristic fallback applies. The
+preflight checks all three CLIs before launch. The Scores tab shows a per-judge row per team
+(`judgeBreakdown()` in `@arena/shared`). Re-judge does not use the panel.
 
 ### Provider CLI preflight & judge failure reporting
 Arena drives the agent CLIs the operator already has installed, so "binary not on PATH"
@@ -314,15 +389,19 @@ const parsed = JSON.parse(extractJson(stdout));
 ```
 
 **Brief context** — `packages/orchestrator/src/utils/brief-context.ts` builds the brief section of every LLM prompt. Exports `buildBriefContext(brief, options)`, `truncateFiles(files, perFile, budget)`, and 4 presets — use them, don't hand-build brief sections:
-- `JUDGE_CONTEXT`: title/problem/constraints/deliverables/rubric (full detail), 12K/file, 80K budget
-- `PRESENTER_CONTEXT`: same fields, weights-only rubric, 8K/file, 50K budget
+- `JUDGE_CONTEXT`: title/problem/constraints/deliverables/rubric (full detail), 24K/file, 240K budget
+- `PRESENTER_CONTEXT`: same fields, weights-only rubric, 12K/file, 120K budget
 - `SYNTHESIS_CONTEXT`: title/problem/constraints/rubric (full), 8K/file, 50K budget
 - `FORGE_CONTEXT`: title/problem/constraints/rubric (full), 6K/file, 40K budget
 
 ### Event normalizers
 - **Claude** (`claude-normalizer.ts`) — parses `stream-json`: unwraps `{ type: "assistant", message: { content: [...] } }`, classifies content blocks (tool_use → TOOL_CALL, Write/Edit → FILE_CREATE, thinking → REASONING, text → REASONING/FILE_CREATE).
-- **Codex** (`codex-normalizer.ts`) — stateful parser for Codex's text protocol. Suppresses banner/prompt echo, classifies `exec` → TOOL_CALL, `file update` → FILE_CREATE, `codex` → REASONING.
-- **Gemini** (`gemini-normalizer.ts`) — plain text pattern matching; mostly REASONING (see Known Issues).
+  `ClaudeNormalizer` is stateful: `task_started` / `task_updated` / `task_notification` become
+  `SUB_AGENT_SPAWN` / `SUB_AGENT_DONE`, and lines with `parent_tool_use_id` get `metadata.agentId`.
+- **Codex** (`codex-json-normalizer.ts`) — `CodexJsonNormalizer` parses `codex exec --json` (`item.completed` lines only): `command_execution` → TOOL_CALL, `file_change` → FILE_CREATE/MODIFY (marker), `collab_tool_call` spawn/wait/close → squad events with the receiver thread id as `agentId`. The old text parser is gone.
+- **Gemini** (`gemini-normalizer.ts`) — `-o stream-json` lines; `invoke_agent` tool_use/tool_result → squad spawn/done. Plain-text fallback for older CLIs.
+
+Squad fixtures (scrubbed real transcripts) live in `adapters/__fixtures__/squads/`; never commit raw ones (`.squad-research/` is git-excluded). A test bans paths, account names and MCP names from them.
 
 ### DB schema (Drizzle + PostgreSQL)
 - `competitions`: id, brief (jsonb), teams (jsonb), state, startedAt, completedAt
@@ -400,6 +479,19 @@ ingest, honesty notes) and either lets it draw the isometric canvas or hands its
 a file and height is the edit count; the 3D path must call `stepStructures(world)` each frame
 because it never calls the isometric `draw()`.
 
+- **Replay**: a finished match opens on its end state and plays as a match. Pause holds the
+  current frame; Resume continues from the playhead and only a playhead at the end restarts from
+  0. `setFinalState()` sets `world.replayOf`, and only a verdict state (`VERDICT_STATES`:
+  SCORED / COMPLETE / FORGING / FORGE_COMPLETE) reveals at the end. The 3D jumbotron reads
+  `REPLAY · A vs B` for a replay (`LIVE · …` live, and in every reel, which never sets
+  `replayOf`) and `REPLAY · MATCH FAILED · …` / `REPLAY · CANCELLED · …` for a match that ended
+  without a verdict.
+- **Theater** (`⛶ Theater`, Esc exits): the arena alone over the viewport for recording, with
+  the team headers, the momentum bar and a 16:9 canvas. Only styles change, so the renderer and
+  the WebGL scene survive the switch; the site chrome is hidden via `body.arena-theater`
+  (`globals.css`) because the arena sits in `<main>`'s stacking context below the TopBar.
+  Honesty notes move into the in-frame legend while it is on.
+
 The bullets below describe the earlier 2D gladiator arena (`lib/arena/*-v2.ts`). Those files
 remain but the live page no longer draws with them; treat this list as history.
 - `packages/web/components/ArenaViewerV2.tsx` — main component (Canvas + inline HUD: LaneHeader, MomentumMeter, PhaseChip, WinnerBanner)
@@ -419,8 +511,13 @@ remain but the live page no longer draws with them; treat this list as history.
 
 ## Next session
 
-Where things stand after 2026-11-14 (see `CHANGELOG.md` for the detail):
-- `main` has the 3D arena (`v2.0.0`) and the harness hardening (#17). Nothing is in flight.
+Where things stand after 2026-11-18 (see `CHANGELOG.md` for the detail):
+- Agent squads are on `feat/agent-squads` (not merged): sub-agent events, robots in the 3D view,
+  squad chips and deliverable strips in the HUD, the Codex `--json` move and the WebSocket
+  subscribe-before-history fix. Browser verification and the PR are what is left.
+
+Earlier, after 2026-11-14:
+- As of 2026-11-14, `main` had the 3D arena (`v2.0.0`) and the harness hardening (#17).
 - **Done 2026-11-14:** real end-to-end runs (CLI and web) on the hardened build. They led to the
   live model catalog and agent-crash reporting on `feat/live-model-catalog` (see CHANGELOG).
 - **Next:** mark a team whose CLI stalled on provider errors (e.g. Gemini 503s until the deadline)
@@ -428,8 +525,7 @@ Where things stand after 2026-11-14 (see `CHANGELOG.md` for the detail):
   agents on retired ids.
 - **Then, in rough priority:** show a draw in the UI and the reel (a tie is stored with no
   `winnerId` and currently renders as a blank winner; the match page's loser calculation and the
-  Forge source picker still fall back to the first team); the WebSocket replay gap
-  (`server/websocket.ts` reads history before subscribing); awaiting tournament match-record
+  Forge source picker still fall back to the first team); awaiting tournament match-record
   creation (`routes/tournaments.ts`); a cancelled state for tournaments; the sandbox-mode CLI
   preflight that looks for agent binaries on the host.
 - **Open decisions for the owner:** whether the web UI gets a login before anyone exposes it;
@@ -439,13 +535,24 @@ Where things stand after 2026-11-14 (see `CHANGELOG.md` for the detail):
 - Docker is not installed on the development machine, so sandbox changes are stub-tested only.
 
 ## Known Issues
-1. Gemini events are mostly REASONING due to plain-text CLI output (no structured markers).
-   Fixable now: gemini-cli 0.38.x supports `-o stream-json`, which would give the Gemini
-   normalizer the structured markers it currently lacks (codex-cli 0.144.x likewise has
-   `codex exec --json`). Not yet wired up.
-2. WebSocket seq counter is approximate (local, not DB serial)
+1. Resolved for Codex (`exec --json`) and Gemini (`-o stream-json`): both are structured now.
+   Gemini's stream still names few file writes; sub-agent writes reach the arena through the
+   workdir watcher (`opSource: 'watch'`).
+2. WebSocket seq counter is approximate (local, not DB serial). The reconnect replay gap is
+   closed (subscribe, then read history, dedupe by event id), except for the persistence-lag
+   window: an event emitted before the subscribe but not yet committed when history is read is
+   still missing for that connection. A full fix needs an in-memory ring buffer on the runner.
 3. Gemini's API can return 503 "high demand" for long stretches; gemini-cli retries with backoff
    until Arena's deadline kills it, so the team is judged on an empty workdir. It is not marked
    `agentFailure` because the CLI never exited on its own.
 4. A drawn match (scores within the aggregator's tolerance) is stored with no `winnerId`; the
    tied teams are the scorecards with `rank === 1`. The UI and the reel do not label a draw yet.
+5. Gemini has no spawn cap: no cap is passed to gemini-cli, so the squad limit is only requested in
+   the `[SQUAD]` prompt (Codex gets a real one via `agents.max_concurrent_threads_per_session`).
+6. Codex and Gemini attribute and time squads coarsely. Neither names which member wrote a file
+   (`subagentAttribution: false`; files carry `metadata.squad` and show as unassigned pulses), and
+   Gemini's `invoke_agent` only marks the call and its result, so lifespans are approximate.
+   Codex's `--ignore-user-config` also ignores the operator's `config.toml` (default model, a custom
+   provider or base URL) for competitors, while the model-catalog probe does not use the flag.
+7. The heuristic fallback scorer (`rubric-scorer.ts`) belongs to the honest-fallback-scorer work
+   (PR #20); the squad work does not change it.

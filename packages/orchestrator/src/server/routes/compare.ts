@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { isSyntheticCompetition } from '@arena/shared';
 import { repo } from '../repo.js';
 
 export const compareRouter = Router();
@@ -14,7 +15,7 @@ compareRouter.get('/', async (req: Request, res: Response) => {
   }
 
   // List all competitions (last 200) and filter to those completed with both models
-  const allComps = await repo.list(200);
+  const allComps = (await repo.list(200)).filter((c) => !isSyntheticCompetition(c));
   const completedComps = allComps.filter((c) => c.state === 'COMPLETE');
 
   // Resolve team model key — "model:persona" or just "model"

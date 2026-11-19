@@ -112,3 +112,6 @@ export const ERROR_LINE_RE = /^(?:error|fatal|exception)[:\s]/i;
 export function normalizeOutput(s: string): string {
   return s.trim().replace(/\r\n/g, '\n');
 }
+
+/** Short chip label for a sub-agent (lives in @arena/shared so the arena labels stored matches the same way). */
+export { squadLabel } from '@arena/shared';

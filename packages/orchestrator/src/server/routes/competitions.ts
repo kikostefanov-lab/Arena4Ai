@@ -28,6 +28,8 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     brief?: unknown;
     teams?: unknown;
     adversarialJudge?: boolean;
+    /** Cross-vendor judge panel: Claude, Codex and Gemini each judge every team. */
+    judgePanel?: boolean;
     // Only `commentary` is honoured from the request. Anything that decides which
     // binary runs, where it writes, or whether the sandbox is on is resolved
     // server-side in resolveRunOptions() — see run-options.ts.
@@ -96,6 +98,7 @@ competitionsRouter.post('/', requireApiKey, async (req: Request, res: Response) 
     ...resolveRunOptions(),
     commentary: body.options?.commentary ?? false,
     adversarialJudge: body.adversarialJudge === true,
+    judgePanel: body.judgePanel === true,
     agentRepo,
   };
 

@@ -1,12 +1,12 @@
 import { Router, type Request, type Response } from 'express';
-import { isFinishedState } from '@arena/shared';
+import { isFinishedState, isSyntheticCompetition } from '@arena/shared';
 import { repo } from '../repo.js';
 import { computeWinRate, computeCompletionRate, computeAvgDurationMs } from '../../analytics/stats-aggregator.js';
 
 export const analyticsRouter = Router();
 
 analyticsRouter.get('/summary', async (_req: Request, res: Response) => {
-  const competitions = await repo.list(200);
+  const competitions = (await repo.list(200)).filter((c) => !isSyntheticCompetition(c));
   const completedComps = competitions.filter((c) => isFinishedState(c.state));
 
   const validResults = await repo.listResults(completedComps.map((c) => c.id));

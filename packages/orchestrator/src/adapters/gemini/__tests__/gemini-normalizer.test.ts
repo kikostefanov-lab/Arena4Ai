@@ -1,8 +1,55 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeLine } from '../gemini-normalizer.js';
 import { EventType } from '@arena/shared';
+import { loadFixture } from '../../__fixtures__/load.js';
 
 const BASE = { competitionId: 'comp-2', teamId: 'team-c' };
+
+// ── Squad events: invoke_agent is a sub-agent, not a tool call ───────────────
+describe('gemini invoke_agent squad events', () => {
+  const lines = loadFixture('gemini-invoke-agent');
+  const events = lines.map((line) => normalizeLine(line, BASE));
+  const spawns = events.filter((e) => e.type === EventType.SUB_AGENT_SPAWN);
+  const dones = events.filter((e) => e.type === EventType.SUB_AGENT_DONE);
+
+  it('turns each invoke_agent tool_use into a SUB_AGENT_SPAWN', () => {
+    expect(spawns).toHaveLength(2);
+    const [first, second] = spawns.map((e) => e.payload as Record<string, unknown>);
+    expect(first).toEqual({
+      agentId: 'invoke_agent__call_12019812510393406164',
+      label: 'Write a file…',
+      description: 'Write a file named a.txt containing exactly the text \'a\'.',
+      kind: 'generalist',
+      depth: 1,
+    });
+    expect(second.agentId).toBe('invoke_agent__call_12019812510393406087');
+    expect(second.kind).toBe('generalist');
+  });
+
+  it('turns each invoke_agent tool_result into a SUB_AGENT_DONE completed', () => {
+    expect(dones).toHaveLength(2);
+    expect(dones.map((e) => e.payload)).toEqual([
+      { agentId: 'invoke_agent__call_12019812510393406164', status: 'completed' },
+      { agentId: 'invoke_agent__call_12019812510393406087', status: 'completed' },
+    ]);
+  });
+
+  it('keeps update_topic as a TOOL_CALL', () => {
+    const topic = events.find(
+      (e) => e.type === EventType.TOOL_CALL && (e.payload as { tool?: string }).tool === 'update_topic',
+    );
+    expect(topic).toBeDefined();
+  });
+
+  it('maps a failed invoke_agent result to SUB_AGENT_DONE failed', () => {
+    const raw = JSON.stringify({
+      type: 'tool_result', tool_id: 'invoke_agent__call_9', status: 'error', error: { message: 'boom' },
+    });
+    const ev = normalizeLine(raw, BASE);
+    expect(ev.type).toBe(EventType.SUB_AGENT_DONE);
+    expect(ev.payload).toEqual({ agentId: 'invoke_agent__call_9', status: 'failed' });
+  });
+});
 
 describe('gemini normalizeLine()', () => {
   it('maps a plain-text file creation line to FILE_CREATE', () => {
@@ -164,5 +211,13 @@ describe('gemini stream-json file events', () => {
     const ev = normalizeLine('Modified legacy.py with the fix', BASE);
     expect(ev.type).toBe(EventType.FILE_MODIFY);
     expect((ev.payload as Record<string, unknown>).opSource).toBe('verb');
+  });
+});
+
+describe('gemini malformed stream lines', () => {
+  it('a non-string tool_id or file path does not throw', () => {
+    expect(() => normalizeLine('{"type":"tool_result","tool_id":42,"status":"success","output":"ok"}', BASE)).not.toThrow();
+    const ev = normalizeLine('{"type":"tool_use","tool_name":"write_file","tool_id":7,"parameters":{"file_path":9}}', BASE);
+    expect(ev.type).toBe(EventType.FILE_CREATE);
   });
 });

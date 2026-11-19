@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CompetitionFormat } from '@arena/shared';
 import type { Brief } from '@arena/shared';
-import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, judgeIdFor, normalizeJudgeScores, quantizeScore, SCORE_RESOLUTION } from './ai-judge.js';
+import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, readJudgeOutput, readCodexJudgeStream, judgeIdFor, normalizeJudgeScores, quantizeScore, SCORE_RESOLUTION } from './ai-judge.js';
+import {
+  helperClaudeArgs, helperEnv, toolLessCodexCatalog,
+  CODEX_HELPER_DISABLED_FEATURES, CODEX_TOOL_LESS_MODEL_FIELDS, GEMINI_DENY_ALL_POLICY,
+} from '../utils/claude-helper.js';
+import { CLI_DEFAULT_MODEL } from '@arena/shared';
 import { resolveJudgeModel as resolveJudgeModelFn, requireDefaultModel as requireDefaultModelFn } from '../adapters/model-registry.js';
 import { DEFAULT_JUDGE_MODEL, DEFAULT_ADVERSARIAL_JUDGE_MODEL } from '../adapters/model-registry.js';
 
@@ -210,6 +215,10 @@ describe('classifyJudgeFailure', () => {
     ['rate limit', new Error('AI judge exited with code 1'), 'Error: 429 rate limit exceeded', 'rate-limit'],
     ['retired model', new Error('AI judge exited with code 1'), 'model claude-sonnet-3-5 not found', 'model-unavailable'],
     ['timeout', new Error('AI judge timed out'), '', 'timeout'],
+    ['provider overloaded (503)', new Error('AI judge timed out after 240s'),
+      'Attempt 1 failed with status 503. {"code":503,"message":"This model is currently experiencing high demand."}', 'rate-limit'],
+    ['a hang whose log merely mentions an unknown model', new Error('AI judge timed out after 120s'),
+      'warning: unknown setting for model routing', 'timeout'],
     ['generic non-zero exit', new Error('AI judge exited with code 2'), 'boom', 'cli-error'],
     ['unparseable output', new SyntaxError('Unexpected token I in JSON'), '', 'bad-output'],
   ];
@@ -232,24 +241,34 @@ describe('classifyJudgeFailure', () => {
     expect(failure.kind).toBe('model-unavailable');
     expect(failure.message).toContain('o4-mini');
   });
+
+  it('points a rejected codex or gemini judge model at that provider\'s own override', () => {
+    const failure = classifyJudgeFailure(
+      new Error('AI judge exited with code 1'), 'unknown model: x', 'gemini', 'x', 'gemini',
+    );
+    expect(failure.message).toContain('ARENA_JUDGE_MODEL_GEMINI');
+  });
 });
 
 // ── AA-046: provider-agnostic judging ────────────────────────────────────────
+const SCRATCH = { workdir: '/scratch/work', policyPath: '/scratch/deny-all.toml', catalogPath: '/scratch/codex-catalog.json' };
+
 describe('buildJudgeInvocation — the three CLIs differ in ways that have bitten us', () => {
   it('claude takes the prompt on stdin and answers on stdout', () => {
-    const inv = buildJudgeInvocation('claude', 'claude-opus-5', 'PROMPT');
+    const inv = buildJudgeInvocation('claude', 'claude-opus-5', 'PROMPT', SCRATCH);
     expect(inv.promptVia).toBe('stdin');
     expect(inv.answerStream).toBe('stdout');
     expect(inv.args).toContain('--model');
     expect(inv.args).toContain('claude-opus-5');
     expect(inv.args).not.toContain('PROMPT'); // prompt must NOT be an argv entry
+    expect(inv.args).toEqual(helperClaudeArgs({ model: 'claude-opus-5' }));
   });
 
   it('codex takes the prompt on argv, is read-only, and answers on stdout', () => {
-    const inv = buildJudgeInvocation('codex', 'gpt-5.6-sol', 'PROMPT');
+    const inv = buildJudgeInvocation('codex', 'gpt-5.6-sol', 'PROMPT', SCRATCH);
     expect(inv.promptVia).toBe('argv');
     expect(inv.answerStream).toBe('stdout');
-    expect(inv.args).toContain('PROMPT');
+    expect(inv.args.at(-1)).toBe('PROMPT');
     expect(inv.args).toContain('-m');           // codex's model flag, from the registry
     expect(inv.args).toContain('gpt-5.6-sol');
     // A judge that can write can edit the thing it is grading.
@@ -257,19 +276,222 @@ describe('buildJudgeInvocation — the three CLIs differ in ways that have bitte
     expect(inv.args).not.toContain('workspace-write');
   });
 
-  it('gemini uses its read-only plan mode rather than --yolo', () => {
-    const inv = buildJudgeInvocation('gemini', 'gemini-3-flash', 'PROMPT');
+  it('codex runs tool-less: no user config (MCP, plugins), no shell, no web, in the scratch dir', () => {
+    const inv = buildJudgeInvocation('codex', CLI_DEFAULT_MODEL, 'PROMPT', SCRATCH);
+    const args = inv.args;
+    expect(inv.answerFormat).toBe('codex-jsonl');
+    expect(args).toContain('--json'); // the stream is checked for tool items
+    expect(args.join(' ')).toContain('-c model_catalog_json="/scratch/codex-catalog.json"');
+    for (const f of ['unified_exec', 'code_mode_host', 'multi_agent_v2', 'image_generation', 'memories', 'sleep_tool']) {
+      expect(CODEX_HELPER_DISABLED_FEATURES).toContain(f);
+    }
+    expect(args).toContain('--ignore-user-config');
+    expect(args).toContain('--ephemeral');
+    expect(args.join(' ')).toContain('-c web_search="disabled"');
+    expect(args.join(' ')).toContain('-C /scratch/work');
+    for (const f of CODEX_HELPER_DISABLED_FEATURES) expect(args.join(' ')).toContain(`--disable ${f}`);
+    expect(CODEX_HELPER_DISABLED_FEATURES).toContain('shell_tool');
+    expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+    expect(args).not.toContain('-m'); // cli-default: no model flag
+  });
+
+  it('gemini runs tool-less under a deny-all admin policy, never --yolo or plan mode', () => {
+    const inv = buildJudgeInvocation('gemini', 'gemini-3-flash', 'PROMPT', SCRATCH);
     expect(inv.promptVia).toBe('argv');
-    expect(inv.args).toContain('--approval-mode');
-    expect(inv.args).toContain('plan');
+    expect(inv.answerFormat).toBe('gemini-json');
+    expect(inv.args.join(' ')).toContain('--admin-policy /scratch/deny-all.toml');
+    expect(inv.args.join(' ')).toContain('-o json');
+    expect(inv.args).toContain('--allowed-mcp-server-names');
+    expect(inv.args).toContain('--extensions');
     expect(inv.args).not.toContain('--yolo');
+    expect(inv.args).not.toContain('plan');
     expect(inv.args).toContain('--model');
+    expect(GEMINI_DENY_ALL_POLICY).toMatch(/toolName = "\*"\s*\ndecision = "deny"/);
   });
 
   it('uses each provider\'s own model flag from the registry', () => {
-    expect(buildJudgeInvocation('codex', 'M', 'P').args).toContain('-m');
-    expect(buildJudgeInvocation('claude', 'M', 'P').args).toContain('--model');
-    expect(buildJudgeInvocation('gemini', 'M', 'P').args).toContain('--model');
+    expect(buildJudgeInvocation('codex', 'M', 'P', SCRATCH).args).toContain('-m');
+    expect(buildJudgeInvocation('claude', 'M', 'P', SCRATCH).args).toContain('--model');
+    expect(buildJudgeInvocation('gemini', 'M', 'P', SCRATCH).args).toContain('--model');
+  });
+});
+
+describe('toolLessCodexCatalog — per-model tools are neutralised', () => {
+  it('rewrites every model\'s tool-granting fields and keeps the rest', () => {
+    const raw = JSON.stringify({ models: [
+      { slug: 'a', tool_mode: 'code_mode_only', multi_agent_version: 'v2', apply_patch_tool_type: 'freeform', shell_type: 'unified_exec', node_repl_disabled: false, supports_search_tool: true, experimental_supported_tools: ['x'], priority: 1 },
+      { slug: 'b', priority: 2 },
+    ] });
+    const out = JSON.parse(toolLessCodexCatalog(raw)) as { models: Array<Record<string, unknown>> };
+    for (const m of out.models) expect(m).toMatchObject(CODEX_TOOL_LESS_MODEL_FIELDS);
+    expect(out.models.map((m) => [m['slug'], m['priority']])).toEqual([['a', 1], ['b', 2]]);
+  });
+  it('throws on anything that is not a catalog, so the judge does not run with tools', () => {
+    expect(() => toolLessCodexCatalog('not json')).toThrow();
+    expect(() => toolLessCodexCatalog('{"models":[]}')).toThrow(/no model catalog/);
+  });
+});
+
+describe('readCodexJudgeStream — a codex judge that uses a tool fails closed', () => {
+  const ev = (o: unknown) => JSON.stringify(o);
+  it('takes the last agent message as the answer when no tool was used', () => {
+    const stream = [
+      ev({ type: 'thread.started', thread_id: 't' }),
+      ev({ type: 'item.completed', item: { id: '0', type: 'reasoning', text: 'thinking' } }),
+      ev({ type: 'item.completed', item: { id: '1', type: 'agent_message', text: '{"scores":[]}' } }),
+      ev({ type: 'turn.completed', usage: {} }),
+    ].join('\n');
+    expect(readCodexJudgeStream(stream)).toEqual({ answer: '{"scores":[]}', toolItems: [] });
+  });
+  it('reports every tool item, including ones it has never seen', () => {
+    const stream = [
+      ev({ type: 'item.started', item: { id: '1', type: 'command_execution', command: 'ls ~/.ssh' } }),
+      ev({ type: 'item.completed', item: { id: '2', type: 'file_change' } }),
+      ev({ type: 'item.completed', item: { id: '3', type: 'mcp_tool_call' } }),
+      ev({ type: 'item.completed', item: { id: '4', type: 'web_search' } }),
+      ev({ type: 'item.completed', item: { id: '5', type: 'some_future_tool' } }),
+      ev({ type: 'item.completed', item: { id: '6', type: 'agent_message', text: '{}' } }),
+    ].join('\n');
+    expect(readCodexJudgeStream(stream).toolItems).toEqual([
+      'command_execution', 'file_change', 'mcp_tool_call', 'web_search', 'some_future_tool',
+    ]);
+  });
+});
+
+describe('readJudgeOutput — record the model the CLI actually ran on', () => {
+  const text = { answerStream: 'stdout', answerFormat: 'text' } as const;
+  it('unwraps gemini\'s -o json and names the model that did the work', () => {
+    const wrapper = JSON.stringify({
+      response: '```json\n{"scores":[]}\n```',
+      stats: { models: {
+        'gemini-router-lite': { tokens: { total: 40 } },
+        'gemini-3-pro': { tokens: { total: 9000 } },
+      } },
+    });
+    const out = readJudgeOutput({ answerStream: 'stdout', answerFormat: 'gemini-json' }, 'gemini', wrapper, '');
+    expect(out.answer).toContain('"scores"');
+    expect(out.model).toBe('gemini-3-pro');
+  });
+  it('falls back to the raw text and no model when the CLI does not say', () => {
+    expect(readJudgeOutput(text, 'claude', 'X', 'model: nope')).toEqual({ answer: 'X' });
+    expect(readJudgeOutput({ answerStream: 'stdout', answerFormat: 'gemini-json' }, 'gemini', 'not json', ''))
+      .toEqual({ answer: 'not json' });
+  });
+});
+
+describe('helperEnv for codex and gemini judges', () => {
+  it('drops injecting and operator-handle variables inside the vendor namespace, keeps auth', () => {
+    const src = {
+      PATH: '/bin', HOME: '/h', GEMINI_API_KEY: 'g', GEMINI_CLI_HOME: '/gh',
+      GEMINI_CLI_SYSTEM_SETTINGS_PATH: '/evil.json', GEMINI_CLI_IDE_SERVER_PORT: '1234',
+      OPENAI_API_KEY: 'o', CODEX_HOME: '/ch', DATABASE_URL: 'pg://x', ARENA_API_KEY: 'k',
+    };
+    const gemini = helperEnv('gemini', src);
+    expect(gemini).toMatchObject({ GEMINI_API_KEY: 'g', GEMINI_CLI_HOME: '/gh', PATH: '/bin' });
+    expect(gemini['GEMINI_CLI_SYSTEM_SETTINGS_PATH']).toBeUndefined();
+    expect(gemini['GEMINI_CLI_IDE_SERVER_PORT']).toBeUndefined();
+    expect(gemini['OPENAI_API_KEY']).toBeUndefined();
+    const codex = helperEnv('codex', src);
+    expect(codex).toMatchObject({ OPENAI_API_KEY: 'o', CODEX_HOME: '/ch' });
+    for (const env of [gemini, codex]) {
+      expect(env['DATABASE_URL']).toBeUndefined();
+      expect(env['ARENA_API_KEY']).toBeUndefined();
+    }
+  });
+});
+
+describe('aiJudge runs the judge in an empty scratch directory', () => {
+  it('spawns with a fresh empty cwd outside the checkout, and removes it after', async () => {
+    const bin = join(scratch, 'claude-cwd');
+    const cwdLog = join(scratch, 'claude-cwd.pwd');
+    writeFileSync(bin, `#!/bin/sh\npwd > ${cwdLog}\nls -A >> ${cwdLog}\ncat > /dev/null\necho '{"scores":[{"criterionId":"correctness","score":5}]}'\n`);
+    chmodSync(bin, 0o755);
+    const result = await aiJudge(brief, deliverable, rubric, { judgeId: 'ai-claude', claudeBin: bin });
+    expect(result.failure).toBeUndefined();
+    const [cwd, ...listing] = readFileSync(cwdLog, 'utf8').trim().split('\n');
+    expect(cwd).toContain('arena-judge-');
+    expect(cwd).not.toBe(process.cwd());
+    expect(listing).toEqual([]);
+    expect(existsSync(cwd!)).toBe(false);
+  });
+
+  /** A stand-in codex: `debug models` prints a catalog; `exec` records argv and prints `stream`. */
+  function fakeCodex(name: string, stream: string, catalogExit = 0): string {
+    const bin = join(scratch, name);
+    const catalog = JSON.stringify({ models: [
+      { slug: 'hidden-model', visibility: 'hide', priority: 1, tool_mode: 'code_mode_only' },
+      { slug: 'codex-top', visibility: 'list', priority: 2, tool_mode: 'code_mode_only', shell_type: 'unified_exec' },
+      { slug: 'codex-next', visibility: 'list', priority: 3 },
+    ] });
+    writeFileSync(bin, [
+      '#!/bin/sh',
+      `if [ "$1" = "debug" ]; then echo '${catalog}'; exit ${catalogExit}; fi`,
+      `printf '%s\\n' "$@" > ${join(scratch, `${name}.argv`)}`,
+      // Keep a copy of the catalog the judge was given, for inspection.
+      'for a in "$@"; do case "$a" in model_catalog_json=*) f="${a#model_catalog_json=}"; f="${f%\\"}"; f="${f#\\"}"; cp "$f" ' + join(scratch, `${name}.catalog`) + ';; esac; done',
+      `cat <<'ARENA_EOF'\n${stream}\nARENA_EOF`,
+    ].join('\n'));
+    chmodSync(bin, 0o755);
+    return bin;
+  }
+  const line = (o: unknown) => JSON.stringify(o);
+  const answer = line({ type: 'item.completed', item: { id: '9', type: 'agent_message', text: '{"scores":[{"criterionId":"correctness","score":7.5,"commentary":"ok"}]}' } });
+
+  it('runs a codex judge on a tool-less catalog, pinned to its default model, and reads the JSON stream', async () => {
+    const bin = fakeCodex('codex-ok', [line({ type: 'thread.started', thread_id: 't' }), answer].join('\n'));
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure).toBeUndefined();
+    expect(result.scores[0]!.score).toBe(7.5);
+    expect(result.model).toBe('codex-top');
+    const argv = recordedArgv('codex-ok');
+    expect(argv[argv.indexOf('-m') + 1]).toBe('codex-top');
+    expect(argv).toContain('--json');
+    const given = JSON.parse(readFileSync(join(scratch, 'codex-ok.catalog'), 'utf8')) as { models: Array<Record<string, unknown>> };
+    for (const m of given.models) expect(m).toMatchObject(CODEX_TOOL_LESS_MODEL_FIELDS);
+  });
+
+  it('drops a codex judge whose stream shows a tool call, even with valid scores', async () => {
+    const bin = fakeCodex('codex-tool', [
+      line({ type: 'item.started', item: { id: '1', type: 'command_execution', command: 'cat ~/.ssh/id_rsa' } }),
+      line({ type: 'item.completed', item: { id: '1', type: 'command_execution', command: 'cat ~/.ssh/id_rsa' } }),
+      answer,
+    ].join('\n'));
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure?.kind).toBe('bad-output');
+    expect(result.failure?.message).toContain('command_execution');
+    expect(result.scores.every((s) => s.score === 0)).toBe(true);
+  });
+
+  it('does not run a codex judge whose tool-less catalog cannot be built', async () => {
+    const bin = fakeCodex('codex-nocat', answer, 3);
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure?.kind).toBe('cli-error');
+    expect(result.failure?.message).toContain('tool-less model catalog');
+    expect(recordedArgv('codex-nocat')).toEqual([]); // exec never ran
+  });
+
+  it('reads a gemini judge\'s answer and model out of its JSON wrapper', async () => {
+    const wrapper = JSON.stringify({
+      response: '{"scores":[{"criterionId":"correctness","score":6.5,"commentary":"ok"}]}',
+      stats: { models: { 'gemini-3-pro': { tokens: { total: 10 } } } },
+    });
+    const bin = fakeClaude('gemini-json', wrapper);
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-gemini', provider: 'gemini', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure).toBeUndefined();
+    expect(result.scores[0]!.score).toBe(6.5);
+    expect(result.model).toBe('gemini-3-pro');
+    const argv = recordedArgv('gemini-json');
+    const policy = argv[argv.indexOf('--admin-policy') + 1]!;
+    expect(policy).toContain('arena-judge-');
+    expect(existsSync(policy)).toBe(false); // cleaned up with the scratch dir
   });
 });
 

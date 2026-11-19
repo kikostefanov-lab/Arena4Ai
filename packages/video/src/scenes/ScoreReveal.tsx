@@ -2,6 +2,7 @@ import { useCurrentFrame, useVideoConfig, spring, interpolate } from 'remotion';
 import type { ReelData } from '../types';
 import { ACCENT_CYAN, TEXT_PRIMARY, TEXT_MUTED, TEXT_DIM, BG_DARK, ORBITRON } from '../tokens';
 import { hexToRgb } from '../utils';
+import { teamDisplayName } from '@arena/shared';
 
 interface ScoreRevealProps {
   data: Pick<ReelData, 'teams' | 'criteria'>;
@@ -134,7 +135,7 @@ export const ScoreReveal: React.FC<ScoreRevealProps> = ({ data }) => {
               <div key={team.teamId} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <div style={{ width: 10, height: 10, borderRadius: '50%', background: team.color, boxShadow: `0 0 8px ${team.color}` }} />
                 <span style={{ fontFamily: ORBITRON, fontSize: 16, color: team.color, letterSpacing: '1px', textTransform: 'uppercase' }}>
-                  {team.model}:{team.persona}
+                  {teamDisplayName(team.model, team.persona)}
                 </span>
               </div>
             ))}
@@ -183,7 +184,7 @@ export const ScoreReveal: React.FC<ScoreRevealProps> = ({ data }) => {
                 }}>
                   <div style={{ fontFamily: ORBITRON, fontSize: 20, color: TEXT_DIM }}>#{rank + 1}</div>
                   <div style={{ fontFamily: ORBITRON, fontSize: 20, fontWeight: 700, color: team.color, textTransform: 'uppercase' }}>
-                    {team.model}:{team.persona}
+                    {teamDisplayName(team.model, team.persona)}
                   </div>
                   <div style={{ fontFamily: ORBITRON, fontSize: 26, fontWeight: 900, color: TEXT_PRIMARY }}>
                     {Math.round(totalProgress * team.score * 100)}%

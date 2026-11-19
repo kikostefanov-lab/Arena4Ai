@@ -1,3 +1,4 @@
+import { teamDisplayName } from '@arena/shared';
 /** Format milliseconds as "Xm Ys" (e.g. "2m 30s"). */
 export function formatDuration(ms: number | null): string {
   if (!ms) return '—';
@@ -29,5 +30,5 @@ export function resolveTeamLabel(
 ): string {
   const t = teams.find((t) => t.id === teamId);
   if (!t) return fallback;
-  return t.persona ? `${t.model}:${t.persona}` : t.model;
+  return teamDisplayName(t.model, t.persona);
 }

@@ -25,8 +25,8 @@ function validateParsedBrief(raw: unknown, context: string): BriefInput {
   if (brief.timeLimitMs < 10_000) {
     throw new Error('timeLimitMs must be at least 10 seconds');
   }
-  if (brief.timeLimitMs > 3_600_000) {
-    throw new Error('timeLimitMs cannot exceed 1 hour');
+  if (brief.timeLimitMs > 10_800_000) {
+    throw new Error('timeLimitMs cannot exceed 3 hours');
   }
 
   if (brief.rubric.criteria.length === 0) {
