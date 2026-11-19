@@ -6,7 +6,7 @@ import { orchestratorUrl, orchestratorHeaders } from '../../../../../lib/orchest
 import { getBundle } from '../../../../../lib/remotion-bundle';
 import { COMPOSITION_ID } from '@arena/video';
 import type { ReelData, ReelTeam, ReelKeyEvent } from '@arena/video';
-import { teamCriterionScores, teamDisplayName } from '@arena/shared';
+import { teamCriterionScores, teamDisplayName, isHarnessError } from '@arena/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -128,7 +128,9 @@ function buildReelData(competition: any, events: any[]): ReelData {
       fileCreates.push(evt);
     }
     if (evt.type === 'TOOL_CALL') toolCallBursts.push(evt);
-    if (evt.type === 'ERROR') errors.push(evt);
+    // A judge or preflight error is filed under the team it concerns but is not
+    // that team's doing; the reel must not show it as the team failing.
+    if (evt.type === 'ERROR' && !isHarnessError(evt.payload)) errors.push(evt);
   }
 
   // Pick the densest TOOL_CALL burst (highest count in any 10s window)
@@ -179,7 +181,8 @@ function buildReelData(competition: any, events: any[]): ReelData {
   const BATTLE_FRAMES = 180; // 6s at 30fps
 
   const significantEvents = events
-    .filter((e: any) => ['FILE_CREATE', 'FILE_MODIFY', 'TOOL_CALL', 'ERROR'].includes(e.type))
+    .filter((e: any) => ['FILE_CREATE', 'FILE_MODIFY', 'TOOL_CALL', 'ERROR'].includes(e.type)
+      && !(e.type === 'ERROR' && isHarnessError(e.payload)))
     .sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   if (significantEvents.length > 0) {

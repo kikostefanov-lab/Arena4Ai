@@ -21,7 +21,7 @@ export type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
 export { planGrid, DEFAULT_BASE_X, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, SQUAD_SLOTS, squadSlotCells } from './layout.js';
 
 export type { KnownProvider, FrameEventKind, FrameEvent, EditDepthMode, TeamTelemetry, TeamManifest, ReconcileResult, SquadSignals } from './event-model.js';
-export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry, reconcileWithManifest, isVendoredPath, corpusFromEvents, squadNotes } from './event-model.js';
+export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry, reconcileWithManifest, isVendoredPath, corpusFromEvents, squadNotes, HARNESS_ERROR_STAGES, isHarnessError } from './event-model.js';
 
 export type { TeamSpec, BlockKind, Structure, TeamState, Phase, World, ApplyEffects, SquadMember, RecentActivity } from './world.js';
 export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, stepStructures, telemetryFromStats, refreshNotes, ensureGridCapacity, foldSquadSignals, momentumShares } from './world.js';
