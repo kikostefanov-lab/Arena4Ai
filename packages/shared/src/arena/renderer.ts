@@ -94,6 +94,8 @@ export class IsoArenaRenderer {
   private winnerId: string | null = null;
   /** How a FINISHED match ended; null while it is live. See `setFinalState()`. */
   private finalState: string | null = null;
+  /** End of stream as of the last seek or tick; see `holdOrFollowEnd()`. */
+  private endSeen: number | null = null;
 
   /** Reused across frames so a 400-block floor allocates nothing per frame. */
   private sortIdx: Int32Array = new Int32Array(0);
@@ -251,6 +253,7 @@ export class IsoArenaRenderer {
 
   /** Advance playback by `dtMs` of arena time, applying any events it passes. */
   tick(dtMs: number): void {
+    this.endSeen = this.totalMs;
     this.world.t = Math.min(this.totalMs, this.world.t + dtMs);
     let applied = false;
     while (this.applied < this.events.length && this.events[this.applied].t <= this.world.t) {
@@ -263,8 +266,23 @@ export class IsoArenaRenderer {
     this.followPlayhead(true);
   }
 
+  /**
+   * A paused frame. A view paused mid-match HOLDS its frame: that is what pause
+   * means, and a recording depends on it. A view parked on the END follows the
+   * end as the stream grows: the page delivers a finished match's history
+   * progressively, so a replay can be built from its first few events, and
+   * without this it would stay on that early end with the rest unapplied.
+   * "Parked on the end" means at or past the end as of the last seek or tick.
+   */
+  holdOrFollowEnd(): void {
+    const prev = this.endSeen;
+    if (prev !== null && this.totalMs !== prev && this.world.t >= prev) this.seek(this.totalMs);
+    this.endSeen = this.totalMs;
+  }
+
   /** Jump to `t`, rebuilding the world without firing effects. */
   seek(t: number): void {
+    this.endSeen = this.totalMs;
     resetWorld(this.world);
     this.world.winnerId = this.winnerId;
     this.effects.length = 0;
@@ -1023,4 +1041,70 @@ export function finishedReplay(opts: RendererOptions, winnerId: string | null, f
   r.setFinalState(finalState);
   r.seek(r.totalMs);
   return r;
+}
+
+/** What a host does with its renderer when its event list may have changed. See `rendererAction()`. */
+export type RendererAction = 'keep' | 'rebuild-replay' | 'rebuild' | 'append';
+
+export interface RendererFeedState {
+  /** The match is still running (or collecting / judging): the host owns the clock. */
+  isLive: boolean;
+  /** The current renderer was fed while the match was live. */
+  fedLive: boolean;
+  /** How many of the host's events the current renderer has consumed. */
+  consumed: number;
+  /** How many events the host now holds. */
+  eventsLength: number;
+  /** The consumed prefix is unchanged (same last event at the same index). */
+  prefixIntact: boolean;
+}
+
+/**
+ * The host's choice of renderer for its current event list:
+ *  - `rebuild-replay`: a finished match with nothing consumed yet, OR one the
+ *    current renderer was fed live → `finishedReplay()` from the whole list,
+ *    parked on the verdict. A live-fed renderer is on the live clock, which the
+ *    page stops when the agents finish and which reads 0 on a page loaded after
+ *    that; kept, it played the finished match on from there (7adcd4df showed
+ *    Claude's squad "1 ACTIVE" long after the result was in);
+ *  - `rebuild`: the consumed prefix changed (a reorder) → rebuild from the whole list;
+ *  - `append`: new events after an intact prefix → `appendEvents()`;
+ *  - `keep`: nothing new.
+ */
+export function rendererAction(s: RendererFeedState): RendererAction {
+  if (s.eventsLength === 0) return 'keep';
+  if (!s.isLive && (s.consumed === 0 || s.fedLive)) return 'rebuild-replay';
+  if (!s.prefixIntact) return 'rebuild';
+  if (s.eventsLength === s.consumed) return 'keep';
+  return 'append';
+}
+
+/** The host's view of the clock for one frame. See `advanceClock()`. */
+export interface ClockFrame {
+  /** The match is still running: the host owns the clock. */
+  isLive: boolean;
+  /** A replay's transport is playing. */
+  playing: boolean;
+  /** Live: the competition's real elapsed time. */
+  elapsedMs: number;
+  /** Replay: arena time to advance while playing. */
+  dtMs: number;
+}
+
+/**
+ * Move a renderer's clock for one animation frame: live, the host's elapsed
+ * time; playing, `dtMs` of arena time; paused, `holdOrFollowEnd()`.
+ *
+ * The host must pass the renderer it holds AFTER feeding this frame's events:
+ * ingest can replace it. ArenaViewerV2 used the one the frame began with, and
+ * kept the end it remembered in a ref shared by both, so the empty renderer's
+ * tick recorded ITS end (the time limit) and the replay just built from the
+ * first 52 events of 7adcd4df never followed the rest: it stayed on its
+ * +30.5 s end, verdict up, Claude's squad "1 ACTIVE". The end each view
+ * follows now lives on its renderer.
+ */
+export function advanceClock(r: IsoArenaRenderer, f: ClockFrame): void {
+  if (f.isLive) r.setTime(f.elapsedMs);
+  else if (f.playing) r.tick(f.dtMs);
+  else r.holdOrFollowEnd();
 }

@@ -446,6 +446,10 @@ export function applyEvent(world: World, ev: FrameEvent, live: boolean, fx: Appl
     return;
   }
 
+  // Not the agent's activity (see 'other' in FrameEventKind): no latest line,
+  // no momentum, no pulse or hit reaction in any view.
+  if (ev.kind === 'other') return;
+
   const team = ev.teamId ? world.teams.get(ev.teamId) : undefined;
   if (!team) return;
 

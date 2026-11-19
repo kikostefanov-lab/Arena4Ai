@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback, Fragment } from 'react';
-import { teamDisplayName, IsoArenaRenderer, finishedReplay, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
+import { teamDisplayName, IsoArenaRenderer, finishedReplay, rendererAction, advanceClock, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
@@ -93,6 +93,8 @@ function LaneHeader({ team, color, align, latest, squad, delivered }: {
       display: 'flex', flexDirection: 'column', gap: 4,
       alignItems: align === 'right' ? 'flex-end' : 'flex-start',
       fontFamily: BODY_FONT,
+      // A grid item: without this a one-line latest widens its column instead of clipping.
+      minWidth: 0,
     }}>
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -109,8 +111,10 @@ function LaneHeader({ team, color, align, latest, squad, delivered }: {
         }}/>
         {teamDisplayName(team.model, team.persona)}
       </div>
-      <div style={{
+      {/* One line: an agent's narration can be a paragraph. The full text is the tooltip. */}
+      <div title={latest || undefined} style={{
         color: `rgba(${rgb},0.55)`, fontSize: 10, letterSpacing: 1.5, minHeight: 14,
+        maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
       }}>
         {latest || '—'}
       </div>
@@ -408,11 +412,6 @@ export default function ArenaViewerV2({
   const winnerRef = useRef<string | null>(null);
   /** The final state of a FINISHED competition (null while live), for the same reason. */
   const finalStateRef = useRef<string | null>(null);
-  /**
-   * End of stream as of the last frame, so a paused view can tell "parked at the
-   * end" (follow the end as the stream grows) from "paused mid-match" (hold).
-   */
-  const endSeenRef = useRef<number | null>(null);
   /** The current renderer has been fed while the match was live (see `ingest`). */
   const fedLiveRef = useRef(false);
 
@@ -596,20 +595,22 @@ export default function ArenaViewerV2({
      * whole stream; a viewer who screenshots the first five seconds must not get
      * a picture with the caveat still missing from it.
      *
-     * That includes a match this page watched live. A renderer fed LIVE stays
-     * on the live clock, which the page stops when the agents finish and which
-     * reads 0 on a page loaded after that. Kept once the match was over, it
-     * played the finished match on from that clock at 3x: on 7adcd4df, a page
-     * loaded during judging showed Claude's squad "1 ACTIVE" and "thinking ·"
-     * long after the result was in. So when the match finishes, the live
-     * renderer is dropped and the replay is built from the whole list.
+     * That includes a match this page watched live: `rendererAction` rebuilds
+     * a live-fed renderer as a parked replay once the match is over (see there
+     * for why keeping it showed 7adcd4df mid-match).
      */
-    if (!isLive && fedLiveRef.current) {
-      fedLiveRef.current = false;
-      consumedRef.current = 0;
-      lastIdRef.current = null;
-    }
-    if (!isLive && consumedRef.current === 0 && events.length > 0) {
+    const consumed = consumedRef.current;
+    const action = rendererAction({
+      isLive,
+      fedLive: fedLiveRef.current,
+      consumed,
+      eventsLength: events.length,
+      prefixIntact: consumed === 0 ||
+        (events.length >= consumed && events[consumed - 1]?.eventId === lastIdRef.current),
+    });
+    if (action === 'keep') return;
+
+    if (action === 'rebuild-replay') {
       // toFrameEvents (plural) sorts; toFrameEvent (singular) does not. The
       // renderer walks its list with a monotonic cursor, so an unsorted list
       // stalls at the first out-of-order timestamp.
@@ -631,7 +632,7 @@ export default function ArenaViewerV2({
         finalStateRef.current,
       );
       rendererRef.current = replay;
-      endSeenRef.current = replay.totalMs;
+      fedLiveRef.current = false;
       setPlaying(false);
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
@@ -639,12 +640,8 @@ export default function ArenaViewerV2({
     }
 
     if (isLive) fedLiveRef.current = true;
-    const consumed = consumedRef.current;
-    const prefixIntact =
-      consumed === 0 ||
-      (events.length >= consumed && events[consumed - 1]?.eventId === lastIdRef.current);
 
-    if (!prefixIntact) {
+    if (action === 'rebuild') {
       // A reorder: the only coherent response is to rebuild from scratch.
       // Rare, and cheaper to do correctly than to patch up incrementally.
       const all = loadFrames(events, origin);
@@ -660,14 +657,13 @@ export default function ArenaViewerV2({
       rebuilt.setWinner(winnerRef.current);
       rebuilt.setFinalState(finalStateRef.current);
       if (!isLive) rebuilt.seek(wasAtEnd ? rebuilt.totalMs : Math.min(at, rebuilt.totalMs));
-      endSeenRef.current = rebuilt.totalMs;
       rendererRef.current = rebuilt;
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
       return;
     }
 
-    if (events.length === consumed) return;
+    // action === 'append'
     const fresh: FrameEvent[] = [];
     for (let i = consumed; i < events.length; i++) {
       fresh.push(toFrameEvent(events[i] as never, origin));
@@ -701,39 +697,20 @@ export default function ArenaViewerV2({
     let hudAcc = 0;
 
     const step = (): void => {
-      const r = rendererRef.current;
       const canvas = canvasRef.current;
-      if (r && canvas) {
+      if (rendererRef.current && canvas) {
         // A WebGL canvas has no 2D context; the 3D branch never asks for one.
         const ctx = use3d ? null : canvas.getContext('2d');
         if (use3d || ctx) {
           ingest();
+          // Read the renderer AFTER ingest: it can replace it, and the rest of
+          // the frame must not run on the one it replaced (see advanceClock).
+          const r = rendererRef.current;
+          if (!r) { raf = requestAnimationFrame(step); return; }
 
-          if (isLive) {
-            // The host owns the clock: the competition's real elapsed time.
-            r.setTime(elapsedMs);
-          } else if (playing) {
-            r.tick(16.7 * speed);
-            endSeenRef.current = r.totalMs;
-          } else {
-            /**
-             * Paused. A view paused mid-match HOLDS its frame: that is what
-             * pause means, and a recording depends on it.
-             *
-             * A view parked on the END follows the end as the stream grows.
-             * Seeking once at construction is not enough: the page delivers its
-             * events progressively, so the first batch can be a single event.
-             * The renderer then gets built from that one-event snapshot — end of
-             * stream 2,000ms — and everything afterwards is appended, so the
-             * view stays parked two seconds into an 831-second competition and
-             * the floor is bare. That is the empty arena. Re-parking when the
-             * end moves, and only if the view sat at the old end, converges on
-             * the real end as the list fills, at one seek per change.
-             */
-            const prevEnd = endSeenRef.current;
-            if (prevEnd !== null && r.totalMs !== prevEnd && r.world.t >= prevEnd) r.seek(r.totalMs);
-            endSeenRef.current = r.totalMs;
-          }
+          // Live: the competition's real elapsed time. A replay plays, or,
+          // paused, holds its frame or follows the end as the history arrives.
+          advanceClock(r, { isLive, playing, elapsedMs, dtMs: 16.7 * speed });
 
           // A replay's phase lives in the world. Mirror it into React only when
           // it changes, never per frame.

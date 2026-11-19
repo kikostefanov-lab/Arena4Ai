@@ -62,6 +62,7 @@ export type FrameEventKind =
   | 'spawn'
   /** A sub-agent ended (see `agentStatus`). */
   | 'agentDone'
+  /** Not the agent's activity (a harness error, PRESENTATION_READY, …): never applied to a team. */
   | 'other';
 
 export interface FrameEvent {
@@ -162,6 +163,14 @@ function textOf(payload: Record<string, unknown>): string {
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v ? v : undefined);
+
+/**
+ * `ERROR.payload.stage` values raised by the harness rather than the agent.
+ * An error with no stage, or `stage: 'agent'`, is the agent's.
+ */
+export const HARNESS_ERROR_STAGES: ReadonlySet<string> = new Set([
+  'preflight', 'sandbox', 'collect', 'presentation', 'judging', 'synthesis',
+]);
 
 const SUB_AGENT_STATUSES: ReadonlySet<string> = new Set<SubAgentStatus>(['completed', 'failed', 'killed', 'unknown']);
 
@@ -271,6 +280,14 @@ function classify(ev: ArenaEvent, originMs: number): FrameEvent {
         legacy: false,
       };
     case 'ERROR':
+      // An error from a stage the agent was not running (a judge rate-limited,
+      // a presentation call that failed) is stored under the team it concerns,
+      // but it is not the team's doing: on 7adcd4df Claude's header ended on
+      // "✕ AI judge unavailable" and its lead took a hit. The Log view lists
+      // every stored event; the arena applies only the agent's own.
+      if (typeof payload.stage === 'string' && HARNESS_ERROR_STAGES.has(payload.stage)) {
+        return { ...base, kind: 'other', legacy: false };
+      }
       return { ...base, kind: 'error', legacy: false };
     case 'SUB_AGENT_SPAWN': {
       const label = str(payload.label) ?? squadLabel(str(payload.description) ?? '');

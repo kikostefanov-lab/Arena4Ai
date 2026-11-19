@@ -27,7 +27,8 @@ export type { TeamSpec, BlockKind, Structure, TeamState, Phase, World, ApplyEffe
 export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, stepStructures, telemetryFromStats, refreshNotes, ensureGridCapacity, foldSquadSignals, momentumShares } from './world.js';
 
 export type { RendererOptions } from './renderer.js';
-export { IsoArenaRenderer, VERDICT_STATES, finishedReplay } from './renderer.js';
+export { IsoArenaRenderer, VERDICT_STATES, finishedReplay, rendererAction, advanceClock } from './renderer.js';
+export type { RendererAction, RendererFeedState, ClockFrame } from './renderer.js';
 
 export type { SquadEventLine } from './squad-hud.js';
 export { describeSquadEvent, squadSummary, deliveredList } from './squad-hud.js';
