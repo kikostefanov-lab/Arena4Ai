@@ -1005,3 +1005,22 @@ export class IsoArenaRenderer {
     }
   }
 }
+
+/**
+ * A FINISHED match as a viewer opens it: the whole stream in hand, the verdict
+ * declared, and the playhead parked on the end.
+ *
+ * Hosts use this for every finished match, whether the page opened on it or
+ * watched it live and saw it finish. A renderer that was fed live is on the live
+ * clock, which the page stops when the agents finish and which reads 0 on a page
+ * loaded after that, so playing it on after the finish shows the match from
+ * wherever that clock stopped (a squad still "active", a verdict not yet
+ * reached) rather than the result.
+ */
+export function finishedReplay(opts: RendererOptions, winnerId: string | null, finalState: string | null): IsoArenaRenderer {
+  const r = new IsoArenaRenderer(opts);
+  r.setWinner(winnerId);
+  r.setFinalState(finalState);
+  r.seek(r.totalMs);
+  return r;
+}

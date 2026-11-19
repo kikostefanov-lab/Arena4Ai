@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback, Fragment } from 'react';
-import { teamDisplayName, IsoArenaRenderer, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
+import { teamDisplayName, IsoArenaRenderer, finishedReplay, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
@@ -413,6 +413,8 @@ export default function ArenaViewerV2({
    * end" (follow the end as the stream grows) from "paused mid-match" (hold).
    */
   const endSeenRef = useRef<number | null>(null);
+  /** The current renderer has been fed while the match was live (see `ingest`). */
+  const fedLiveRef = useRef(false);
 
   const [shares, setShares] = useState<MomentumShare[]>([]);
   const [squads, setSquads] = useState<Record<string, SquadSummary>>({});
@@ -472,6 +474,7 @@ export default function ArenaViewerV2({
     consumedRef.current = 0;
     lastIdRef.current = null;
     originRef.current = null;
+    fedLiveRef.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamsKey, timeLimitMs, deliverableNames]);
 
@@ -592,16 +595,26 @@ export default function ArenaViewerV2({
      * caveat until playback happened to reach the evidence. We already know the
      * whole stream; a viewer who screenshots the first five seconds must not get
      * a picture with the caveat still missing from it.
+     *
+     * That includes a match this page watched live. A renderer fed LIVE stays
+     * on the live clock, which the page stops when the agents finish and which
+     * reads 0 on a page loaded after that. Kept once the match was over, it
+     * played the finished match on from that clock at 3x: on 7adcd4df, a page
+     * loaded during judging showed Claude's squad "1 ACTIVE" and "thinking ·"
+     * long after the result was in. So when the match finishes, the live
+     * renderer is dropped and the replay is built from the whole list.
      */
+    if (!isLive && fedLiveRef.current) {
+      fedLiveRef.current = false;
+      consumedRef.current = 0;
+      lastIdRef.current = null;
+    }
     if (!isLive && consumedRef.current === 0 && events.length > 0) {
       // toFrameEvents (plural) sorts; toFrameEvent (singular) does not. The
       // renderer walks its list with a monotonic cursor, so an unsorted list
       // stalls at the first out-of-order timestamp.
       const all = loadFrames(events, origin);
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
-      const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
-      replay.setWinner(winnerRef.current);
-      replay.setFinalState(finalStateRef.current);
       /**
        * Open a FINISHED competition on its finished state, not on an empty floor.
        *
@@ -612,7 +625,11 @@ export default function ArenaViewerV2({
        * city is the result; someone opening a finished match wants to see what
        * was built, and can then rewind deliberately with the transport.
        */
-      replay.seek(replay.totalMs);
+      const replay = finishedReplay(
+        { teams: specs, events: all, timeLimitMs, deliverables: deliverableNames },
+        winnerRef.current,
+        finalStateRef.current,
+      );
       rendererRef.current = replay;
       endSeenRef.current = replay.totalMs;
       setPlaying(false);
@@ -621,6 +638,7 @@ export default function ArenaViewerV2({
       return;
     }
 
+    if (isLive) fedLiveRef.current = true;
     const consumed = consumedRef.current;
     const prefixIntact =
       consumed === 0 ||
