@@ -2,7 +2,56 @@
 
 Newest first. Each entry says what changed, why, how it was verified, and what was left open.
 
-## 2026-11-18 — agent squads (branch `feat/agent-squads`)
+## 2026-11-19 — judge panel, a real three-way squad match, and the fixes it forced (`main` `f0c5895`)
+
+The squads work went to a real match: Claude vs Codex vs Gemini on the published
+`briefs/first-paying-customer.yml`, judged by all three vendors. Rehearsing it and recording it
+exposed bugs that only real data shows; each is fixed and tested here.
+
+**What changed**
+- **Cross-vendor judge panel** (`5de05ed`): `--judge-panel` / `judgePanel: true` / a New Battle
+  toggle. Claude, Codex and Gemini each judge every team; the final score is the mean of the
+  judges that succeeded, a failed seat is dropped with an `ERROR {stage:'judging', provider}`,
+  and all seats failing falls back to the heuristic. Criterion rows show the mean across judges
+  (`4273f43`), not one judge's scores.
+- **Judges are tool-less and fail closed**:
+  - The old Codex and Gemini judge drivers were not tool-less. A probe (`dev/codex-judge-tool-probe.ts`) showed the Codex judge was offered a code-execution tool through its per-model catalog (`a870b8b`). It now runs on a rewritten catalog with every tool feature off.
+  - Any tool item in its stream fails the seat as `tool-use`, which is never retried (`c1abe14`), even when the judge then crashes or times out (`a7742cc`).
+- **Competitors never see the arena's secrets**: `DATABASE_URL`, `ARENA_*` and `PG*` are stripped for host runs too (`327ee4b`).
+- **Agent-planted paths**: the watcher and collector use `lstat`, `O_NOFOLLOW | O_NONBLOCK` and `fstat`, so a FIFO, device or symlink can neither block the server nor read outside the workdir (`5c571d9`). A scan is bounded by total entries (20,000) and depth (24), not just files (`c1abe14`).
+- **Display fixes found on the real match**:
+  - A finished replay built from the first-arrived events never caught up and showed "1 ACTIVE" (`3ad404b`). The renderer choice is now a tested pure `rendererAction`.
+  - A match that finishes while its page is open now opens on its verdict (`4c9ab42`).
+  - Teams are coloured by model, not by list position (`fca1f23`).
+  - Team labels never double the persona (`561a0fb`, `teamDisplayName`). Compare sends the server's own key (`64f0d8f`).
+  - Same-provider winner chips name the team (`b0ed3f7`).
+  - Harness-stage errors (judging, preflight, …) are not shown as team activity in the arena (`3ad404b`) or in the recap reel (`b7daf5e`, `isHarnessError`).
+- **Brief published**: `briefs/first-paying-customer.yml` (`2182135`).
+
+**The match** (`7adcd4df-2cfe-451b-872b-686c28d97fe6`, 45-minute limit):
+- **Result**: Codex 0.904, Claude 0.891, Gemini 0.697.
+- **Disclosed caveats**: Gemini ran on `gemini-3.1-flash-lite` because its default model was out of daily API quota. Its judge seat ran flash-lite too, and the CLI reported `gemini-3.5-flash-lite`.
+- **Judges**: the Claude and Codex judges each ranked their own team first. The Gemini judge ranked Gemini last, but 31–39 points above what the other two gave it.
+- **Squads**: only Claude delegated, one research sub-agent. All three teams picked the commercial cleaning bid-pricing checker. Agents finished within ~4 minutes.
+- **Published**: https://arena4.ai/blog/let-the-bots-run-it (private site repo).
+
+**Verified**:
+- Shared 162 and orchestrator 716 (16 skipped) tests; both typechecks; the video build. CI green on `f0c5895`.
+- Two rehearsals:
+  - (1) Gemini quota failure, and the panel dropping a failed seat.
+  - (2) All three providers, the full panel, and a mid-run reload rebuilding history.
+- The real match was checked in the browser after every display fix.
+
+**Decisions**:
+- Squads stay the agent's choice (no mandate).
+- Re-judge is still Claude-only, so do not re-judge a panel match.
+
+**Left open**:
+- `adapter-shutdown.test.ts` ("kills an agent that ignores SIGTERM") failed once on CI and passed on re-run, which is a reaping race on a busy runner.
+- Spectate and replay pages still colour teams by position.
+- A page loaded during judging shows an empty arena until the match completes.
+
+## 2026-11-18 — agent squads (merged in `96b110d`)
 
 Competitor CLIs spawn sub-agents of their own. Arena saw none of it: the files they wrote
 appeared from nowhere, the judge saw a lead's partial work, and the arena drew one robot per team.

@@ -511,10 +511,20 @@ remain but the live page no longer draws with them; treat this list as history.
 
 ## Next session
 
-Where things stand after 2026-11-18 (see `CHANGELOG.md` for the detail):
-- Agent squads are on `feat/agent-squads` (not merged): sub-agent events, robots in the 3D view,
-  squad chips and deliverable strips in the HUD, the Codex `--json` move and the WebSocket
-  subscribe-before-history fix. Browser verification and the PR are what is left.
+Where things stand after 2026-11-19 (see `CHANGELOG.md` for the detail):
+- **Done:** agent squads, the cross-vendor judge panel, competitor isolation and the security
+  follow-ups are on `main` (`f0c5895`, CI green). The real three-way match `7adcd4df-…` is
+  published at arena4.ai/blog/let-the-bots-run-it. Nothing is in flight.
+- **Don't** press Re-judge on a panel match: re-judge (`routes/competitions.ts`, `re-evaluate`)
+  is still Claude-only and would replace the panel's scorecards. Wiring the panel into re-judge
+  is the first follow-up.
+- **Next, small:** spectate and replay pages still colour teams by position; a page loaded during
+  judging shows an empty arena until the match completes; the CLI results report
+  (`results-reporter.ts:47`) still reads one judge.
+- **Flaky:** `adapter-shutdown.test.ts` "kills an agent that ignores SIGTERM" failed once on CI
+  (passed on re-run): a SIGKILLed process not yet reaped on a busy runner.
+- **Model for the next session:** Opus for anything touching judging, isolation or the 3D scene;
+  Sonnet is enough for the small UI follow-ups.
 
 Earlier, after 2026-11-14:
 - As of 2026-11-14, `main` had the 3D arena (`v2.0.0`) and the harness hardening (#17).
