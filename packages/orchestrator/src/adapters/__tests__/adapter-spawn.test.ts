@@ -67,7 +67,8 @@ describe('CodexAdapter spawn', () => {
     expect(spawnCalls).toHaveLength(1);
     expect(spawnCalls[0].command).toBe('codex');
     expect(spawnCalls[0].command).not.toBe('/bin/sh');
-    expect(spawnCalls[0].args).not.toContain('-c');
+    // `-c` is codex's own config flag now, so a shell is ruled out by argv[0] instead.
+    expect(spawnCalls[0].args[0]).toBe('exec');
   });
 
   it('passes a model variant as its own argv entry', async () => {
