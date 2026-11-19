@@ -1,9 +1,15 @@
-import { EventType, type ArenaEvent } from '@arena/shared';
+import {
+  EventType,
+  type ArenaEvent,
+  type SubAgentDonePayload,
+  type SubAgentSpawnPayload,
+} from '@arena/shared';
 import {
   stripAnsi,
   makeEvent,
   makeFileEvent,
   operationFromVerb,
+  squadLabel,
   toRelativePath,
   FILE_PATH_RE,
   ERROR_LINE_RE,
@@ -34,12 +40,20 @@ import {
 const WRITE_FILE_TOOL = 'write_file';
 const EDIT_FILE_TOOL = 'replace';
 
+/**
+ * gemini's sub-agent tool. Its tool_id is `invoke_agent__<call id>`, and the
+ * matching tool_result carries the same id, so a result is recognised by prefix.
+ */
+const INVOKE_AGENT_TOOL = 'invoke_agent';
+const INVOKE_AGENT_ID_PREFIX = `${INVOKE_AGENT_TOOL}__`;
+
 interface StreamEvent {
   type?: string;
   role?: string;
   content?: unknown;
   tool_name?: string;
   parameters?: Record<string, unknown>;
+  tool_id?: string;
   message?: string;
   severity?: string;
   status?: string;
@@ -72,6 +86,18 @@ function fromToolUse(msg: StreamEvent, ctx: NormalizeContext): ArenaEvent {
   const tool = msg.tool_name ?? 'unknown';
   const params = msg.parameters ?? {};
   const filePath = (params.file_path as string) ?? (params.path as string) ?? '';
+
+  if (tool === INVOKE_AGENT_TOOL) {
+    const prompt = typeof params.prompt === 'string' ? params.prompt : '';
+    const payload: SubAgentSpawnPayload = {
+      agentId: msg.tool_id ?? '',
+      label: squadLabel(prompt),
+      description: prompt,
+      kind: typeof params.agent_name === 'string' ? params.agent_name : undefined,
+      depth: 1,
+    };
+    return makeEvent(EventType.SUB_AGENT_SPAWN, payload, ctx);
+  }
 
   if (tool === WRITE_FILE_TOOL || tool === EDIT_FILE_TOOL) {
     // `replace` with an empty old_string is gemini's create-a-new-file form
@@ -113,6 +139,13 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
         return makeEvent(EventType.ERROR, { error: msg.message ?? msg }, ctx);
 
       case 'tool_result':
+        if (msg.tool_id?.startsWith(INVOKE_AGENT_ID_PREFIX)) {
+          const done: SubAgentDonePayload = {
+            agentId: msg.tool_id,
+            status: msg.status === 'success' ? 'completed' : 'failed',
+          };
+          return makeEvent(EventType.SUB_AGENT_DONE, done, ctx);
+        }
         return msg.status === 'error'
           ? makeEvent(EventType.ERROR, { error: msg.error ?? msg.output ?? msg }, ctx)
           : makeEvent(EventType.REASONING, { text: textOf(msg.output) }, ctx);
