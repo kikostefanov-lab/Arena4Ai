@@ -9,7 +9,7 @@ import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import ArenaViewerV2 from '../../../components/ArenaViewerV2';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
-import { isHeuristicScore, judgeBreakdown, HEURISTIC_CEILING, type JudgeBreakdown } from '@arena/shared';
+import { isHeuristicScore, judgeBreakdown, teamCriterionScores, HEURISTIC_CEILING, type JudgeBreakdown } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -2377,9 +2377,10 @@ export default function CompetitionPage() {
             teams: scorecards.map((sc) => ({
               teamId: sc.teamId,
               totalScore: sc.finalScore,
-              criteriaScores: sc.judgeResults?.[0]?.scores?.map(s => ({
-                criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary ?? '',
-              })) ?? [],
+              // Mean across the team's AI judges, so it matches the multi-judge total.
+              criteriaScores: teamCriterionScores(sc).map(s => ({
+                criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary,
+              })),
               rank: sc.rank,
               ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
               ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),

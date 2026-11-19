@@ -111,3 +111,82 @@ export function judgeBreakdown(scorecard: {
   const average = scored.length > 0 ? scored.reduce((a, b) => a + b, 0) / scored.length : null;
   return { label, rows, average };
 }
+
+/** One criterion's score for a team, as the views show it. */
+export interface TeamCriterionScore {
+  criterionId: string;
+  score: number;
+  maxScore?: number;
+  commentary: string;
+}
+
+type StoredCriterionScore = { criterionId?: string; score?: number; maxScore?: number; commentary?: string };
+type StoredJudgeResultWithScores = StoredJudgeResult & { scores?: ReadonlyArray<StoredCriterionScore> | null };
+
+const PROVIDER_LABEL: Record<string, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
+
+/**
+ * A team's per-criterion scores across every usable AI judge: each criterion is
+ * the mean of the judges that scored it, so a view never sets one judge's
+ * criterion score beside a multi-judge total (or compares Claude's score for
+ * one team against Codex's for another). Failed panel seats and the heuristic
+ * fallback are not judges here. With several judges, the commentary keeps each
+ * one's text, labelled. A team scored only by the heuristic fallback keeps the
+ * heuristic's scores, as before.
+ */
+export function teamCriterionScores(scorecard: {
+  judgeResults?: ReadonlyArray<StoredJudgeResultWithScores> | null;
+  judgePanel?: ReadonlyArray<StoredPanelSeat> | null;
+}): TeamCriterionScore[] {
+  const results = scorecard.judgeResults ?? [];
+  const failedSeats = new Set((scorecard.judgePanel ?? []).filter((s) => s.failure).map((s) => s.judgeId));
+  const judges = results.filter((r) =>
+    r.heuristic !== true && r.judgeId !== AUTOMATED_JUDGE_ID
+    && !failedSeats.has(r.judgeId ?? '') && Array.isArray(r.scores) && r.scores.length > 0);
+
+  const clean = (s: StoredCriterionScore): TeamCriterionScore | null =>
+    typeof s.criterionId === 'string' && typeof s.score === 'number' && Number.isFinite(s.score)
+      ? { criterionId: s.criterionId, score: s.score, ...(s.maxScore !== undefined ? { maxScore: s.maxScore } : {}), commentary: s.commentary ?? '' }
+      : null;
+
+  if (judges.length === 0) {
+    return (results[0]?.scores ?? []).map(clean).filter((s): s is TeamCriterionScore => s !== null);
+  }
+  if (judges.length === 1) {
+    return (judges[0]!.scores ?? []).map(clean).filter((s): s is TeamCriterionScore => s !== null);
+  }
+
+  const label = (r: StoredJudgeResultWithScores): string => {
+    const parsed = PANEL_JUDGE_ID.exec(r.judgeId ?? '');
+    const provider = r.provider ?? parsed?.[1];
+    const model = r.model ?? parsed?.[2];
+    const name = provider ? (PROVIDER_LABEL[provider] ?? provider) : (r.judgeId ?? 'judge');
+    return model ? `${name} (${model})` : name;
+  };
+  const order: string[] = [];
+  const byCriterion = new Map<string, { sum: number; count: number; maxScore?: number; notes: string[] }>();
+  for (const judge of judges) {
+    for (const raw of judge.scores ?? []) {
+      const s = clean(raw);
+      if (!s) continue;
+      let entry = byCriterion.get(s.criterionId);
+      if (!entry) {
+        entry = { sum: 0, count: 0, notes: [], ...(s.maxScore !== undefined ? { maxScore: s.maxScore } : {}) };
+        byCriterion.set(s.criterionId, entry);
+        order.push(s.criterionId);
+      }
+      entry.sum += s.score;
+      entry.count += 1;
+      if (s.commentary) entry.notes.push(`${label(judge)}: ${s.commentary}`);
+    }
+  }
+  return order.map((criterionId) => {
+    const e = byCriterion.get(criterionId)!;
+    return {
+      criterionId,
+      score: e.sum / e.count,
+      ...(e.maxScore !== undefined ? { maxScore: e.maxScore } : {}),
+      commentary: e.notes.join('\n\n'),
+    };
+  });
+}

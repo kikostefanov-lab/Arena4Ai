@@ -147,6 +147,26 @@ describe('websocket stream', () => {
     expect(complete.result.teams[0]!.judges!.rows).toHaveLength(2);
   });
 
+  it('sends each criterion as the mean across the team\'s judges, not the first judge\'s score', async () => {
+    getEvents.mockResolvedValue([] as never);
+    getResult.mockResolvedValue({
+      winnerId: 'a',
+      scorecards: [{
+        teamId: 'a', finalScore: 0.7, rank: 1,
+        judgeResults: [
+          { judgeId: 'ai-claude/m1', overallScore: 0.9, scores: [{ criterionId: 'q', score: 9, commentary: 'c' }] },
+          { judgeId: 'ai-codex/m2', overallScore: 0.5, scores: [{ criterionId: 'q', score: 5, commentary: 'x' }] },
+        ],
+      }],
+    } as never);
+    const { ws, msgs } = connect();
+    await new Promise((r) => ws.on('close', r));
+    const complete = msgs.find((m) => m.type === 'COMPLETE') as { result: { teams: Array<{ criteriaScores: Array<{ criterionId: string; score: number }> }> } };
+    expect(complete.result.teams[0]!.criteriaScores).toEqual([
+      expect.objectContaining({ criterionId: 'q', score: 7, maxScore: 10 }),
+    ]);
+  });
+
   const EVENTS = ['arenaEvent', 'stateChange', 'result', 'error'];
   const listenerCounts = () => EVENTS.map((e) => runner.listenerCount(e));
 

@@ -6,6 +6,7 @@ import { orchestratorUrl, orchestratorHeaders } from '../../../../../lib/orchest
 import { getBundle } from '../../../../../lib/remotion-bundle';
 import { COMPOSITION_ID } from '@arena/video';
 import type { ReelData, ReelTeam, ReelKeyEvent } from '@arena/video';
+import { teamCriterionScores } from '@arena/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -94,9 +95,9 @@ function buildReelData(competition: any, events: any[]): ReelData {
     // result.scorecards holds per-team scores
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const scorecard = result?.scorecards?.find((s: any) => s.teamId === team.id);
-    // AI judge scores live in judgeResults[0].scores; each has score/10, criterionId, commentary
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const judgeScores: any[] = scorecard?.judgeResults?.[0]?.scores ?? [];
+    // Per-criterion mean across the team's AI judges (score/10, criterionId, commentary),
+    // so a multi-judge match is never shown as one judge's scores.
+    const judgeScores = scorecard ? teamCriterionScores(scorecard) : [];
 
     return {
       teamId: team.id,
@@ -106,7 +107,7 @@ function buildReelData(competition: any, events: any[]): ReelData {
       color: getModelColor(model),
       // finalScore is already 0–1
       score: scorecard?.finalScore ?? 0,
-      criteriaScores: judgeScores.map((cs: any) => ({
+      criteriaScores: judgeScores.map((cs) => ({
         name: criteriaMap[cs.criterionId] ?? cs.criterionId,
         score: cs.score / 10,
         commentary: cs.commentary ?? '',

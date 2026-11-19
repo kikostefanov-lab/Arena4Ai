@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { isSyntheticCompetition } from '@arena/shared';
+import { isSyntheticCompetition, teamCriterionScores } from '@arena/shared';
 import { repo } from '../repo.js';
 
 export const criteriaRouter = Router();
@@ -61,17 +61,17 @@ criteriaRouter.get('/', async (_req: Request, res: Response) => {
       const modelKey = teamModelMap.get(sc.teamId) ?? teamKeyMap.get(sc.teamId);
       if (!modelKey) continue;
 
-      // Use the first AI judge result if available, else first result
-      const judgeResult = sc.judgeResults?.find((j) => j.judgeId?.startsWith('ai-'))
-        ?? sc.judgeResults?.[0];
-      if (!judgeResult?.scores) continue;
+      // The team's per-criterion mean across its AI judges (the heuristic's
+      // scores only when no AI judge scored it).
+      const teamScores = teamCriterionScores(sc);
+      if (teamScores.length === 0) continue;
 
       if (!accumulator.has(modelKey)) {
         accumulator.set(modelKey, new Map());
       }
       const modelMap = accumulator.get(modelKey)!;
 
-      for (const criterionScore of judgeResult.scores) {
+      for (const criterionScore of teamScores) {
         const cid = criterionScore.criterionId;
         if (!cid) continue;
         const existing = modelMap.get(cid) ?? { sum: 0, count: 0 };

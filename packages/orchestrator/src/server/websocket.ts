@@ -5,7 +5,7 @@ import { repo } from './repo.js';
 import { runnerRegistry } from './runner-registry.js';
 import { isAllowedWsOrigin } from './network.js';
 import { isStreamAuthorized } from './stream-ticket.js';
-import { isHeuristicScore, judgeBreakdown } from '@arena/shared';
+import { isHeuristicScore, judgeBreakdown, teamCriterionScores } from '@arena/shared';
 
 type RawScorecard = {
   teamId: string;
@@ -42,12 +42,13 @@ function normalizeResult(
     teams: scorecards.map((sc) => ({
       teamId: sc.teamId,
       totalScore: sc.finalScore,
-      criteriaScores: sc.judgeResults?.[0]?.scores?.map(s => ({
+      // Mean across the team's AI judges, so it matches the multi-judge total.
+      criteriaScores: teamCriterionScores(sc).map(s => ({
         criterionId: s.criterionId,
         score: s.score,
         maxScore: s.maxScore ?? 10,
-        commentary: s.commentary ?? '',
-      })) ?? [],
+        commentary: s.commentary,
+      })),
       rank: sc.rank,
       // The AI judge failed and the completeness heuristic scored this team.
       ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
