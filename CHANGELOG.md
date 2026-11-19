@@ -2,6 +2,34 @@
 
 Newest first. Each entry says what changed, why, how it was verified, and what was left open.
 
+## 2026-11-18 — honest fallback scores (branch `fix/honest-fallback-scorer`)
+
+**What was wrong**
+- When the AI judge failed, `rubric-scorer.ts` scored most criteria as
+  `min(maxScore, totalChars / 500 * maxScore)`: 500 characters of anything earned full marks,
+  even with every named deliverable missing. A judge outage could rank scratch notes first.
+- The UI showed that number exactly like an AI-judged score.
+
+**What changed**
+- The fallback now scores completeness only. Each `brief.deliverables` entry that names a file
+  earns full credit when that file was handed in with substance, 0.2 when it is a placeholder
+  (under 40 non-whitespace characters), and nothing when it is missing. Extra files earn
+  nothing, and length beyond the placeholder check counts for nothing. When the brief names no
+  file, it only checks that something substantive was handed in.
+- Quality is never assessed, so heuristic scores are capped at 50% (`HEURISTIC_CEILING` in
+  `@arena/shared`). Execution-based `correctness` (with `expectedOutput`) is unchanged.
+- Fallback results carry `heuristic: true`. The match page shows a HEURISTIC tag and a banner
+  explaining the score, spectate shows the tag, and gallery cards mark it `73%*`.
+  `isHeuristicScore()` also recognises older results by their `automated` judge id.
+
+**Verified**: orchestrator (589) and shared (87) tests, all three typechecks, and the three UI
+views on a temporary heuristic-scored copy of a local match (since deleted).
+
+**Left open**: the cap means a team scored by the fallback cannot beat an AI-judged team on a
+good day. That is deliberate (an unjudged score should not outrank a judged one); Re-judge is
+the remedy. A deliverable entry that starts with a dotted word (`Node.js CLI`) is read as a
+file name.
+
 ## 2026-11-14 — live model catalog and honest agent failures (branch `feat/live-model-catalog`)
 
 The first real end-to-end run after #17 found that stale model ids broke Codex and Gemini, and

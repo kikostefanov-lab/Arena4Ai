@@ -214,7 +214,7 @@ zero score; branch on `agentFailure`.
 
 ### Judging pipeline
 1. **AI cross-judge** (`ai-judge.ts`) — PRIMARY scorer. Claude reads actual deliverables and scores against rubric criteria.
-2. **Automated scorer** (`rubric-scorer.ts`) — FALLBACK only, per-team when the AI judge fails. Executes deliverables (`.py`/`.js`/`.rb`/`.sh` via stdin, `.ts` via tsx temp file); 100KB input / 512KB stdout / 10s timeout limits. Heuristic scoring when no `expectedOutput`.
+2. **Automated scorer** (`rubric-scorer.ts`) — FALLBACK only, per-team when the AI judge fails. Executes deliverables (`.py`/`.js`/`.rb`/`.sh` via stdin, `.ts` via tsx temp file); 100KB input / 512KB stdout / 10s timeout limits. Otherwise it scores completeness only (named `brief.deliverables` present and not placeholders), capped at `HEURISTIC_CEILING` (50%), and sets `heuristic: true`; the UI labels those scores. Never treat length as quality there.
 3. **Aggregation** (`score-aggregator.ts`) — weighted average; tie-breaking within 0.005 tolerance. Only AI judge scores are aggregated when the AI judge succeeds.
 4. **Synthesis** (`merge-engine.ts`) — returns `SynthesisResult { synthesis: string, perCriterion[] }` with per-criterion winner attribution. On-demand only.
 

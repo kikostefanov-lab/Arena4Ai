@@ -9,6 +9,13 @@ export interface JudgeResult {
   teamId: string;
   scores: CriterionScore[];
   overallScore: number;   // weighted sum
+  /**
+   * Set by the automated fallback scorer (`rubric-scorer.ts`), which runs when
+   * the AI judge fails. It checks completeness against the brief's named
+   * deliverables and cannot assess quality, so its scores are capped. The UI
+   * labels these results; branch on this flag, never on the score values.
+   */
+  heuristic?: boolean;
 }
 
 export interface ScoreCard {
