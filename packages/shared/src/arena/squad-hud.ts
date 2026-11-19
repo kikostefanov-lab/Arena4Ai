@@ -3,6 +3,8 @@
  * package has no test runner) and the log and the arena say the same thing.
  */
 
+import type { TeamState, World } from './world.js';
+
 export interface SquadEventLine {
   icon: string;
   label: string;
@@ -25,4 +27,22 @@ export function describeSquadEvent(type: string, payload: unknown): SquadEventLi
   const status = str(p.status) || 'unknown';
   const text = [status, str(p.reason)].filter(Boolean).join(' · ');
   return { icon: status === 'completed' ? '✓' : '✗', label: 'SQUAD −', text };
+}
+
+/** A team's squad as the header chip shows it. `models` is the distinct models its members ran on. */
+export function squadSummary(team: TeamState): { active: number; spawned: number; failed: number; models: string[] } {
+  let active = 0;
+  const models = new Set<string>();
+  for (const m of team.squad.values()) {
+    if (m.status === 'running') active++;
+    if (m.model) models.add(m.model);
+  }
+  return { active, spawned: team.squadTotals.spawned, failed: team.squadTotals.failed, models: [...models] };
+}
+
+/** The brief's named deliverables, in brief order, each flagged when the team has written it. */
+export function deliveredList(world: World, teamId: string): Array<{ name: string; done: boolean }> {
+  const team = world.teams.get(teamId);
+  if (!team) return [];
+  return world.deliverables.map((name) => ({ name, done: team.delivered.has(name) }));
 }

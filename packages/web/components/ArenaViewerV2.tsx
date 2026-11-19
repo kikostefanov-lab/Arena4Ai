@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useEffect, useMemo, useState, useCallback } from 'react';
-import { IsoArenaRenderer, stepStructures, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
+import { useRef, useEffect, useMemo, useState, useCallback, Fragment } from 'react';
+import { IsoArenaRenderer, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
@@ -67,12 +67,25 @@ interface ArenaViewerV2Props {
    * changes. Falls back to the isometric canvas if WebGL is unavailable.
    */
   view3d?: boolean;
+  /**
+   * The brief's `deliverables` entries, raw. The world reduces them to file
+   * names and checks each off per team as a file event lands, which feeds the
+   * strip under every header.
+   */
+  deliverableNames?: string[];
 }
+
+interface SquadSummary { active: number; spawned: number; failed: number; models: string[] }
+interface DeliveredItem { name: string; done: boolean }
+interface MomentumShare { id: string; label: string; color: string; share: number }
+
+const NO_SQUAD: SquadSummary = { active: 0, spawned: 0, failed: 0, models: [] };
 
 // ── HUD subcomponents ───────────────────────────────────────────
 
-function LaneHeader({ team, color, align, latest }: {
+function LaneHeader({ team, color, align, latest, squad, delivered }: {
   team: Team; color: string; align: 'left' | 'right'; latest: string;
+  squad: SquadSummary; delivered: DeliveredItem[];
 }) {
   const rgb = hexToRgb(color);
   return (
@@ -101,15 +114,36 @@ function LaneHeader({ team, color, align, latest }: {
       }}>
         {latest || '—'}
       </div>
+      {squad.spawned > 0 && (
+        <div
+          title={squad.models.length ? `Squad models: ${squad.models.join(', ')}` : 'Squad'}
+          style={{
+            fontFamily: MONOSPACE_FONT, fontSize: 10, fontWeight: 700, letterSpacing: 1.5,
+            color: `rgba(${rgb},0.8)`, textTransform: 'uppercase',
+          }}
+        >
+          ◆ {squad.active} active · {squad.spawned} spawned{squad.failed > 0 ? ` · ${squad.failed} failed` : ''}
+        </div>
+      )}
+      {delivered.length > 0 && (
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '2px 10px',
+          justifyContent: align === 'right' ? 'flex-end' : 'flex-start',
+          fontFamily: MONOSPACE_FONT, fontSize: 10, letterSpacing: 0.5,
+        }}>
+          {delivered.map((d) => (
+            <span key={d.name} style={{ color: d.done ? color : '#4a8fa8', opacity: d.done ? 1 : 0.7 }}>
+              {d.done ? '✓' : '·'} {d.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function MomentumMeter({ momentum, teamA, teamB, colorA, colorB }: {
-  momentum: number; teamA: Team; teamB: Team; colorA: string; colorB: string;
-}) {
-  const rgbA = hexToRgb(colorA);
-  const rgbB = hexToRgb(colorB);
+function MomentumMeter({ shares }: { shares: MomentumShare[] }) {
+  const total = shares.reduce((n, x) => n + x.share, 0);
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 6,
@@ -120,33 +154,26 @@ function MomentumMeter({ momentum, teamA, teamB, colorA, colorB }: {
       fontFamily: BODY_FONT,
     }}>
       <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
         fontFamily: MONOSPACE_FONT, fontSize: 9, fontWeight: 800,
         letterSpacing: 2, textTransform: 'uppercase',
       }}>
-        <span style={{ color: colorA }}>◀ {teamA.model}</span>
+        <span style={{ color: shares[0].color }}>◀ {shares[0].label}</span>
         <span style={{ color: '#4a8fa8' }}>MOMENTUM · last 10s</span>
-        <span style={{ color: colorB }}>{teamB.model} ▶</span>
+        <span style={{ color: shares[shares.length - 1].color }}>{shares[shares.length - 1].label} ▶</span>
       </div>
       <div style={{
-        position: 'relative', height: 10,
+        position: 'relative', display: 'flex', height: 10,
         background: '#01060c', borderRadius: 2,
         border: '1px solid #0a2235', overflow: 'hidden',
       }}>
-        <div style={{
-          position: 'absolute', top: 0, bottom: 0,
-          left: momentum < 0 ? `${50 + momentum * 50}%` : '50%',
-          width: `${Math.abs(momentum) * 50}%`,
-          background: momentum < 0
-            ? `linear-gradient(90deg, ${colorA}, rgba(${rgbA},0.5))`
-            : `linear-gradient(90deg, rgba(${rgbB},0.5), ${colorB})`,
-          boxShadow: `0 0 12px ${momentum < 0 ? colorA : colorB}`,
-          transition: 'left 180ms ease, width 180ms ease',
-        }}/>
-        <div style={{
-          position: 'absolute', top: -2, bottom: -2, left: '50%',
-          width: 1, background: '#4a8fa8', opacity: 0.6,
-        }}/>
+        {total > 0 && shares.map((x) => (
+          <div key={x.id} title={`${x.label} ${Math.round(x.share * 100)}%`} style={{
+            width: `${x.share * 100}%`, height: '100%',
+            background: x.color, boxShadow: `0 0 12px ${x.color}`,
+            transition: 'width 180ms ease',
+          }}/>
+        ))}
       </div>
     </div>
   );
@@ -286,8 +313,13 @@ const HUD_INSETS = { top: 18, right: 24, bottom: 34, left: 24 };
 const SPEEDS = [1, 3, 8] as const;
 
 export default function ArenaViewerV2({
-  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables, view3d,
+  teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables, view3d, deliverableNames: deliverableNamesProp,
 }: ArenaViewerV2Props) {
+  // A re-fetched brief is a new array with the same entries; keep the identity
+  // stable so it does not rebuild the renderer.
+  const namesKey = (deliverableNamesProp ?? []).join('\n');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const deliverableNames = useMemo(() => deliverableNamesProp, [namesKey]);
   const [glFailed, setGlFailed] = useState(false);
   const use3d = !!view3d && !glFailed;
   const sceneRef = useRef<Arena3D | null>(null);
@@ -352,7 +384,9 @@ export default function ArenaViewerV2({
   /** End of stream the paused view is currently parked on. */
   const parkedAtRef = useRef<number | null>(null);
 
-  const [momentum, setMomentum] = useState(0);
+  const [shares, setShares] = useState<MomentumShare[]>([]);
+  const [squads, setSquads] = useState<Record<string, SquadSummary>>({});
+  const [delivered, setDelivered] = useState<Record<string, DeliveredItem[]>>({});
   const [latest, setLatest] = useState<Record<string, string>>({});
   const [orbit, setOrbit] = useState(true);
   const [playing, setPlaying] = useState(true);
@@ -387,6 +421,7 @@ export default function ArenaViewerV2({
       teams: specs,
       events: [],
       timeLimitMs,
+      deliverables: deliverableNames,
       reducedMotion:
         typeof window !== 'undefined' &&
         window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -396,7 +431,7 @@ export default function ArenaViewerV2({
     lastIdRef.current = null;
     originRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teamsKey, timeLimitMs]);
+  }, [teamsKey, timeLimitMs, deliverableNames]);
 
   // ── Track the box the arena has to live inside ────────────────
   useEffect(() => {
@@ -522,7 +557,7 @@ export default function ArenaViewerV2({
       // stalls at the first out-of-order timestamp.
       const all = loadFrames(events, origin);
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
-      const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
+      const replay = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
       replay.setWinner(winnerRef.current);
       /**
        * Open a FINISHED competition on its finished state, not on an empty floor.
@@ -555,7 +590,7 @@ export default function ArenaViewerV2({
       r.seek(0);
       rendererRef.current = null;
       const specs: TeamSpec[] = teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona }));
-      const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs });
+      const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
       rendererRef.current = rebuilt;
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
@@ -573,7 +608,7 @@ export default function ArenaViewerV2({
     r.appendEvents(fresh);
     consumedRef.current = events.length;
     lastIdRef.current = events[events.length - 1]?.eventId ?? null;
-  }, [events, teams, timeLimitMs, isLive, loadFrames]);
+  }, [events, teams, timeLimitMs, isLive, loadFrames, deliverableNames]);
 
   // ── Winner / terminal poses ───────────────────────────────────
   useEffect(() => {
@@ -658,17 +693,18 @@ export default function ArenaViewerV2({
             const next: Record<string, string> = {};
             for (const team of r.world.teams.values()) next[team.id] = team.latest;
             setLatest(next);
-            if (teams.length === 2) {
-              const now = r.world.t;
-              let a = 0;
-              let b = 0;
-              for (const rec of r.world.recent) {
-                if (now - rec.t >= 10_000) continue;
-                if (rec.teamId === teams[0].id) a++;
-                else if (rec.teamId === teams[1].id) b++;
-              }
-              setMomentum(a + b === 0 ? 0 : (b - a) / (a + b));
+            const nextSquads: Record<string, SquadSummary> = {};
+            const nextDelivered: Record<string, DeliveredItem[]> = {};
+            for (const team of r.world.teams.values()) {
+              nextSquads[team.id] = squadSummary(team);
+              nextDelivered[team.id] = deliveredList(r.world, team.id);
             }
+            setSquads(nextSquads);
+            setDelivered(nextDelivered);
+            const share = momentumShares(r.world);
+            setShares(teams.map((t) => ({
+              id: t.id, label: t.model, color: teamColors[t.id], share: share.get(t.id) ?? 0,
+            })));
           }
         }
       }
@@ -676,24 +712,35 @@ export default function ArenaViewerV2({
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams, use3d]);
+  }, [ingest, isLive, elapsedMs, playing, speed, orbit, phase, teams, teamColors, use3d]);
 
   const notes = rendererRef.current?.honestyNotes ?? [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
-      {teams.length === 2 && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'start', gap: 12 }}>
-          <LaneHeader
-            team={teams[0]} color={teamColors[teams[0].id]} align="left"
-            latest={latest[teams[0].id] ?? ''}
-          />
-          <PhaseChip phase={phase} />
-          <LaneHeader
-            team={teams[1]} color={teamColors[teams[1].id]} align="right"
-            latest={latest[teams[1].id] ?? ''}
-          />
-        </div>
+      {teams.length >= 2 && (
+        <>
+          {teams.length > 2 && (
+            <div style={{ position: 'relative', height: 30 }}><PhaseChip phase={phase} /></div>
+          )}
+          <div style={{
+            display: 'grid', alignItems: 'start', gap: 12,
+            gridTemplateColumns: teams.length === 2 ? '1fr auto 1fr' : `repeat(${teams.length}, 1fr)`,
+          }}>
+            {teams.map((t, i) => (
+              <Fragment key={t.id}>
+                {teams.length === 2 && i === 1 && <PhaseChip phase={phase} />}
+                <LaneHeader
+                  team={t} color={teamColors[t.id]}
+                  align={teams.length === 2 ? (i === 0 ? 'left' : 'right') : 'left'}
+                  latest={latest[t.id] ?? ''}
+                  squad={squads[t.id] ?? NO_SQUAD}
+                  delivered={delivered[t.id] ?? []}
+                />
+              </Fragment>
+            ))}
+          </div>
+        </>
       )}
 
       <div ref={boxRef} style={{ position: 'relative', width: '100%', flex: 1, minHeight: 240 }}>
@@ -754,13 +801,7 @@ export default function ArenaViewerV2({
         ))}
       </div>
 
-      {teams.length === 2 && (
-        <MomentumMeter
-          momentum={momentum}
-          teamA={teams[0]} teamB={teams[1]}
-          colorA={teamColors[teams[0].id]} colorB={teamColors[teams[1].id]}
-        />
-      )}
+      {teams.length >= 2 && shares.length === teams.length && <MomentumMeter shares={shares} />}
 
       {/* Controls. Transport only once the history exists to scrub. */}
       <div style={{

@@ -3084,6 +3084,7 @@ export default function CompetitionPage() {
               scores={result?.teams?.map((t) => ({ teamId: t.teamId, finalScore: t.totalScore })) ?? undefined}
               winnerId={result?.winnerId ?? undefined}
               deliverables={result?.deliverables ?? undefined}
+              deliverableNames={brief?.deliverables}
               view3d={effectiveView === '3d'}
             />
           </div>
