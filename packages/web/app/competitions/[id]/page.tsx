@@ -706,6 +706,19 @@ function ScoreDrawer({
    */
   const teamColor = (teamId: string): string => getModelColor(teams.find((t) => t.id === teamId)?.model ?? '');
 
+  /**
+   * A short chip naming a team: its provider ("CODEX"), or its whole display
+   * name when another team in the match shares that provider, since colour and
+   * provider alone cannot tell claude:architect from claude:speedrunner.
+   */
+  const providerOf = (model: string): string => model.split(':')[0].toLowerCase();
+  const teamChip = (teamId: string, label: string): string => {
+    const own = teams.find((t) => t.id === teamId);
+    const provider = own ? providerOf(own.model) : providerOf(label);
+    const shared = teams.filter((t) => providerOf(t.model) === provider).length > 1;
+    return (shared ? label : label.split(':')[0]).toUpperCase();
+  };
+
   const teamDisplays = result.teams.map((tr, i) => ({
     result: tr,
     label: resolveTeamLabel(teams, tr.teamId, `Team ${i + 1}`),
@@ -1159,7 +1172,7 @@ function ScoreDrawer({
                               background: `rgba(${hexToRgb(winnerForCrit.color)},0.12)`,
                               border: `1px solid rgba(${hexToRgb(winnerForCrit.color)},0.3)`,
                             }}>
-                              {winnerForCrit.label.split(':')[0].toUpperCase()}
+                              {teamChip(winnerForCrit.result.teamId, winnerForCrit.label)}
                             </span>
                           </div>
                         </div>
@@ -1618,7 +1631,7 @@ function ScoreDrawer({
                       {/* Criterion rows */}
                       {(result.synthesis.perCriterion ?? []).map((entry) => {
                         const winnerTeam = teams.find(t => t.id === entry.teamId);
-                        const teamColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
+                        const winnerColor = winnerTeam ? getModelColor(winnerTeam.model) : '#4a8fa8';
                         const wLabel = resolveTeamLabel(teams, entry.teamId, entry.teamId);
                         const isOpen = selectedSynthCriterionId === entry.criterionId;
 
@@ -1643,9 +1656,9 @@ function ScoreDrawer({
                               <div style={{ textAlign: 'center' }}>
                                 <span style={{
                                   fontSize: '0.62rem', fontWeight: 800, padding: '0.12rem 0.4rem', borderRadius: '3px',
-                                  color: teamColor, background: `rgba(${hexToRgb(teamColor)},0.12)`,
+                                  color: winnerColor, background: `rgba(${hexToRgb(winnerColor)},0.12)`,
                                 }}>
-                                  {wLabel.split(':')[0].toUpperCase()}
+                                  {teamChip(entry.teamId, wLabel)}
                                 </span>
                               </div>
                             </div>

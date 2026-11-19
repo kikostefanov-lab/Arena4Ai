@@ -721,6 +721,9 @@ function CompareTab() {
     else setData(null);
   }, [modelA, modelB, fetchCompare]);
 
+  /** The picker label for a server key: the server answers in keys, which can be doubled. */
+  const labelOf = (key: string): string => availableModels.find((m) => m.key === key)?.label ?? key;
+
   const colorA = modelA ? getModelColor(modelA) : '#7cc6db';
   const colorB = modelB ? getModelColor(modelB) : '#7cc6db';
 
@@ -827,7 +830,7 @@ function CompareTab() {
             }}>
               <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>{'\u{1F4ED}'}</div>
               <p style={{ color: '#3d7d94', fontSize: BODY_FONT_SIZE, fontFamily: BODY_FONT, marginBottom: '1.25rem' }}>
-                No completed head-to-head matches between <span style={{ color: colorA }}>{modelA}</span> and <span style={{ color: colorB }}>{modelB}</span> yet.
+                No completed head-to-head matches between <span style={{ color: colorA }}>{labelOf(modelA)}</span> and <span style={{ color: colorB }}>{labelOf(modelB)}</span> yet.
               </p>
               <Link href="/competitions/new" style={{
                 fontSize: '0.65rem', fontWeight: 700, padding: '0.5rem 1.25rem',
@@ -846,7 +849,7 @@ function CompareTab() {
                 display: 'grid', gridTemplateColumns: '1fr auto 1fr', gap: '1.5rem', alignItems: 'center',
               }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.6rem', color: colorA, textTransform: 'uppercase', letterSpacing: '3px', fontWeight: 700, marginBottom: '0.5rem' }}>{data.modelA.key}</div>
+                  <div style={{ fontSize: '0.6rem', color: colorA, textTransform: 'uppercase', letterSpacing: '3px', fontWeight: 700, marginBottom: '0.5rem' }}>{labelOf(data.modelA.key)}</div>
                   <div style={{ fontSize: '3rem', fontWeight: 900, color: colorA, lineHeight: 1 }}>{data.modelA.wins}{'\u2013'}{data.modelA.losses}{'\u2013'}{data.modelA.draws}</div>
                   <div style={{ fontSize: '0.52rem', color: '#3d7d94', marginTop: '0.4rem', letterSpacing: '1.5px' }}>W {'\u2013'} L {'\u2013'} D</div>
                 </div>
@@ -855,7 +858,7 @@ function CompareTab() {
                   <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>VS</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: '0.6rem', color: colorB, textTransform: 'uppercase', letterSpacing: '3px', fontWeight: 700, marginBottom: '0.5rem' }}>{data.modelB.key}</div>
+                  <div style={{ fontSize: '0.6rem', color: colorB, textTransform: 'uppercase', letterSpacing: '3px', fontWeight: 700, marginBottom: '0.5rem' }}>{labelOf(data.modelB.key)}</div>
                   <div style={{ fontSize: '3rem', fontWeight: 900, color: colorB, lineHeight: 1 }}>{data.modelB.wins}{'\u2013'}{data.modelB.losses}{'\u2013'}{data.modelB.draws}</div>
                   <div style={{ fontSize: '0.52rem', color: '#3d7d94', marginTop: '0.4rem', letterSpacing: '1.5px' }}>W {'\u2013'} L {'\u2013'} D</div>
                 </div>
@@ -868,11 +871,11 @@ function CompareTab() {
                     Avg Score Comparison
                   </div>
                   {[
-                    { key: data.modelA.key, score: data.modelA.avgScore, color: colorA },
-                    { key: data.modelB.key, score: data.modelB.avgScore, color: colorB },
-                  ].map(({ key, score, color }) => (
+                    { key: data.modelA.key, label: labelOf(data.modelA.key), score: data.modelA.avgScore, color: colorA },
+                    { key: data.modelB.key, label: labelOf(data.modelB.key), score: data.modelB.avgScore, color: colorB },
+                  ].map(({ key, label, score, color }) => (
                     <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', marginBottom: '0.65rem' }}>
-                      <span style={{ fontSize: '0.62rem', color, fontWeight: 700, minWidth: '140px', textAlign: 'right' }}>{key}</span>
+                      <span style={{ fontSize: '0.62rem', color, fontWeight: 700, minWidth: '140px', textAlign: 'right' }}>{label}</span>
                       <ScoreBar value={score ?? 0} max={maxAvgScore} color={color} />
                       <span style={{ fontSize: '0.72rem', fontWeight: 800, color, minWidth: '3.5rem', textAlign: 'right' }}>
                         {score !== null ? `${(score * 100).toFixed(1)}%` : '\u2014'}
@@ -900,7 +903,7 @@ function CompareTab() {
                       {'\u{1F4DC}'} Recent Matches
                     </span>
                     <span style={{ fontSize: '0.5rem', color: '#0e3050', letterSpacing: '1px' }}>
-                      {data.modelA.key} score / {data.modelB.key} score
+                      {labelOf(data.modelA.key)} score / {labelOf(data.modelB.key)} score
                     </span>
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem' }}>
@@ -909,11 +912,11 @@ function CompareTab() {
                         {[
                           { label: 'Brief', align: 'left' },
                           { label: 'Winner', align: 'left' },
-                          { label: data.modelA.key, align: 'right' },
-                          { label: data.modelB.key, align: 'right' },
+                          { label: labelOf(data.modelA.key), align: 'right' },
+                          { label: labelOf(data.modelB.key), align: 'right' },
                           { label: 'Date', align: 'right' },
-                        ].map(({ label, align }) => (
-                          <th key={label} style={{
+                        ].map(({ label, align }, col) => (
+                          <th key={col} style={{
                             padding: '0.55rem 1rem', textAlign: align as React.CSSProperties['textAlign'],
                             fontSize: '0.5rem', color: '#0e3050', textTransform: 'uppercase', letterSpacing: '1.5px', fontWeight: 700,
                           }}>
