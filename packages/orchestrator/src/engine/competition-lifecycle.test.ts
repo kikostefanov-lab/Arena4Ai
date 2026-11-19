@@ -5,7 +5,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { CompetitionState, CompetitionFormat } from '@arena/shared';
+import { CompetitionState, CompetitionFormat, EventType } from '@arena/shared';
+import type { ArenaEvent } from '@arena/shared';
 import type { Brief, Deliverable } from '@arena/shared';
 
 vi.mock('node:fs/promises', () => ({ mkdtemp: vi.fn().mockResolvedValue('/tmp/arena-test-workdir') }));
@@ -78,7 +79,7 @@ vi.mock('../adapters/claude/claude-adapter.js', () => ({
 vi.mock('../adapters/codex/codex-adapter.js', () => ({ CodexAdapter: vi.fn() }));
 vi.mock('../adapters/gemini/gemini-adapter.js', () => ({ GeminiAdapter: vi.fn() }));
 
-import { CompetitionRunner } from './competition-runner.js';
+import { CompetitionRunner, JUDGE_RATE_LIMIT_RETRY_DELAY_MS } from './competition-runner.js';
 import { aiJudge } from '../judging/ai-judge.js';
 import { generateAllPresentations } from '../presentation/presentation-generator.js';
 import { scoreDeliverable } from '../judging/rubric-scorer.js';
@@ -235,6 +236,45 @@ describe('judge retry', () => {
     const { aggregate } = await import('../judging/score-aggregator.js');
     const judged = vi.mocked(aggregate).mock.calls.at(-1)![0] as Array<{ judgeId: string }>;
     expect(judged.every((r) => r.judgeId === 'ai-claude')).toBe(true);
+  });
+
+  it('a recovered first failure is still reported, as a recovered judging ERROR', async () => {
+    const calls = new Map<string, number>();
+    vi.mocked(aiJudge).mockImplementation((async (_b: unknown, d: { teamId: string }) => {
+      const n = (calls.get(d.teamId) ?? 0) + 1;
+      calls.set(d.teamId, n);
+      return n === 1 && d.teamId === 'team-a' ? failed(d, 'bad-output') : ok(d);
+    }) as never);
+    const { runner } = makeRunner();
+    const events: ArenaEvent[] = [];
+    runner.on('arenaEvent', (e: ArenaEvent) => events.push(e));
+    await runner.run();
+    const judging = events.filter((e) => e.type === EventType.ERROR && (e.payload as { stage?: string }).stage === 'judging');
+    expect(judging).toHaveLength(1);
+    expect(judging[0]!.teamId).toBe('team-a');
+    expect(judging[0]!.payload).toMatchObject({ recovered: true, kind: 'bad-output', judgeId: 'ai-claude' });
+  });
+
+  it('waits before retrying a rate-limited judge', async () => {
+    // The 15 s wait is shortened to 0 here; what is checked is that it is asked for.
+    const realSetTimeout = globalThis.setTimeout;
+    const timers = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number) =>
+      realSetTimeout(fn, ms === JUDGE_RATE_LIMIT_RETRY_DELAY_MS ? 0 : ms)) as typeof setTimeout);
+    try {
+      const calls = new Map<string, number>();
+      vi.mocked(aiJudge).mockImplementation((async (_b: unknown, d: { teamId: string }) => {
+        const n = (calls.get(d.teamId) ?? 0) + 1;
+        calls.set(d.teamId, n);
+        return n === 1 && d.teamId === 'team-a' ? failed(d, 'rate-limit') : ok(d);
+      }) as never);
+      const { runner } = makeRunner();
+      await runner.run();
+      expect(calls.get('team-a')).toBe(2);
+      expect(timers.mock.calls.some((c) => c[1] === JUDGE_RATE_LIMIT_RETRY_DELAY_MS)).toBe(true);
+      expect(JUDGE_RATE_LIMIT_RETRY_DELAY_MS).toBe(15_000);
+    } finally {
+      timers.mockRestore();
+    }
   });
 
   it('does not retry an auth failure and falls back to the automated scorer', async () => {

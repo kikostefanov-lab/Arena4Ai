@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { CodexJsonNormalizer } from './codex-json-normalizer.js';
 import { codexIsolationArgs, competitorEnv } from '../isolation.js';
@@ -107,7 +108,15 @@ export class CodexAdapter extends BaseAdapter {
       // JSONL events arrive on stdout; stderr is progress chatter, kept only for crash summaries.
       const outRl = createInterface({ input: child.stdout! });
       outRl.on('line', (line) => {
-        for (const event of normalizer.addLine(line)) this.emitArenaEvent(event);
+        for (const event of this.normalizeSafely(line, (l) => normalizer.addLine(l))) {
+          // With --json, codex reports why a run died on stdout (`error`,
+          // `turn.failed`), not stderr; keep it so the crash summary names it.
+          if (event.type === EventType.ERROR) {
+            const error = (event.payload as { error?: unknown }).error;
+            if (typeof error === 'string') this.noteStderr(`ERROR: ${error}`);
+          }
+          this.emitArenaEvent(event);
+        }
       });
       const errRl = createInterface({ input: child.stderr! });
       errRl.on('line', (line) => this.noteStderr(line));

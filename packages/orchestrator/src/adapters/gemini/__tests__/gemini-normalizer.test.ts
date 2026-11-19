@@ -213,3 +213,11 @@ describe('gemini stream-json file events', () => {
     expect((ev.payload as Record<string, unknown>).opSource).toBe('verb');
   });
 });
+
+describe('gemini malformed stream lines', () => {
+  it('a non-string tool_id or file path does not throw', () => {
+    expect(() => normalizeLine('{"type":"tool_result","tool_id":42,"status":"success","output":"ok"}', BASE)).not.toThrow();
+    const ev = normalizeLine('{"type":"tool_use","tool_name":"write_file","tool_id":7,"parameters":{"file_path":9}}', BASE);
+    expect(ev.type).toBe(EventType.FILE_CREATE);
+  });
+});

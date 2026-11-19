@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { EventType, type ArenaEvent } from '@arena/shared';
-import { CodexJsonNormalizer } from '../codex-json-normalizer.js';
+import { CodexJsonNormalizer, codexSubAgentStatus } from '../codex-json-normalizer.js';
 import { codexArgs } from '../codex-adapter.js';
 import { loadFixture } from '../../__fixtures__/load.js';
 
@@ -87,6 +87,78 @@ describe('CodexJsonNormalizer', () => {
     const n = new CodexJsonNormalizer(BASE);
     const evs = n.addLine('{"type":"item.completed","item":{"id":"e","type":"error","message":"boom"}}');
     expect(evs[0].type).toBe(EventType.ERROR);
+  });
+});
+
+describe('CodexJsonNormalizer failures and edge cases', () => {
+  const line = (o: unknown) => JSON.stringify(o);
+
+  it('a top-level error line becomes an ERROR event with the message', () => {
+    const n = new CodexJsonNormalizer(BASE);
+    const evs = n.addLine(line({ type: 'error', message: 'stream disconnected: model not found' }));
+    expect(evs).toHaveLength(1);
+    expect(evs[0].type).toBe(EventType.ERROR);
+    expect(p(evs[0]).error).toBe('stream disconnected: model not found');
+  });
+
+  it('turn.failed becomes an ERROR event reading error.message', () => {
+    const n = new CodexJsonNormalizer(BASE);
+    const evs = n.addLine(line({ type: 'turn.failed', error: { message: 'usage limit reached' } }));
+    expect(evs.map((e) => e.type)).toEqual([EventType.ERROR]);
+    expect(p(evs[0]).error).toBe('usage limit reached');
+  });
+
+  it('error items accept message or error.message', () => {
+    const n = new CodexJsonNormalizer(BASE);
+    const a = n.addLine(line({ type: 'item.completed', item: { type: 'error', message: 'boom' } }));
+    const b = n.addLine(line({ type: 'item.completed', item: { type: 'error', error: { message: 'bang' } } }));
+    expect(p(a[0]).error).toBe('boom');
+    expect(p(b[0]).error).toBe('bang');
+  });
+
+  it('maps codex sub-agent states: only error-like states fail', () => {
+    expect(codexSubAgentStatus('completed')).toBe('completed');
+    for (const s of ['errored', 'failed', 'error']) expect(codexSubAgentStatus(s)).toBe('failed');
+    for (const s of ['shutdown', 'interrupted', 'closed', 'cancelled', 'canceled']) expect(codexSubAgentStatus(s)).toBe('killed');
+    for (const s of ['not_found', '', 'mystery']) expect(codexSubAgentStatus(s)).toBe('unknown');
+  });
+
+  const spawn = (id: string) => line({
+    type: 'item.completed',
+    item: { type: 'collab_tool_call', tool: 'spawn_agent', receiver_thread_ids: [id], prompt: 'write a.txt', status: 'completed' },
+  });
+
+  it('a wait reporting shutdown is killed, not failed', () => {
+    const n = new CodexJsonNormalizer(BASE);
+    n.addLine(spawn('k1'));
+    const evs = n.addLine(line({
+      type: 'item.completed',
+      item: { type: 'collab_tool_call', tool: 'wait', receiver_thread_ids: ['k1'], agents_states: { k1: { status: 'shutdown' } }, status: 'completed' },
+    }));
+    expect(evs.map((e) => [e.type, p(e).status])).toEqual([[EventType.SUB_AGENT_DONE, 'killed']]);
+  });
+
+  it('a lead closing a still-running helper shows it killed, not failed', () => {
+    const n = new CodexJsonNormalizer(BASE);
+    n.addLine(spawn('r1'));
+    n.addLine(spawn('r2'));
+    const evs = n.addLine(line({
+      type: 'item.completed',
+      item: {
+        type: 'collab_tool_call', tool: 'close_agent', receiver_thread_ids: ['r1', 'r2'],
+        agents_states: { r1: { status: 'running' } }, status: 'completed',
+      },
+    }));
+    expect(evs.map((e) => [p(e).agentId, p(e).status])).toEqual([['r1', 'killed'], ['r2', 'killed']]);
+  });
+
+  it('file_change: a delete emits nothing and a null change is skipped, not thrown', () => {
+    const n = new CodexJsonNormalizer(BASE);
+    const evs = n.addLine(line({
+      type: 'item.completed',
+      item: { type: 'file_change', changes: [null, { path: '/tmp/arena-t-x/gone.txt', kind: 'delete' }, { path: '/tmp/arena-t-x/new.txt', kind: 'add' }] },
+    }));
+    expect(evs.map((e) => [e.type, p(e).path])).toEqual([[EventType.FILE_CREATE, 'new.txt']]);
   });
 });
 

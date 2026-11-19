@@ -220,6 +220,15 @@ describe('BaseAdapter.collectDeliverables named-first collection', () => {
     expect(d.files[0].path).toBe('docs/zz-report.md');
   });
 
+  it('puts the top-level file ahead of a nested basename match for a bare name', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'docs'));
+    await writeFile(join(dir, 'docs', 'report.md'), 'draft'); // sorts first by path
+    await writeFile(join(dir, 'report.md'), 'final');
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables(['report.md']);
+    expect(d.files.map((f) => f.path).slice(0, 2)).toEqual(['report.md', 'docs/report.md']);
+  });
+
   it('skips node_modules and .git, reporting only the vendored directory', async () => {
     dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
     await mkdir(join(dir, 'node_modules', 'pkg'), { recursive: true });

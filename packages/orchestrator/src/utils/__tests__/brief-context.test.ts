@@ -188,6 +188,13 @@ describe('truncateFiles', () => {
     expect(truncateFiles(files, 8000, 50000, ['decision.md']).startsWith('### docs/decision.md')).toBe(true);
   });
 
+  it('puts the exact top-level path ahead of a nested basename match', () => {
+    const files = [{ path: 'docs/decision.md', content: 'draft' }, { path: 'decision.md', content: 'final' }];
+    const result = truncateFiles(files, 8000, 50000, ['decision.md']);
+    expect(result.startsWith('### decision.md')).toBe(true);
+    expect(result.indexOf('### decision.md')).toBeLessThan(result.indexOf('### docs/decision.md'));
+  });
+
   it('reports omissions and missing named files', () => {
     const files = [
       { path: 'a.md', content: 'a'.repeat(100) },

@@ -57,8 +57,10 @@ export function summarizeAgentError(lines: string[]): string | undefined {
     if (m) return fromJson(m[1]!).trim();
   }
   // Nothing labelled as an error (gemini's "not running in a trusted directory"
-  // isn't): a CLI that exits non-zero usually says why on its last line.
-  return lines.at(-1);
+  // isn't): a CLI that exits non-zero usually says why on its last line. Arena's
+  // own notes (`[arena] …`) are context, not the CLI's reason.
+  const own = lines.filter((l) => !l.startsWith('[arena]'));
+  return own.at(-1);
 }
 
 /** Default time an agent gets to exit after SIGTERM before it is SIGKILLed. */
@@ -129,11 +131,20 @@ async function walkDir(
   return results;
 }
 
-/** Index of the first named deliverable `path` satisfies: exact path, or basename when the name has no `/`. */
-function namedRank(path: string, names: string[]): number {
+/**
+ * Sort rank of `path` among the named deliverables (lower first, -1 for none):
+ * the first name it satisfies, by exact path or by basename when the name has
+ * no `/`, with the exact path ahead of a basename match for the same name.
+ */
+export function namedRank(path: string, names: string[]): number {
   const lower = path.toLowerCase();
   const base = lower.split('/').pop()!;
-  return names.findIndex((n) => (n.includes('/') ? lower === n : base === n));
+  const i = names.findIndex((n) => (n.includes('/') ? lower === n : base === n));
+  if (i < 0) return -1;
+  // Within one name, the exact path outranks a nested basename match: for a
+  // bare `report.md`, the top-level file is the deliverable, `docs/report.md`
+  // only a stand-in (and it sorts first alphabetically, so it must lose here).
+  return i * 2 + (lower === names[i] ? 0 : 1);
 }
 
 /**
@@ -325,6 +336,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     const child = this.process;
     if (!child) {
       liveAdapters.delete(this);
+      this.finalWatchFlush();
       this.closeOpenSubAgents('killed', 'deadline');
       this.sealed = true;
       return;
@@ -353,8 +365,20 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     this.signalProcess(child, 'SIGKILL', true);
     this.process = null;
     liveAdapters.delete(this);
+    this.finalWatchFlush();
     this.closeOpenSubAgents('killed', 'deadline');
     this.sealed = true;
+  }
+
+  /**
+   * One last watcher scan once the agent is gone and before collection, so
+   * files sub-agents wrote in the final seconds still appear. Runs before the
+   * squad is closed, so those files keep their squad tag. Once only.
+   */
+  private finalWatchFlush(): void {
+    const watcher = this.watcher;
+    this.watcher = null;
+    watcher?.finalFlush();
   }
 
   /** Signal the process group when we own one (`detached` spawn), else just the child. */
@@ -378,6 +402,22 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
     if (!clean) return;
     this.stderrTail.push(clean);
     if (this.stderrTail.length > STDERR_TAIL_LINES) this.stderrTail.shift();
+  }
+
+  /**
+   * Run one output line through a normalizer. A normalizer bug must cost that
+   * line, not the server: a throw out of a readline 'line' handler is an
+   * uncaught exception that takes the whole orchestrator down mid-match.
+   */
+  protected normalizeSafely(line: string, normalize: (line: string) => ArenaEvent | ArenaEvent[]): ArenaEvent[] {
+    try {
+      const out = normalize(line);
+      return Array.isArray(out) ? out : [out];
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.noteStderr(`[arena] skipped an output line the normalizer could not read (${reason.slice(0, 120)})`);
+      return [];
+    }
   }
 
   /**
@@ -446,6 +486,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
    * straight to disk). Call right after spawning; shutdown() stops it.
    */
   protected startWorkdirWatch(): void {
+    if (this.sealed || this.stopping) return;
     this.watcher?.stop();
     this.watcher = new WorkdirWatcher({ root: this.workdir, onFile: (f) => this.onWatchedFile(f) });
     this.watcher.start();

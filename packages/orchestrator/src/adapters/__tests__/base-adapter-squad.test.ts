@@ -101,6 +101,18 @@ describe('squadLabel', () => {
     expect(squadLabel('Fix bug')).toBe('Fix bug');
     expect(squadLabel('  ')).toBe('sub-agent');
   });
+  it('skips leading filler so the label reads like the task', () => {
+    expect(squadLabel("In the current working directory, create a.txt containing 'a'.")).toBe('create a.txt…');
+    expect(squadLabel('Please write the README')).toBe('write the README');
+    expect(squadLabel('You are a research helper. Summarise kegs.md')).toBe('Summarise kegs.md');
+    expect(squadLabel('Your task is to fix the parser')).toBe('fix the parser');
+    expect(squadLabel('Please, in the current directory, add tests')).toBe('add tests');
+    expect(squadLabel('Write a file named a.txt')).toBe('Write a file…'); // the task verb stays
+    expect(squadLabel('Please')).toBe('Please'); // nothing left: keep the original
+    for (const t of ['In the current working directory, create a.txt containing a', 'Your task is to write pricing-tiers.md']) {
+      expect(squadLabel(t).length).toBeLessThanOrEqual(18);
+    }
+  });
 });
 
 describe('[SQUAD] prompt', () => {

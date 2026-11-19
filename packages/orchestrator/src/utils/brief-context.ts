@@ -71,8 +71,13 @@ export function truncateFiles(
   const ordered: Array<{ path: string; content: string }> = [];
   const missing: string[] = [];
   const seen = new Set<string>();
+  const exact = (path: string, name: string): boolean =>
+    path.replace(/^\.?\//, '').toLowerCase() === name.replace(/^\.?\//, '').toLowerCase();
   for (const name of priority) {
-    const hits = files.filter((f) => !seen.has(f.path) && matches(f.path, name));
+    // The exact path first, then nested basename matches, as collection ranks them.
+    const hits = files
+      .filter((f) => !seen.has(f.path) && matches(f.path, name))
+      .sort((a, b) => Number(!exact(a.path, name)) - Number(!exact(b.path, name)));
     if (!files.some((f) => matches(f.path, name))) missing.push(name);
     for (const h of hits) { seen.add(h.path); ordered.push(h); }
   }

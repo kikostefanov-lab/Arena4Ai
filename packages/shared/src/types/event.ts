@@ -50,12 +50,40 @@ export interface SubAgentSpawnPayload {
 const SQUAD_LABEL_MAX = 18;
 
 /**
+ * Leading boilerplate a lead's prompt to a sub-agent opens with, which says
+ * nothing about the task. "Write …", "Create …" and the like are the task and
+ * are kept.
+ */
+const LABEL_FILLER: readonly RegExp[] = [
+  /^in (?:the )?(?:current )?(?:working )?(?:directory|folder|workdir|repo(?:sitory)?)\b[^,:;]*[,:;]\s*/i,
+  /^please\b[,\s]*/i,
+  /^you are [^.!?]*[.!?]\s+/i, // a whole "You are a helper." sentence, when more follows
+  /^you are\s+(?:to\s+)?/i,
+  /^your (?:task|job|goal|assignment) is\s+(?:to\s+)?/i,
+];
+
+/** The description with leading filler removed, or as given when nothing would be left. */
+function stripLabelFiller(text: string): string {
+  let out = text;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const re of LABEL_FILLER) {
+      const next = out.replace(re, '');
+      if (next !== out && next.trim()) { out = next; changed = true; }
+    }
+  }
+  return out;
+}
+
+/**
  * Short chip label for a sub-agent: the first words of its description, at most
- * 18 chars. Shared so the normalizers and the arena's read-time upgrade of
- * stored Claude matches label a sub-agent identically.
+ * 18 chars, after leading filler ("In the current working directory,",
+ * "Please", "You are …", "Your task is to") so it reads like the task. Shared so
+ * the normalizers and the arena's read-time upgrade of stored Claude matches
+ * label a sub-agent identically.
  */
 export function squadLabel(text: string): string {
-  const clean = text.replace(/\s+/g, ' ').trim();
+  const clean = stripLabelFiller(text.replace(/\s+/g, ' ').trim());
   if (!clean) return 'sub-agent';
   if (clean.length <= SQUAD_LABEL_MAX) return clean;
   const cut = clean.slice(0, SQUAD_LABEL_MAX - 1);

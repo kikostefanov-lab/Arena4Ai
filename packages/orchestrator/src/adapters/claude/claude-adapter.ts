@@ -113,7 +113,7 @@ export class ClaudeAdapter extends BaseAdapter {
       const rl = createInterface({ input: child.stdout! });
       rl.on('line', (line) => {
         if (!line.trim()) return;
-        for (const event of normalizer.addLine(line)) this.emitArenaEvent(event);
+        for (const event of this.normalizeSafely(line, (l) => normalizer.addLine(l))) this.emitArenaEvent(event);
         // Claude reports API failures (unknown model, auth, rate limit) as
         // stream-json on stdout; keep them so a crash can be explained.
         const failure = claudeStreamError(line);
@@ -125,11 +125,11 @@ export class ClaudeAdapter extends BaseAdapter {
       errRl.on('line', (line) => {
         if (!line.trim()) return;
         this.noteStderr(line);
-        const event = normalizeLine(
+        const events = this.normalizeSafely(
           JSON.stringify({ type: 'error', error: { message: line } }),
-          ctx,
+          (l) => normalizeLine(l, ctx),
         );
-        this.emitArenaEvent(event);
+        for (const event of events) this.emitArenaEvent(event);
       });
 
       child.on('close', (code) => {

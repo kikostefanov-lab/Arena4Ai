@@ -98,6 +98,9 @@ const WALL_CLOCK_FACTOR = 1.5;
 /** Judge failures worth one more try; auth, a missing CLI or a retired model will not fix themselves. */
 const RETRYABLE_JUDGE_FAILURES = new Set<string>(['timeout', 'rate-limit', 'cli-error', 'bad-output']);
 
+/** A rate-limited judge waits this long before its one retry: an instant retry hits the same limit. */
+export const JUDGE_RATE_LIMIT_RETRY_DELAY_MS = 15_000;
+
 /**
  * Orchestrates the full competition lifecycle:
  *
@@ -544,7 +547,31 @@ export class CompetitionRunner extends EventEmitter {
         if (!first.failure || !RETRYABLE_JUDGE_FAILURES.has(first.failure.kind)) return first;
         this.assertNotCancelled();
         console.error(`[arena] AI judge ${judgeId} failed for ${d.teamId} (${first.failure.kind}) — retrying once.`);
-        return run();
+        if (first.failure.kind === 'rate-limit') {
+          await new Promise((r) => setTimeout(r, JUDGE_RATE_LIMIT_RETRY_DELAY_MS));
+          this.assertNotCancelled();
+        }
+        const second = await run();
+        if (!second.failure) {
+          // The retry saved it, but a flaky judge is still worth seeing in the log.
+          forwardEvent({
+            eventId: randomUUID(),
+            competitionId: this.competition.id,
+            teamId: d.teamId,
+            timestamp: new Date().toISOString(),
+            type: EventType.ERROR,
+            payload: {
+              stage: 'judging',
+              recovered: true,
+              judgeId,
+              model: first.model,
+              kind: first.failure.kind,
+              message: `${first.failure.message} (recovered on retry)`,
+            },
+            metadata: {},
+          });
+        }
+        return second;
       };
       const aiJudgePromises: Promise<AiJudgeResult>[] = deliverables.map((d) => judgeOnce(d, JUDGE_IDS.aiClaude));
 

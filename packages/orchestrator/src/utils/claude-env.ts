@@ -77,9 +77,28 @@ const PROVIDER_PREFIXES: Record<SandboxProvider, readonly string[]> = {
  *     bearer tokens for a local bridge. Precisely what a sandbox exists to
  *     keep away from model-written code.
  */
+/**
+ * Handles to the operator's own machine: IDE servers, local bridges and their
+ * tokens, on loopback. Exported because they must not reach a host-run
+ * competitor either (`competitorEnv()`), not only a sandboxed one.
+ */
+export const OPERATOR_HANDLE_EXACT: readonly string[] = ['CLAUDE_CODE_SSE_PORT'];
+export const OPERATOR_HANDLE_PREFIXES: readonly string[] = [
+  'CLAUDE_BG_',       // rendezvous socket + socket-token paths on the host
+  'CLAUDE_BRIDGE_',   // base URL + OAuth token for a host-local bridge
+  'CLAUDE_CODE_IDE_',
+  'GEMINI_CLI_IDE_',  // IDE server port + auth token, on loopback
+];
+
+/** True for a variable that is a handle to the operator's machine (see above). */
+export function isOperatorHandleEnvVar(name: string): boolean {
+  return OPERATOR_HANDLE_EXACT.includes(name) || OPERATOR_HANDLE_PREFIXES.some((p) => name.startsWith(p));
+}
+
 const BLOCKED_EXACT: ReadonlySet<string> = new Set([
   // nested-session markers — a claude inside a claude refuses to start
-  'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_SSE_PORT',
+  'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT',
+  ...OPERATOR_HANDLE_EXACT,
   // host config paths
   'CLAUDE_CONFIG_DIR', 'ANTHROPIC_CONFIG_DIR', 'ANTHROPIC_IDENTITY_TOKEN_FILE',
   'ANTHROPIC_UNIX_SOCKET',
@@ -103,10 +122,7 @@ const BLOCKED_EXACT: ReadonlySet<string> = new Set([
  */
 const BLOCKED_PREFIXES: readonly string[] = [
   'ARENA_',
-  'CLAUDE_BG_',       // rendezvous socket + socket-token paths on the host
-  'CLAUDE_BRIDGE_',   // base URL + OAuth token for a host-local bridge
-  'CLAUDE_CODE_IDE_',
-  'GEMINI_CLI_IDE_',  // IDE server port + auth token, on loopback
+  ...OPERATOR_HANDLE_PREFIXES,
 ];
 
 /** Never forwarded, full stop. Redundant with the rules above, kept explicit. */

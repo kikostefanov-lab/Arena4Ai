@@ -1,4 +1,4 @@
-import { readdirSync, statSync } from 'node:fs';
+import { closeSync, openSync, readSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { isVendoredPath } from '@arena/shared';
 import { MAX_FILE_BYTES } from './base-adapter.js';
@@ -19,7 +19,27 @@ interface Options {
 }
 
 const DEFAULT_HOLD_MS = 5000;
-const DEFAULT_POLL_MS = 1000;
+/** The spec's poll interval: a full walk every second was twice the cost for no gain. */
+const DEFAULT_POLL_MS = 2000;
+/** Bytes sniffed for a NUL to tell a binary file from text, as collection does. */
+const SNIFF_BYTES = 8192;
+/** Files one scan looks at before giving up on the rest (a vendored tree we missed). */
+export const MAX_SCAN_FILES = 5000;
+
+/** True when the file's first bytes contain a NUL: collection would skip it too. */
+function looksBinary(full: string): boolean {
+  let fd: number | undefined;
+  try {
+    fd = openSync(full, 'r');
+    const buf = Buffer.alloc(SNIFF_BYTES);
+    const n = readSync(fd, buf, 0, SNIFF_BYTES, 0);
+    return buf.subarray(0, n).includes(0);
+  } catch {
+    return true; // unreadable: nothing collection could show either
+  } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+}
 
 /**
  * Sees files the agent CLI's own event stream never reports (Codex and Gemini
@@ -38,6 +58,7 @@ export class WorkdirWatcher {
   private readonly reported = new Set<string>();
   private readonly pending = new Map<string, number>();
   private readonly streamAt = new Map<string, number>();
+  private cappedLogged = false;
 
   constructor(private readonly opts: Options) {
     this.holdMs = opts.holdMs ?? DEFAULT_HOLD_MS;
@@ -56,6 +77,18 @@ export class WorkdirWatcher {
     this.timer = null;
   }
 
+  /**
+   * Last look before collection: one more scan, then every pending observation
+   * goes out now rather than after its hold, so files a sub-agent wrote in the
+   * final seconds still reach the city. The stream still wins: a path it
+   * reported around the observation is not emitted again.
+   */
+  finalFlush(): void {
+    this.stop();
+    this.scanOnce();
+    this.flushDue(true);
+  }
+
   /** The stream reported this path (relative to the workdir). */
   noteStreamPath(relPath: string): void {
     this.streamAt.set(relPath, this.now());
@@ -64,17 +97,30 @@ export class WorkdirWatcher {
 
   scanOnce(): void {
     const t = this.now();
-    this.walk('', (rel, signature) => {
-      if (this.known.get(rel) === signature) return;
+    let seen = 0;
+    this.walk('', (rel, signature, full) => {
+      if (++seen > MAX_SCAN_FILES) {
+        if (!this.cappedLogged) {
+          this.cappedLogged = true;
+          console.warn(`[arena] workdir watcher: ${this.opts.root} has more than ${MAX_SCAN_FILES} files; scanning only the first ${MAX_SCAN_FILES}`);
+        }
+        return false;
+      }
+      if (this.known.get(rel) === signature) return true;
       this.known.set(rel, signature);
+      // Sniffed once per change: a binary is remembered by its signature too,
+      // so it is not re-read on every scan.
+      if (looksBinary(full)) return true;
       if (!this.pending.has(rel)) this.pending.set(rel, t);
+      return true;
     });
   }
 
-  flushDue(): void {
+  /** Emit observations whose hold has passed (all of them when `now` is set). */
+  flushDue(now = false): void {
     const t = this.now();
     for (const [rel, observedAt] of [...this.pending]) {
-      if (t - observedAt < this.holdMs) continue;
+      if (!now && t - observedAt < this.holdMs) continue;
       this.pending.delete(rel);
       const streamed = this.streamAt.get(rel);
       if (streamed !== undefined && streamed >= observedAt - this.holdMs) continue;
@@ -84,26 +130,30 @@ export class WorkdirWatcher {
     }
   }
 
-  private walk(rel: string, visit: (rel: string, signature: string) => void): void {
+  /** Walk the tree; `visit` returns false to stop the walk. Returns false once stopped. */
+  private walk(rel: string, visit: (rel: string, signature: string, full: string) => boolean): boolean {
     let entries;
     try {
       entries = readdirSync(join(this.opts.root, rel), { withFileTypes: true });
     } catch {
-      return;
+      return true;
     }
     for (const entry of entries) {
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (entry.name.startsWith('.') || isVendoredPath(childRel)) continue;
-        this.walk(childRel, visit);
+        if (!this.walk(childRel, visit)) return false;
       } else if (entry.isFile()) {
         if (isVendoredPath(childRel)) continue;
+        const full = join(this.opts.root, childRel);
+        let info;
         try {
-          const info = statSync(join(this.opts.root, childRel));
-          if (info.size > MAX_FILE_BYTES) continue;
-          visit(childRel, `${info.mtimeMs}:${info.size}`);
-        } catch { /* vanished mid-scan */ }
+          info = statSync(full);
+        } catch { continue; /* vanished mid-scan */ }
+        if (info.size > MAX_FILE_BYTES) continue;
+        if (!visit(childRel, `${info.mtimeMs}:${info.size}`, full)) return false;
       }
     }
+    return true;
   }
 }

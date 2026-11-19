@@ -97,6 +97,32 @@ describe('competitor environment', () => {
     });
   }
 
+  const HANDLES = [
+    'CLAUDE_CODE_SSE_PORT', 'CLAUDE_CODE_IDE_HOST_OVERRIDE', 'GEMINI_CLI_IDE_SERVER_PORT',
+    'GEMINI_CLI_IDE_AUTH_TOKEN', 'CLAUDE_BG_SOCKET', 'CLAUDE_BRIDGE_OAUTH_TOKEN',
+  ];
+  const AUTH = {
+    CLAUDE_CONFIG_DIR: '/auth-dir', ANTHROPIC_API_KEY: 'k', CODEX_HOME: '/codex-home',
+    OPENAI_API_KEY: 'o', GEMINI_CLI_HOME: '/gemini-home', GEMINI_API_KEY: 'g',
+  };
+
+  for (const [name, Adapter] of [['claude', ClaudeAdapter], ['codex', CodexAdapter], ['gemini', GeminiAdapter]] as const) {
+    it(`${name} does not inherit IDE, bridge or port handles to the operator's machine`, async () => {
+      for (const k of HANDLES) process.env[k] = '12345';
+      Object.assign(process.env, AUTH);
+      try {
+        const a = new Adapter('t', { workdir: '/tmp', competitionId: 'c' } as never);
+        await a.injectBrief(BRIEF, 'p');
+        await a.startExecution();
+        const env = spawnCalls[0]!.env!;
+        for (const k of HANDLES) expect(env[k], k).toBeUndefined();
+        expect(env).toMatchObject(AUTH); // every login variable is kept
+      } finally {
+        for (const k of [...HANDLES, ...Object.keys(AUTH)]) delete process.env[k];
+      }
+    });
+  }
+
   it('claude keeps the squad cap variables', async () => {
     process.env['CLAUDE_CODE_PLUGIN_DIRS'] = '/x';
     try {

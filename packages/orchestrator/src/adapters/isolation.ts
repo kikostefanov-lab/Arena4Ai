@@ -44,7 +44,7 @@
  * `codex debug models` probe does not use the flag.
  */
 
-import { claudeEnv } from '../utils/claude-env.js';
+import { claudeEnv, isOperatorHandleEnvVar } from '../utils/claude-env.js';
 
 export function claudeIsolationArgs(): string[] {
   return ['--strict-mcp-config', '--setting-sources', 'project'];
@@ -76,9 +76,18 @@ export function isInjectingEnvVar(name: string): boolean {
   return INJECTING_EXACT.includes(name) || INJECTING_PREFIXES.some((p) => name.startsWith(p));
 }
 
-/** The competitor's environment: the host env minus anything that injects extra tools. */
+/**
+ * The competitor's environment: the host env minus anything that injects extra
+ * tools, and minus the handles to the operator's machine (IDE ports, local
+ * bridges, their tokens) that the sandbox blocklist already names
+ * (`isOperatorHandleEnvVar`). Auth stays: CLAUDE_CONFIG_DIR, ANTHROPIC_*,
+ * CODEX_HOME, OPENAI_*, GEMINI_CLI_HOME, GEMINI_API_KEY / GOOGLE_* and HOME.
+ */
 export function competitorEnv(source: NodeJS.ProcessEnv = claudeEnv()): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {};
-  for (const [k, v] of Object.entries(source)) if (!isInjectingEnvVar(k)) out[k] = v;
+  for (const [k, v] of Object.entries(source)) {
+    if (isInjectingEnvVar(k) || isOperatorHandleEnvVar(k)) continue;
+    out[k] = v;
+  }
   return out;
 }

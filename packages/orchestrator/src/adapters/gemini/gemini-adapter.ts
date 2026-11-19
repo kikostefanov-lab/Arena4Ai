@@ -103,7 +103,7 @@ export class GeminiAdapter extends BaseAdapter {
       const rl = createInterface({ input: child.stdout! });
       rl.on('line', (line) => {
         if (!line.trim()) return;
-        this.emitArenaEvent(normalizeLine(line, ctx));
+        for (const event of this.normalizeSafely(line, (l) => normalizeLine(l, ctx))) this.emitArenaEvent(event);
       });
 
       const errRl = createInterface({ input: child.stderr! });

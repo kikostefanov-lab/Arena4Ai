@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { EventType } from '@arena/shared';
 import type { ArenaEvent } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
-import { WorkdirWatcher } from '../workdir-watcher.js';
+import { WorkdirWatcher, MAX_SCAN_FILES } from '../workdir-watcher.js';
 import { makeEvent, makeFileEvent } from '../normalizer-utils.js';
 
 let root: string;
@@ -92,7 +92,8 @@ describe('WorkdirWatcher', () => {
         const w = new WorkdirWatcher({ root, now: () => Date.now(), onFile: (f) => seen.push(f) });
         w.start();
         if (stopIt) w.stop();
-        vi.advanceTimersByTime(6000);
+        // Polls every 2 s (the spec value): first sighting at 2 s, out after the 5 s hold.
+        vi.advanceTimersByTime(8000);
         w.stop();
         return seen;
       };
@@ -100,6 +101,52 @@ describe('WorkdirWatcher', () => {
       expect(run(false)).toEqual([{ path: 'a.md', op: 'create' }]);
       expect(run(true)).toEqual([]);
     } finally { vi.useRealTimers(); }
+  });
+
+  it('polls every 2000 ms by default', () => {
+    vi.useFakeTimers();
+    try {
+      const w = new WorkdirWatcher({ root, onFile: () => {} });
+      const scan = vi.spyOn(w, 'scanOnce');
+      w.start();
+      vi.advanceTimersByTime(1999);
+      expect(scan).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(scan).toHaveBeenCalledTimes(1);
+      w.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('skips binary files, as collection does', () => {
+    const { w, seen, at } = make();
+    writeFileSync(join(root, 'logo.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x01]));
+    writeFileSync(join(root, 'ok.md'), 'text');
+    at.t = 0; w.scanOnce();
+    at.t = 5000; w.flushDue();
+    expect(seen).toEqual([{ path: 'ok.md', op: 'create' }]);
+  });
+
+  it('caps one scan at MAX_SCAN_FILES and says so once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      for (let i = 0; i < MAX_SCAN_FILES + 3; i++) writeFileSync(join(root, `f${i}.txt`), 'x');
+      const { w, seen, at } = make();
+      at.t = 0; w.scanOnce(); w.scanOnce();
+      at.t = 5000; w.flushDue();
+      expect(seen).toHaveLength(MAX_SCAN_FILES);
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally { warn.mockRestore(); }
+  });
+
+  it('finalFlush emits pending observations at once, and the stream still wins', () => {
+    const { w, seen, at } = make();
+    writeFileSync(join(root, 'early.md'), 'x');
+    at.t = 0; w.scanOnce();
+    writeFileSync(join(root, 'late.md'), 'x');
+    writeFileSync(join(root, 'streamed.md'), 'x');
+    at.t = 1000; w.noteStreamPath('streamed.md');
+    at.t = 1500; w.finalFlush();
+    expect(seen).toEqual([{ path: 'early.md', op: 'create' }, { path: 'late.md', op: 'create' }]);
   });
 });
 
@@ -150,6 +197,29 @@ describe('BaseAdapter workdir watch', () => {
     const spy = vi.spyOn(a.getWatcher()!, 'stop');
     await a.shutdown();
     expect(spy).toHaveBeenCalled();
+  });
+
+  it('shutdown flushes files from the final seconds before collection, squad-tagged', async () => {
+    const a = new TestAdapter('t1', root, 'c1');
+    const evs: ArenaEvent[] = [];
+    a.on('arenaEvent', (e: ArenaEvent) => evs.push(e));
+    a.watch();
+    a.emit2(spawn('helper'));
+    writeFileSync(join(root, 'last-second.md'), 'x'); // never seen by a timed scan
+    await a.shutdown();
+    const kinds = evs.map((e) => e.type);
+    const file = evs.find((e) => e.type === EventType.FILE_CREATE);
+    expect(file?.payload).toMatchObject({ opSource: 'watch', path: 'last-second.md' });
+    expect(file?.metadata.squad).toBe(true);
+    // The file lands before the squad is closed for the deadline.
+    expect(kinds.indexOf(EventType.FILE_CREATE)).toBeLessThan(kinds.indexOf(EventType.SUB_AGENT_DONE));
+  });
+
+  it('startWorkdirWatch is a no-op once shutdown has begun', async () => {
+    const a = new TestAdapter('t1', root, 'c1');
+    await a.shutdown();
+    a.watch();
+    expect(a.getWatcher()).toBeNull();
   });
 
   it('is sealed after shutdown: a late SPAWN is dropped', async () => {

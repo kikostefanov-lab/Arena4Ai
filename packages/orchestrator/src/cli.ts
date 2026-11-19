@@ -247,9 +247,12 @@ program
 
     let ids: string[];
     if (opts.all) {
+      const { isSyntheticCompetition } = await import('@arena/shared');
       const comps = await repo.list();
+      // A seeded demo has no real deliverables to re-judge; skip it as
+      // seed-quality-signals does.
       ids = comps
-        .filter((c: any) => c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE')
+        .filter((c: any) => !isSyntheticCompetition(c) && (c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE'))
         .map((c: any) => c.id);
     } else if (competitionId) {
       ids = [competitionId];

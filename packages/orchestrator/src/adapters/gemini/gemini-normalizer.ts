@@ -85,12 +85,13 @@ function parseStreamEvent(line: string): StreamEvent | null {
 function fromToolUse(msg: StreamEvent, ctx: NormalizeContext): ArenaEvent {
   const tool = msg.tool_name ?? 'unknown';
   const params = msg.parameters ?? {};
-  const filePath = (params.file_path as string) ?? (params.path as string) ?? '';
+  const asStr = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+  const filePath = asStr(params.file_path) ?? asStr(params.path) ?? '';
 
   if (tool === INVOKE_AGENT_TOOL) {
     const prompt = typeof params.prompt === 'string' ? params.prompt : '';
     const payload: SubAgentSpawnPayload = {
-      agentId: msg.tool_id ?? '',
+      agentId: typeof msg.tool_id === 'string' ? msg.tool_id : '',
       label: squadLabel(prompt),
       description: prompt,
       kind: typeof params.agent_name === 'string' ? params.agent_name : undefined,
@@ -139,7 +140,8 @@ export function normalizeLine(line: string, ctx: NormalizeContext): ArenaEvent {
         return makeEvent(EventType.ERROR, { error: msg.message ?? msg }, ctx);
 
       case 'tool_result':
-        if (msg.tool_id?.startsWith(INVOKE_AGENT_ID_PREFIX)) {
+        // tool_id comes off the wire untyped: check it is a string before use.
+        if (typeof msg.tool_id === 'string' && msg.tool_id.startsWith(INVOKE_AGENT_ID_PREFIX)) {
           const done: SubAgentDonePayload = {
             agentId: msg.tool_id,
             status: msg.status === 'success' ? 'completed' : 'failed',
