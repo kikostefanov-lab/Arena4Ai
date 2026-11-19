@@ -94,6 +94,7 @@ describe('codexArgs', () => {
   it('returns the exact argument list', () => {
     expect(codexArgs('p', undefined, {})).toEqual([
       'exec', '--json', '--skip-git-repo-check', '-s', 'workspace-write',
+      '--ignore-user-config',
       '-c', 'features.multi_agent_v2=false',
       '-c', 'sandbox_workspace_write.network_access=true',
       '-c', 'web_search=live',

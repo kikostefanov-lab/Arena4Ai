@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline';
 import type { Brief } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { ClaudeNormalizer, normalizeLine } from './claude-normalizer.js';
+import { claudeIsolationArgs } from '../isolation.js';
 import { squadLimits } from '../squad-limits.js';
 import { claudeEnv } from '../../utils/claude-env.js';
 import { safeModelVariant } from '../model-variant.js';
@@ -68,6 +69,7 @@ export class ClaudeAdapter extends BaseAdapter {
         '--output-format', 'stream-json',
         '--verbose',
         '--dangerously-skip-permissions',
+        ...claudeIsolationArgs(),
       ];
 
       const modelVariant = safeModelVariant(this.modelVariant);

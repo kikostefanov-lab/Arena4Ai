@@ -4,6 +4,7 @@ import { EventType } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
 import { normalizeLine } from './gemini-normalizer.js';
 import { claudeEnv } from '../../utils/claude-env.js';
+import { geminiIsolationArgs } from '../isolation.js';
 import { safeModelVariant } from '../model-variant.js';
 import { ERROR_LINE_RE, makeEvent } from '../normalizer-utils.js';
 import type { SandboxManager } from '../../sandbox/sandbox-manager.js';
@@ -71,7 +72,7 @@ export class GeminiAdapter extends BaseAdapter {
       // SECURITY: spawn with an argv array, never through `/bin/sh -c`. The model
       // variant and the prompt are user-supplied; as argv entries they can only
       // ever be one argument each, whatever characters they contain.
-      const args = ['-p', this.promptText!, '--yolo', '-o', 'stream-json'];
+      const args = ['-p', this.promptText!, '--yolo', '-o', 'stream-json', ...geminiIsolationArgs()];
       const modelVariant = safeModelVariant(this.modelVariant);
       if (modelVariant) {
         args.push('--model', modelVariant);

@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { BaseAdapter } from '../base-adapter.js';
 import { CodexJsonNormalizer } from './codex-json-normalizer.js';
+import { codexIsolationArgs } from '../isolation.js';
 import { squadLimits } from '../squad-limits.js';
 import { claudeEnv } from '../../utils/claude-env.js';
 import { safeModelVariant } from '../model-variant.js';
@@ -39,6 +40,7 @@ export function codexArgs(prompt: string, modelVariant?: string, env: NodeJS.Pro
   const { maxConcurrent } = squadLimits(env);
   const args = [
     'exec', '--json', '--skip-git-repo-check', '-s', 'workspace-write',
+    ...codexIsolationArgs(),
     '-c', 'features.multi_agent_v2=false',
     '-c', 'sandbox_workspace_write.network_access=true',
     '-c', 'web_search=live',
