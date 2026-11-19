@@ -30,8 +30,19 @@ appeared from nowhere, the judge saw a lead's partial work, and the arena drew o
 - WebSocket: subscribe before reading history, dedupe by event id.
 - `dev/seed-squad-demo.ts` seeds a synthetic three-team match for judging the visuals.
 
+- Final review fixes: per-band grid capacity measured (the middle band at N=3 lost x=0);
+  Codex `--json` crash reasons (`error`, `turn.failed`) reach `agentFailure`; Codex sub-agent
+  states map to failed / killed / unknown honestly; a throwing normalizer costs one line, not the
+  server; competitors lose the IDE / bridge / port handles the sandbox already blocks; replay
+  pause holds its frame and resumes from the playhead; the jumbotron says REPLAY for a finished
+  match and names FAILED / CANCELLED instead of SCORED; watch-only teams get their own legend
+  note; a ⛶ Theater mode for recording; the watcher polls every 2 s, skips binaries, caps a scan
+  and flushes once at shutdown; a rate-limited judge waits 15 s before its retry, and a
+  recovered judge failure is logged; squad labels skip leading filler.
+
 **Verified**: orchestrator, shared tests, orchestrator typecheck, web tsc and the video build
-(see the task report for counts). Browser verification (3D, headers, iso, log, fps): pending.
+(see the task report for counts). Browser (Chrome, foreground, 1510×833, the three-team squad
+replay): median 8.3 ms/frame (120 fps); squad robots visible mid-replay; headers count live.
 
 **Left open**: Gemini has no spawn cap; Codex and Gemini cannot say which member wrote a file;
 the persistence-lag window in the WebSocket replay; Codex `--ignore-user-config` ignores the

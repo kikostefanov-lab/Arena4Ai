@@ -12,7 +12,7 @@ to its lead, works, and leaves when it is done. The picture must stay clean, rea
 honest with three teams on the floor.
 
 The first event this is for: a three-way match (Claude vs Codex vs Gemini) on
-*The First Paying Customer* brief (`~/Documents/Codex/2026-11-18/h/outputs/first-paying-customer.yml`).
+*The First Paying Customer* brief (the owner's brief file, kept outside the repo).
 That brief splits naturally into three research tracks, then a decision, then a demo build
 and a go-to-market plan that can run in parallel.
 
@@ -173,7 +173,7 @@ their cities would fill in only after collection.
   `timeLimitMs × 1.5` of real time.
 - **Isolation (owner decision):** competitors get only their CLI's built-in tools and built-in
   sub-agent types. No user MCP servers, plugins, hooks or custom agents; today the research runs
-  loaded 212 tools including Gmail, Drive, Home Assistant and NetSuite, a `codex:codex-rescue`
+  loaded 212 tools including the operator's personal MCP servers, a `codex:codex-rescue`
   agent, and operator hooks that told children to run a `bootstrap` skill.
   - Claude: `--strict-mcp-config` with no config, user settings, plugins and hooks off, auth intact.
   - Codex: no MCP servers, no user instructions.

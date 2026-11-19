@@ -50,7 +50,7 @@ Fixes all 8 BG findings + consolidates all CSS (CP-007) + adds the shared CSS cl
 - [x] **Step 1: Verify current file contents**
 
 ```bash
-cat "/Users/kstefano/Personal Projects/agentarena/packages/web/app/globals.css"
+cat "<repo>/packages/web/app/globals.css"
 ```
 
 Expected: 30 lines — @tailwind directives, body grid, html font-size, and 3 keyframes.
@@ -340,7 +340,7 @@ html {
 - [x] **Step 3: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -348,7 +348,7 @@ Expected: no errors.
 - [x] **Step 4: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/web/app/globals.css
 git commit -m "$(cat <<'EOF'
 feat(web): rewrite globals.css — TRON background shell + shared CSS library
@@ -388,7 +388,7 @@ The CSS classes and keyframes now live in globals.css — no replacement needed.
 - [x] **Step 7: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors. If there are errors about GLOBAL_STYLES not being defined, you missed the style injection — search for `GLOBAL_STYLES` in the file and remove all references.
@@ -396,7 +396,7 @@ Expected: no errors. If there are errors about GLOBAL_STYLES not being defined, 
 - [x] **Step 8: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add "packages/web/app/competitions/[id]/page.tsx"
 git commit -m "$(cat <<'EOF'
 refactor(arena): remove inline GLOBAL_STYLES — animations now in globals.css (CP-007)
@@ -423,7 +423,7 @@ In `packages/web/app/leaderboard/page.tsx`, remove the entire `<style>{`...`}</s
 - [x] **Step 11: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -431,7 +431,7 @@ Expected: no errors.
 - [x] **Step 12: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/web/app/page.tsx packages/web/app/leaderboard/page.tsx
 git commit -m "$(cat <<'EOF'
 refactor(web): remove duplicate inline style blocks from gallery and leaderboard (CP-007)
@@ -490,7 +490,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 - [x] **Step 14: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -498,7 +498,7 @@ Expected: no errors.
 - [x] **Step 15: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/web/app/layout.tsx
 git commit -m "$(cat <<'EOF'
 feat(layout): inject scanlines, corner brackets, ambient glow at root (BG-003,004,006,008)
@@ -523,7 +523,7 @@ Adds new exports to `design-tokens.ts` covering TY-004, TY-005, TY-007, TY-008, 
 
 Check the top of `packages/web/lib/design-tokens.ts`:
 ```bash
-head -5 "/Users/kstefano/Personal Projects/agentarena/packages/web/lib/design-tokens.ts"
+head -5 "<repo>/packages/web/lib/design-tokens.ts"
 ```
 
 If `import type React from 'react';` is not already the first line, add it now. This must exist before appending the new exports in Step 2, because those exports use `React.CSSProperties`.
@@ -628,7 +628,7 @@ export const KICKER_STYLE: React.CSSProperties = {
 - [x] **Step 3: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors. If `React.CSSProperties` errors, add `import type React from 'react';` to design-tokens.ts.
@@ -636,7 +636,7 @@ Expected: no errors. If `React.CSSProperties` errors, add `import type React fro
 - [x] **Step 4: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/web/lib/design-tokens.ts
 git commit -m "$(cat <<'EOF'
 feat(tokens): expand design-tokens.ts with typography, spacing, badge, and interaction tokens
@@ -658,7 +658,7 @@ Applies `MONOSPACE_FONT` (which includes Orbitron) to all 6 main pages, fixes th
 
 > **Dependency:** Chunk 2 must be complete before running Chunk 3. Verify by checking:
 > ```bash
-> grep -n "MONOSPACE_FONT" "/Users/kstefano/Personal Projects/agentarena/packages/web/lib/design-tokens.ts"
+> grep -n "MONOSPACE_FONT" "<repo>/packages/web/lib/design-tokens.ts"
 > ```
 > Expected: at least one match. If not found, complete Chunk 2 first.
 
@@ -671,7 +671,7 @@ Applies `MONOSPACE_FONT` (which includes Orbitron) to all 6 main pages, fixes th
 
 First, find all hardcoded monospace font strings in the file:
 ```bash
-grep -n "SF Mono" "/Users/kstefano/Personal Projects/agentarena/packages/web/app/page.tsx"
+grep -n "SF Mono" "<repo>/packages/web/app/page.tsx"
 ```
 Note every line number. Replace each occurrence in the following steps.
 
@@ -705,7 +705,7 @@ import { ..., KICKER_STYLE } from '../lib/design-tokens';
 - [x] **Step 3: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -801,7 +801,7 @@ For any element with high letter-spacing or heavy font weight but no `textTransf
 - [x] **Step 11: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -809,7 +809,7 @@ Expected: no errors.
 - [x] **Step 12: Commit all typography changes**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add \
   packages/web/app/page.tsx \
   packages/web/app/leaderboard/page.tsx \
@@ -847,7 +847,7 @@ Creates the shared TopBar, applies .arena-btn across pages, uses glowShadow on c
 - [x] **Step 1: Create the components directory if it doesn't exist**
 
 ```bash
-mkdir -p "/Users/kstefano/Personal Projects/agentarena/packages/web/components"
+mkdir -p "<repo>/packages/web/components"
 ```
 
 - [x] **Step 2: Create TopBar.tsx**
@@ -927,7 +927,7 @@ Note: `paddingTop: '3.5rem'` prevents page content from starting under the fixed
 - [x] **Step 4: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors. If `usePathname` causes issues with server/client mismatch, ensure TopBar has `'use client'` at the top (already included above).
@@ -935,7 +935,7 @@ Expected: no errors. If `usePathname` causes issues with server/client mismatch,
 - [x] **Step 5: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add packages/web/components/TopBar.tsx packages/web/app/layout.tsx
 git commit -m "$(cat <<'EOF'
 feat(web): add fixed TopBar component to layout — TRON nav with logo + nav links (CP-001)
@@ -999,7 +999,7 @@ If the inline style is fully static and duplicates what `.arena-btn` already pro
 
 In `packages/web/app/page.tsx`, verify the competition card elements already use `className="arena-card"`:
 ```bash
-grep -n "arena-card" "/Users/kstefano/Personal Projects/agentarena/packages/web/app/page.tsx"
+grep -n "arena-card" "<repo>/packages/web/app/page.tsx"
 ```
 
 If no matches (the CSS class in globals.css handles hover glow), find the card div at lines 536–540 and add `className="arena-card"`. Remove inline style properties that duplicate what `.arena-card` provides (background, border). Keep any dynamic `style` props that set per-competition colors.
@@ -1019,7 +1019,7 @@ CP-002 also covers form pages. In `packages/web/app/competitions/new/page.tsx` a
 - [x] **Step 12: Typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -1027,7 +1027,7 @@ Expected: no errors.
 - [x] **Step 13: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add \
   packages/web/app/page.tsx \
   packages/web/app/leaderboard/page.tsx \
@@ -1047,7 +1047,7 @@ EOF
 - [x] **Step 14: Full typecheck**
 
 ```bash
-npx tsc --noEmit -p "/Users/kstefano/Personal Projects/agentarena/packages/web/tsconfig.json"
+npx tsc --noEmit -p "<repo>/packages/web/tsconfig.json"
 ```
 
 Expected: no errors.
@@ -1057,7 +1057,7 @@ Expected: no errors.
 Start the dev server and verify:
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena/packages/web" && npm run dev
+cd "<repo>/packages/web" && npm run dev
 ```
 
 Open http://localhost:3001 and check:
@@ -1080,7 +1080,7 @@ Open http://localhost:3001 and check:
 If any visual issues required small fixes during verification, commit those now:
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add -A packages/web/
 git commit -m "$(cat <<'EOF'
 fix(web): visual verification tweaks post-implementation

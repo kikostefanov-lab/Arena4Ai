@@ -103,8 +103,11 @@ Competitor CLIs may spawn their own sub-agents; Arena records and draws them as 
   `killed` / `unknown` DONEs for anything still open, so no robot is left standing.
 - **Workdir watcher** (`adapters/workdir-watcher.ts`): polls the workdir for files the stream
   never reports (sub-agents write straight to disk) and emits file events with
-  `opSource: 'watch'`. It is evidence of a file, not of who wrote it, so it never counts as
-  measured per-team telemetry.
+  `opSource: 'watch'`. It is evidence of a file, not of who wrote it, so it never makes a
+  team's heights `measured`: a team whose every file came from the watcher is drawn `inferred`
+  with its own legend note ("files observed on disk; the CLI did not report its edits"). It
+  polls every 2 s, skips binaries, caps one scan at 5,000 files, and flushes once more at
+  shutdown so files from the final seconds still appear.
 - **Limits:** 6 concurrent sub-agents and depth 1 per team (`ARENA_SQUAD_MAX_CONCURRENT`,
   `ARENA_SQUAD_MAX_DEPTH`, `adapters/squad-limits.ts`), told to the agent by a `[SQUAD]` prompt block.
 - **Isolation:** competitors see only their CLI's built-ins (`adapters/isolation.ts`): Claude
@@ -440,6 +443,19 @@ ingest, honesty notes) and either lets it draw the isometric canvas or hands its
 a file and height is the edit count; the 3D path must call `stepStructures(world)` each frame
 because it never calls the isometric `draw()`.
 
+- **Replay**: a finished match opens on its end state and plays as a match. Pause holds the
+  current frame; Resume continues from the playhead and only a playhead at the end restarts from
+  0. `setFinalState()` sets `world.replayOf`, and only a verdict state (`VERDICT_STATES`:
+  SCORED / COMPLETE / FORGING / FORGE_COMPLETE) reveals at the end. The 3D jumbotron reads
+  `REPLAY · A vs B` for a replay (`LIVE · …` live, and in every reel, which never sets
+  `replayOf`) and `REPLAY · MATCH FAILED · …` / `REPLAY · CANCELLED · …` for a match that ended
+  without a verdict.
+- **Theater** (`⛶ Theater`, Esc exits): the arena alone over the viewport for recording, with
+  the team headers, the momentum bar and a 16:9 canvas. Only styles change, so the renderer and
+  the WebGL scene survive the switch; the site chrome is hidden via `body.arena-theater`
+  (`globals.css`) because the arena sits in `<main>`'s stacking context below the TopBar.
+  Honesty notes move into the in-frame legend while it is on.
+
 The bullets below describe the earlier 2D gladiator arena (`lib/arena/*-v2.ts`). Those files
 remain but the live page no longer draws with them; treat this list as history.
 - `packages/web/components/ArenaViewerV2.tsx` — main component (Canvas + inline HUD: LaneHeader, MomentumMeter, PhaseChip, WinnerBanner)
@@ -502,5 +518,5 @@ Earlier, after 2026-11-14:
    Gemini's `invoke_agent` only marks the call and its result, so lifespans are approximate.
    Codex's `--ignore-user-config` also ignores the operator's `config.toml` (default model, a custom
    provider or base URL) for competitors, while the model-catalog probe does not use the flag.
-7. The heuristic fallback scorer's formula (`rubric-scorer.ts`) is the heuristic fallback scorer work (PR #20);
-   squad work does not touch it.
+7. The heuristic fallback scorer (`rubric-scorer.ts`) belongs to the honest-fallback-scorer work
+   (PR #20); the squad work does not change it.

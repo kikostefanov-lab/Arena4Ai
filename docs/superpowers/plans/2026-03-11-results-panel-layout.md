@@ -120,7 +120,7 @@ Change its padding so full-width layouts don't get squeezed. The padding should 
 - [ ] **Step 4: Typecheck**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npx tsc --noEmit -p packages/web/tsconfig.json
 ```
 Expected: zero errors.
@@ -128,7 +128,7 @@ Expected: zero errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add "packages/web/app/competitions/[id]/page.tsx"
 git commit -m "feat(ui): add layout state vars for results panel redesign"
 ```
@@ -292,7 +292,7 @@ Delete everything between `{/* SCORES TAB */}` and its closing `)}` (lines ~1068
 - [ ] **Step 2: Typecheck**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npx tsc --noEmit -p packages/web/tsconfig.json
 ```
 Expected: zero errors.
@@ -304,7 +304,7 @@ Start or reload the web UI (`cd packages/web && npm run dev`). Open a completed 
 - [ ] **Step 4: Commit**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 git add "packages/web/app/competitions/[id]/page.tsx"
 git commit -m "feat(ui): scores tab — criterion table with expandable commentary"
 ```
@@ -1061,7 +1061,7 @@ git commit -m "feat(ui): forge tab — sidebar run navigator + artifact grid"
 - [ ] **Step 1: Full typecheck**
 
 ```bash
-cd "/Users/kstefano/Personal Projects/agentarena"
+cd "<repo>"
 npx tsc --noEmit -p packages/web/tsconfig.json
 npm run test --workspace=packages/orchestrator
 ```
@@ -1086,5 +1086,5 @@ git push
 - [ ] **Step 4: Stop brainstorm server**
 
 ```bash
-/Users/kstefano/.claude/plugins/cache/superpowers-marketplace/superpowers/5.0.0/lib/brainstorm-server/stop-server.sh "/Users/kstefano/Personal Projects/agentarena/.superpowers/brainstorm/36463-1773219646"
+~/.claude/plugins/cache/superpowers-marketplace/superpowers/5.0.0/lib/brainstorm-server/stop-server.sh "<repo>/.superpowers/brainstorm/36463-1773219646"
 ```
