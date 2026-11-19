@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
 import {
   helperClaudeArgs, helperCodexArgs, helperGeminiArgs, helperEnv, GEMINI_DENY_ALL_POLICY,
+  toolLessCodexCatalog,
 } from '../utils/claude-helper.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
@@ -83,8 +84,8 @@ export interface AiJudgeResult extends JudgeResult {
   failure?: AiJudgeFailure;
   /**
    * Model the judge ran on. For a judge on CLI_DEFAULT_MODEL this is the model
-   * the CLI reported using (codex's banner, gemini's stats), falling back to
-   * `cli-default` when the CLI did not say.
+   * the CLI reported using (gemini's stats) or that the judge pinned from the
+   * CLI's own catalog (codex), falling back to `cli-default` otherwise.
    */
   model?: string;
   /** Provider whose CLI produced this score. */
@@ -112,14 +113,22 @@ interface JudgeInvocation {
   args: string[];
   promptVia: 'stdin' | 'argv';
   answerStream: 'stdout' | 'stderr';
-  /** 'gemini-json': stdout is gemini's `-o json` wrapper; the answer is its `response`. */
-  answerFormat: 'text' | 'gemini-json';
+  /**
+   * 'gemini-json': stdout is gemini's `-o json` wrapper; the answer is its `response`.
+   * 'codex-jsonl': stdout is codex's `exec --json` event stream; the answer is
+   * the last agent message, and any tool item fails the judge closed.
+   */
+  answerFormat: 'text' | 'gemini-json' | 'codex-jsonl';
 }
 
-/** Where a judge runs: an empty scratch dir, and (gemini) its deny-all policy file. */
+/**
+ * Where a judge runs: an empty scratch dir, (gemini) its deny-all policy file,
+ * and (codex) its tool-less model catalog.
+ */
 export interface JudgeScratch {
   workdir: string;
   policyPath: string;
+  catalogPath: string;
 }
 
 export function buildJudgeInvocation(
@@ -134,10 +143,10 @@ export function buildJudgeInvocation(
   switch (provider) {
     case 'codex':
       return {
-        args: [...helperCodexArgs({ modelArgs, workdir: scratch.workdir }), prompt],
+        args: [...helperCodexArgs({ modelArgs, workdir: scratch.workdir, catalogPath: scratch.catalogPath }), prompt],
         promptVia: 'argv',
         answerStream: 'stdout',
-        answerFormat: 'text',
+        answerFormat: 'codex-jsonl',
       };
     case 'gemini':
       return {
@@ -157,23 +166,50 @@ export function buildJudgeInvocation(
   }
 }
 
+/** Codex `exec --json` item types that are not tools: the answer and its reasoning. */
+const CODEX_NON_TOOL_ITEMS: ReadonlySet<string> = new Set(['agent_message', 'reasoning', 'error']);
+
+/**
+ * Read codex's `exec --json` stream: the answer is the last agent message, and
+ * every other item type (command_execution, file_change, mcp_tool_call,
+ * web_search, collab_tool_call, todo_list...) is a tool the judge used.
+ */
+export function readCodexJudgeStream(stdout: string): { answer: string; toolItems: string[] } {
+  let answer = '';
+  const toolItems = new Set<string>();
+  for (const line of stdout.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('{')) continue;
+    let event: { type?: unknown; item?: { type?: unknown; text?: unknown } };
+    try {
+      event = JSON.parse(trimmed) as typeof event;
+    } catch {
+      continue;
+    }
+    const item = event.item;
+    if (!item || typeof item !== 'object') continue;
+    const type = typeof item.type === 'string' ? item.type : 'unknown';
+    if (!CODEX_NON_TOOL_ITEMS.has(type)) toolItems.add(type);
+    else if (type === 'agent_message' && typeof item.text === 'string') answer = item.text;
+  }
+  return { answer, toolItems: [...toolItems] };
+}
+
 /**
  * Split a judge CLI's output into the answer text and the model that produced
- * it, when the CLI says. Codex prints a `model: <id>` line in its stderr banner;
- * gemini's `-o json` carries per-model token stats (the one with the most
- * tokens did the judging; a router model may appear beside it).
+ * it, when the CLI says, plus (codex) any tool items it used. Gemini's
+ * `-o json` carries per-model token stats (the one with the most tokens did the
+ * judging; a router model may appear beside it). Codex's JSON stream names no
+ * model: the judge pins one from the catalog instead (see aiJudge).
  */
 export function readJudgeOutput(
   invocation: Pick<JudgeInvocation, 'answerStream' | 'answerFormat'>,
   provider: JudgeProvider,
   stdout: string,
   stderr: string,
-): { answer: string; model?: string } {
+): { answer: string; model?: string; toolItems?: string[] } {
   const raw = invocation.answerStream === 'stderr' ? stderr : stdout;
-  if (provider === 'codex') {
-    const model = /^model:\s*(\S+)/m.exec(stderr)?.[1];
-    return { answer: raw, ...(model ? { model } : {}) };
-  }
+  if (invocation.answerFormat === 'codex-jsonl') return readCodexJudgeStream(raw);
   if (invocation.answerFormat !== 'gemini-json') return { answer: raw };
 
   let wrapper: { response?: unknown; stats?: { models?: Record<string, unknown> } };
@@ -226,6 +262,9 @@ export function classifyJudgeFailure(
   }
   // 503 "high demand" is the provider shedding load: like a rate limit, it is
   // worth one delayed retry (gemini-cli retries it with backoff until killed).
+  if (err instanceof Error && /tool-less model catalog/.test(err.message)) {
+    return { kind: 'cli-error', message: `AI judge unavailable: ${err.message}.`, detail };
+  }
   if (/rate limit|429|quota|overloaded|too many requests|503|high demand|resource_exhausted/.test(haystack)) {
     return {
       kind: 'rate-limit',
@@ -401,6 +440,54 @@ Return ONLY a JSON object with this exact shape (no markdown, no prose):
 }`;
 }
 
+/** Thrown when a judge's output shows it used a tool. */
+class JudgeUsedToolError extends Error {
+  constructor(readonly toolItems: string[]) {
+    super(`judge used a tool: ${toolItems.join(', ')}`);
+  }
+}
+
+/**
+ * `codex debug models`, rewritten so no model is offered a tool, plus the
+ * catalog's default model (first listed by priority, the one codex picks with
+ * no -m). Throws (and the judge does not run) when the catalog cannot be read.
+ */
+async function readCodexCatalog(
+  bin: string,
+  env: NodeJS.ProcessEnv,
+  cwd: string,
+): Promise<{ toolLess: string; defaultModel?: string }> {
+  const out = await new Promise<string>((resolve, reject) => {
+    const child = spawn(bin, ['debug', 'models'], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    const timer = setTimeout(() => {
+      child.kill();
+      reject(new Error('could not build the codex tool-less model catalog: `codex debug models` timed out'));
+    }, 30_000);
+    child.stdout?.on('data', (c: Buffer) => { stdout += c.toString(); });
+    child.stderr?.on('data', (c: Buffer) => { stderr += c.toString(); });
+    child.on('error', (err) => { clearTimeout(timer); reject(err); });
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      if (code === 0) resolve(stdout);
+      else reject(new Error(`could not build the codex tool-less model catalog: \`codex debug models\` exited with code ${code}: ${stderr.trim().slice(0, 200)}`));
+    });
+  });
+  let toolLess: string;
+  try {
+    toolLess = toolLessCodexCatalog(out);
+  } catch (err) {
+    throw new Error(`could not build the codex tool-less model catalog: ${(err as Error).message}`);
+  }
+  const models = (JSON.parse(toolLess) as { models: Array<{ slug?: unknown; visibility?: unknown; priority?: unknown }> }).models;
+  const listed = models
+    .filter((m) => typeof m.slug === 'string' && m.visibility === 'list')
+    .sort((a, b) => (typeof a.priority === 'number' ? a.priority : Infinity) - (typeof b.priority === 'number' ? b.priority : Infinity));
+  const defaultModel = listed[0]?.slug as string | undefined;
+  return { toolLess, ...(defaultModel ? { defaultModel } : {}) };
+}
+
 /**
  * Ask a judge model (on the claude, codex or gemini CLI) to evaluate a
  * deliverable against a rubric.
@@ -441,13 +528,28 @@ export async function aiJudge(
     // orchestrator's checkout (its .env, its CLAUDE.md / AGENTS.md / GEMINI.md),
     // and all three judges get the same, empty, context.
     scratchDir = await mkdtemp(join(tmpdir(), 'arena-judge-'));
-    const scratch: JudgeScratch = { workdir: join(scratchDir, 'work'), policyPath: join(scratchDir, 'deny-all.toml') };
+    const scratch: JudgeScratch = {
+      workdir: join(scratchDir, 'work'),
+      policyPath: join(scratchDir, 'deny-all.toml'),
+      catalogPath: join(scratchDir, 'codex-catalog.json'),
+    };
     await mkdir(scratch.workdir);
     if (provider === 'gemini') await writeFile(scratch.policyPath, GEMINI_DENY_ALL_POLICY, 'utf8');
-    const invocation = buildJudgeInvocation(provider, model, prompt, scratch);
     const env = provider === 'gemini'
       ? { ...helperEnv(provider), GEMINI_CLI_TRUST_WORKSPACE: 'true' }
       : helperEnv(provider);
+    let runModel = model;
+    if (provider === 'codex') {
+      // Codex grants tools per model in its catalog; the judge only ever runs
+      // on a copy with those neutralised. On CLI_DEFAULT_MODEL it is pinned to
+      // the catalog's own default (first listed by priority), because the JSON
+      // stream does not say which model ran.
+      const catalog = await readCodexCatalog(claudeBin, env, scratch.workdir);
+      await writeFile(scratch.catalogPath, catalog.toolLess, 'utf8');
+      if (isCliDefaultModel(model) && catalog.defaultModel) runModel = catalog.defaultModel;
+      ranOn = runModel;
+    }
+    const invocation = buildJudgeInvocation(provider, runModel, prompt, scratch);
 
     const stdout = await new Promise<string>((resolve, reject) => {
       // stdin is 'ignore' unless the prompt travels that way. codex `exec`
@@ -483,15 +585,20 @@ export async function aiJudge(
       child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
       child.on('close', (code) => settle(() => {
         if (code === 0) { resolve(out); return; }
-        // gemini's `-o json` reports its error on stdout; classify on both.
-        if (invocation.answerFormat === 'gemini-json' && out.trim()) stderr = `${stderr}\n${out}`.trim();
+        // gemini's `-o json` and codex's `--json` report errors on stdout; classify on both.
+        if (invocation.answerFormat !== 'text' && out.trim()) stderr = `${stderr}\n${out}`.trim();
         reject(new Error(`AI judge exited with code ${code}`));
       }));
       child.on('error', (err) => settle(() => reject(err)));
     });
 
-    const { answer, model: reported } = readJudgeOutput(invocation, provider, stdout, stderr);
-    ranOn = reported;
+    const { answer, model: reported, toolItems } = readJudgeOutput(invocation, provider, stdout, stderr);
+    if (reported) ranOn = reported;
+    if (toolItems && toolItems.length > 0) {
+      // Fail closed: a judge that used a tool read or touched something beyond
+      // the prompt, so its scores are not trusted and its seat is dropped.
+      throw new JudgeUsedToolError(toolItems);
+    }
     const parsed = JSON.parse(extractJson(answer)) as { scores?: unknown };
     const normalized = normalizeJudgeScores(parsed.scores, rubric);
     const missing = missingCriteria(normalized, rubric);
@@ -510,7 +617,13 @@ export async function aiJudge(
       failure = classifyJudgeFailure(new Error('judge returned no scores'), '', claudeBin, model, provider);
     }
   } catch (err) {
-    failure = classifyJudgeFailure(err, stderr, claudeBin, model, provider);
+    failure = err instanceof JudgeUsedToolError
+      ? {
+          kind: 'bad-output',
+          message: `AI judge unavailable: the ${provider} judge used a tool (${err.toolItems.join(', ')}); a judge must only read the prompt, so its scores were discarded.`,
+          detail: `tool items: ${err.toolItems.join(', ')}`,
+        }
+      : classifyJudgeFailure(err, stderr, claudeBin, model, provider);
   } finally {
     if (scratchDir) await rm(scratchDir, { recursive: true, force: true }).catch(() => {});
   }

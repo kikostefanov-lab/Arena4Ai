@@ -43,46 +43,100 @@ export function helperClaudeArgs({ model }: HelperArgsOptions): string[] {
 }
 
 /**
- * Codex features that hand the model a tool. Each is turned off for a helper,
- * so the judge reads the prompt and answers, nothing else. Names verified
- * against `codex features list` on codex-cli 0.169.0; an unknown name makes
- * codex refuse to start ("Unknown feature flag"), which the judge reports as
- * a cli-error, so a rename is loud rather than silently re-enabling a tool.
+ * Codex features that hand the model a tool, turned off for a helper so the
+ * judge reads the prompt and answers, nothing else. This is every feature
+ * that `codex features list` shows enabled (or can be enabled) and that
+ * registers a tool, checked against codex-cli 0.169.0 with
+ * `codex debug prompt-input`, which renders the tools the model is offered.
+ * Features in the "removed" stage (js_repl, tool_search, apply_patch_freeform)
+ * cannot be turned on and are left out: naming one that codex later deletes
+ * would stop the judge from starting. An unknown name makes codex refuse to
+ * start ("Unknown feature flag"), a loud cli-error rather than a quietly
+ * re-enabled tool.
  *
- * unified_exec is not here: codex 0.169 keeps it on whatever the flag says.
- * It is the shell tool's back end, and with shell_tool off no shell is offered.
+ * Feature flags are not enough on their own: the model catalog turns tools on
+ * per model (code-mode `exec`, sub-agents, apply_patch, node_repl). See
+ * CODEX_TOOL_LESS_MODEL_FIELDS.
  */
 export const CODEX_HELPER_DISABLED_FEATURES: readonly string[] = [
-  'shell_tool', 'apps', 'plugins', 'browser_use', 'computer_use',
-  'in_app_browser', 'view_image', 'multi_agent',
+  'shell_tool', 'unified_exec', 'apps', 'plugins', 'remote_plugin',
+  'browser_use', 'browser_use_external', 'computer_use', 'in_app_browser',
+  'view_image', 'image_generation', 'multi_agent', 'multi_agent_v2',
+  'code_mode', 'code_mode_host', 'sleep_tool', 'tool_suggest', 'skill_search',
+  'skill_mcp_dependency_install', 'goals', 'memories', 'hooks',
+  'in_app_local_automation', 'workspace_dependencies', 'request_permissions_tool',
+  'standalone_web_search',
 ];
+
+/**
+ * Per-model catalog fields that grant tools whatever the feature flags say
+ * (codex 0.169: `tool_mode: "code_mode_only"` offers a JavaScript `exec` tool,
+ * `multi_agent_version` the sub-agent tools, `apply_patch_tool_type` file
+ * edits, `shell_type` the shell, `node_repl_disabled: false` a Node REPL).
+ * The judge runs on a copy of the catalog with these neutralised for every
+ * model (`toolLessCodexCatalog`, passed as `-c model_catalog_json=...`).
+ * Rendered with `codex debug prompt-input`, this plus the flags above leaves
+ * the model one tool, `request_user_input`, which can only ask a question
+ * that headless `exec` has nobody to answer.
+ */
+export const CODEX_TOOL_LESS_MODEL_FIELDS: Readonly<Record<string, unknown>> = {
+  tool_mode: null,
+  multi_agent_version: null,
+  apply_patch_tool_type: null,
+  shell_type: 'disabled',
+  node_repl_disabled: true,
+  supports_search_tool: false,
+  experimental_supported_tools: [],
+};
+
+/**
+ * Rewrite `codex debug models` output so no model in it is offered a tool.
+ * Throws when the output is not a catalog: the caller must then not run the
+ * judge, because without the rewrite the model would be offered tools.
+ */
+export function toolLessCodexCatalog(debugModelsOutput: string): string {
+  const catalog = JSON.parse(debugModelsOutput) as { models?: unknown };
+  if (!catalog || !Array.isArray(catalog.models) || catalog.models.length === 0) {
+    throw new Error('codex debug models returned no model catalog');
+  }
+  for (const model of catalog.models as Record<string, unknown>[]) {
+    Object.assign(model, CODEX_TOOL_LESS_MODEL_FIELDS);
+  }
+  return JSON.stringify(catalog);
+}
 
 export interface ProviderHelperArgsOptions {
   /** Model id, or CLI_DEFAULT_MODEL: the caller resolves which (no flag then). */
   modelArgs: string[];
   /** Empty scratch directory the CLI runs in; it holds nothing to read. */
   workdir: string;
+  /** File holding toolLessCodexCatalog() output. */
+  catalogPath: string;
 }
 
 /**
  * `codex exec` as a tool-less helper. The prompt is appended by the caller.
  *
+ *  --json                   JSONL events, so the caller can see (and refuse) any tool item
  *  --ignore-user-config     no MCP servers, plugins or hooks from config.toml (auth still works)
  *  --ignore-rules           no execpolicy .rules files
  *  --ephemeral              no session files written
  *  -s read-only             defence in depth: even a tool could not write
  *  -C <workdir>             an empty scratch directory, not the orchestrator's cwd
  *  web_search="disabled"    no web tool
- *  --disable <feature>      every other tool family (CODEX_HELPER_DISABLED_FEATURES)
+ *  model_catalog_json       the catalog with per-model tools neutralised
+ *  --disable <feature>      every tool-bearing feature (CODEX_HELPER_DISABLED_FEATURES)
  */
-export function helperCodexArgs({ modelArgs, workdir }: ProviderHelperArgsOptions): string[] {
+export function helperCodexArgs({ modelArgs, workdir, catalogPath }: ProviderHelperArgsOptions): string[] {
   return [
-    'exec', '--skip-git-repo-check',
+    'exec', '--json', '--skip-git-repo-check',
     ...codexIsolationArgs(),
     '--ignore-rules', '--ephemeral', '--color', 'never',
     '-s', 'read-only',
     '-C', workdir,
     '-c', 'web_search="disabled"',
+    // JSON string syntax is a valid TOML basic string for a path.
+    '-c', `model_catalog_json=${JSON.stringify(catalogPath)}`,
     ...CODEX_HELPER_DISABLED_FEATURES.flatMap((f) => ['--disable', f]),
     ...modelArgs,
   ];

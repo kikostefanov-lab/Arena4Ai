@@ -85,8 +85,12 @@ with `helperClaudeArgs()` and its env with `helperClaudeEnv()` / `helperEnv(prov
 environment. Never pass `--dangerously-skip-permissions` to a helper. Competitor agents
 (`src/adapters/`) keep broad permissions by design.
 Codex and Gemini judges use `helperCodexArgs()` / `helperGeminiArgs()` from the same file: codex
-runs `--ignore-user-config`, read-only, web search off and every tool feature disabled
-(`CODEX_HELPER_DISABLED_FEATURES`); gemini runs under an admin-tier deny-all policy
+runs `--ignore-user-config`, read-only, web search off, every tool-bearing feature disabled
+(`CODEX_HELPER_DISABLED_FEATURES`) and on a copy of its model catalog with the per-model tool
+fields neutralised (`CODEX_TOOL_LESS_MODEL_FIELDS`, `-c model_catalog_json`); it runs with
+`--json`, and any tool item in the stream fails that judge closed (`bad-output`). Check with
+`npx tsx packages/orchestrator/src/dev/codex-judge-tool-probe.ts`, which renders the offered tools
+(`codex debug prompt-input`; only `request_user_input` should remain). Gemini runs under an admin-tier deny-all policy
 (`GEMINI_DENY_ALL_POLICY`) with no extensions or MCP servers. Every judge runs in an empty
 scratch directory, never the orchestrator's checkout.
 
@@ -251,7 +255,8 @@ different prompt. Override per-run with `ARENA_JUDGE_MODEL` / `ARENA_ADVERSARIAL
 (useful when reproducing an old score). Those two apply to Claude judges only: the Codex and
 Gemini judges of the cross-vendor panel run on `cli-default` unless `ARENA_JUDGE_MODEL_CODEX` /
 `ARENA_JUDGE_MODEL_GEMINI` names a model, and `AiJudgeResult.model` records the model the CLI
-reported using (codex's banner, gemini's `-o json` stats).
+ran on: gemini's `-o json` stats, or for codex the catalog default the judge pins with `-m`
+(codex's `--json` stream does not name its model).
 
 **Stage pinning** — every other `claude` call (synthesis, presentations, commentary, forge,
 brief intake/generation) passes `--model resolveStageModel()` (`DEFAULT_STAGE_MODEL`,

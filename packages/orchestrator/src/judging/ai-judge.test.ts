@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CompetitionFormat } from '@arena/shared';
 import type { Brief } from '@arena/shared';
-import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, readJudgeOutput, judgeIdFor, normalizeJudgeScores, quantizeScore, SCORE_RESOLUTION } from './ai-judge.js';
-import { helperClaudeArgs, helperEnv, CODEX_HELPER_DISABLED_FEATURES, GEMINI_DENY_ALL_POLICY } from '../utils/claude-helper.js';
+import { buildJudgePrompt, aiJudge, classifyJudgeFailure, buildJudgeInvocation, readJudgeOutput, readCodexJudgeStream, judgeIdFor, normalizeJudgeScores, quantizeScore, SCORE_RESOLUTION } from './ai-judge.js';
+import {
+  helperClaudeArgs, helperEnv, toolLessCodexCatalog,
+  CODEX_HELPER_DISABLED_FEATURES, CODEX_TOOL_LESS_MODEL_FIELDS, GEMINI_DENY_ALL_POLICY,
+} from '../utils/claude-helper.js';
 import { CLI_DEFAULT_MODEL } from '@arena/shared';
 import { resolveJudgeModel as resolveJudgeModelFn, requireDefaultModel as requireDefaultModelFn } from '../adapters/model-registry.js';
 import { DEFAULT_JUDGE_MODEL, DEFAULT_ADVERSARIAL_JUDGE_MODEL } from '../adapters/model-registry.js';
@@ -248,7 +251,7 @@ describe('classifyJudgeFailure', () => {
 });
 
 // ── AA-046: provider-agnostic judging ────────────────────────────────────────
-const SCRATCH = { workdir: '/scratch/work', policyPath: '/scratch/deny-all.toml' };
+const SCRATCH = { workdir: '/scratch/work', policyPath: '/scratch/deny-all.toml', catalogPath: '/scratch/codex-catalog.json' };
 
 describe('buildJudgeInvocation — the three CLIs differ in ways that have bitten us', () => {
   it('claude takes the prompt on stdin and answers on stdout', () => {
@@ -274,7 +277,14 @@ describe('buildJudgeInvocation — the three CLIs differ in ways that have bitte
   });
 
   it('codex runs tool-less: no user config (MCP, plugins), no shell, no web, in the scratch dir', () => {
-    const args = buildJudgeInvocation('codex', CLI_DEFAULT_MODEL, 'PROMPT', SCRATCH).args;
+    const inv = buildJudgeInvocation('codex', CLI_DEFAULT_MODEL, 'PROMPT', SCRATCH);
+    const args = inv.args;
+    expect(inv.answerFormat).toBe('codex-jsonl');
+    expect(args).toContain('--json'); // the stream is checked for tool items
+    expect(args.join(' ')).toContain('-c model_catalog_json="/scratch/codex-catalog.json"');
+    for (const f of ['unified_exec', 'code_mode_host', 'multi_agent_v2', 'image_generation', 'memories', 'sleep_tool']) {
+      expect(CODEX_HELPER_DISABLED_FEATURES).toContain(f);
+    }
     expect(args).toContain('--ignore-user-config');
     expect(args).toContain('--ephemeral');
     expect(args.join(' ')).toContain('-c web_search="disabled"');
@@ -306,12 +316,50 @@ describe('buildJudgeInvocation — the three CLIs differ in ways that have bitte
   });
 });
 
+describe('toolLessCodexCatalog — per-model tools are neutralised', () => {
+  it('rewrites every model\'s tool-granting fields and keeps the rest', () => {
+    const raw = JSON.stringify({ models: [
+      { slug: 'a', tool_mode: 'code_mode_only', multi_agent_version: 'v2', apply_patch_tool_type: 'freeform', shell_type: 'unified_exec', node_repl_disabled: false, supports_search_tool: true, experimental_supported_tools: ['x'], priority: 1 },
+      { slug: 'b', priority: 2 },
+    ] });
+    const out = JSON.parse(toolLessCodexCatalog(raw)) as { models: Array<Record<string, unknown>> };
+    for (const m of out.models) expect(m).toMatchObject(CODEX_TOOL_LESS_MODEL_FIELDS);
+    expect(out.models.map((m) => [m['slug'], m['priority']])).toEqual([['a', 1], ['b', 2]]);
+  });
+  it('throws on anything that is not a catalog, so the judge does not run with tools', () => {
+    expect(() => toolLessCodexCatalog('not json')).toThrow();
+    expect(() => toolLessCodexCatalog('{"models":[]}')).toThrow(/no model catalog/);
+  });
+});
+
+describe('readCodexJudgeStream — a codex judge that uses a tool fails closed', () => {
+  const ev = (o: unknown) => JSON.stringify(o);
+  it('takes the last agent message as the answer when no tool was used', () => {
+    const stream = [
+      ev({ type: 'thread.started', thread_id: 't' }),
+      ev({ type: 'item.completed', item: { id: '0', type: 'reasoning', text: 'thinking' } }),
+      ev({ type: 'item.completed', item: { id: '1', type: 'agent_message', text: '{"scores":[]}' } }),
+      ev({ type: 'turn.completed', usage: {} }),
+    ].join('\n');
+    expect(readCodexJudgeStream(stream)).toEqual({ answer: '{"scores":[]}', toolItems: [] });
+  });
+  it('reports every tool item, including ones it has never seen', () => {
+    const stream = [
+      ev({ type: 'item.started', item: { id: '1', type: 'command_execution', command: 'ls ~/.ssh' } }),
+      ev({ type: 'item.completed', item: { id: '2', type: 'file_change' } }),
+      ev({ type: 'item.completed', item: { id: '3', type: 'mcp_tool_call' } }),
+      ev({ type: 'item.completed', item: { id: '4', type: 'web_search' } }),
+      ev({ type: 'item.completed', item: { id: '5', type: 'some_future_tool' } }),
+      ev({ type: 'item.completed', item: { id: '6', type: 'agent_message', text: '{}' } }),
+    ].join('\n');
+    expect(readCodexJudgeStream(stream).toolItems).toEqual([
+      'command_execution', 'file_change', 'mcp_tool_call', 'web_search', 'some_future_tool',
+    ]);
+  });
+});
+
 describe('readJudgeOutput — record the model the CLI actually ran on', () => {
   const text = { answerStream: 'stdout', answerFormat: 'text' } as const;
-  it('reads codex\'s model from its stderr banner', () => {
-    const out = readJudgeOutput(text, 'codex', '{"scores":[]}', 'OpenAI Codex\nworkdir: /x\nmodel: gpt-5.6-sol\nprovider: openai\n');
-    expect(out).toEqual({ answer: '{"scores":[]}', model: 'gpt-5.6-sol' });
-  });
   it('unwraps gemini\'s -o json and names the model that did the work', () => {
     const wrapper = JSON.stringify({
       response: '```json\n{"scores":[]}\n```',
@@ -365,6 +413,67 @@ describe('aiJudge runs the judge in an empty scratch directory', () => {
     expect(cwd).not.toBe(process.cwd());
     expect(listing).toEqual([]);
     expect(existsSync(cwd!)).toBe(false);
+  });
+
+  /** A stand-in codex: `debug models` prints a catalog; `exec` records argv and prints `stream`. */
+  function fakeCodex(name: string, stream: string, catalogExit = 0): string {
+    const bin = join(scratch, name);
+    const catalog = JSON.stringify({ models: [
+      { slug: 'hidden-model', visibility: 'hide', priority: 1, tool_mode: 'code_mode_only' },
+      { slug: 'codex-top', visibility: 'list', priority: 2, tool_mode: 'code_mode_only', shell_type: 'unified_exec' },
+      { slug: 'codex-next', visibility: 'list', priority: 3 },
+    ] });
+    writeFileSync(bin, [
+      '#!/bin/sh',
+      `if [ "$1" = "debug" ]; then echo '${catalog}'; exit ${catalogExit}; fi`,
+      `printf '%s\\n' "$@" > ${join(scratch, `${name}.argv`)}`,
+      // Keep a copy of the catalog the judge was given, for inspection.
+      'for a in "$@"; do case "$a" in model_catalog_json=*) f="${a#model_catalog_json=}"; f="${f%\\"}"; f="${f#\\"}"; cp "$f" ' + join(scratch, `${name}.catalog`) + ';; esac; done',
+      `cat <<'ARENA_EOF'\n${stream}\nARENA_EOF`,
+    ].join('\n'));
+    chmodSync(bin, 0o755);
+    return bin;
+  }
+  const line = (o: unknown) => JSON.stringify(o);
+  const answer = line({ type: 'item.completed', item: { id: '9', type: 'agent_message', text: '{"scores":[{"criterionId":"correctness","score":7.5,"commentary":"ok"}]}' } });
+
+  it('runs a codex judge on a tool-less catalog, pinned to its default model, and reads the JSON stream', async () => {
+    const bin = fakeCodex('codex-ok', [line({ type: 'thread.started', thread_id: 't' }), answer].join('\n'));
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure).toBeUndefined();
+    expect(result.scores[0]!.score).toBe(7.5);
+    expect(result.model).toBe('codex-top');
+    const argv = recordedArgv('codex-ok');
+    expect(argv[argv.indexOf('-m') + 1]).toBe('codex-top');
+    expect(argv).toContain('--json');
+    const given = JSON.parse(readFileSync(join(scratch, 'codex-ok.catalog'), 'utf8')) as { models: Array<Record<string, unknown>> };
+    for (const m of given.models) expect(m).toMatchObject(CODEX_TOOL_LESS_MODEL_FIELDS);
+  });
+
+  it('drops a codex judge whose stream shows a tool call, even with valid scores', async () => {
+    const bin = fakeCodex('codex-tool', [
+      line({ type: 'item.started', item: { id: '1', type: 'command_execution', command: 'cat ~/.ssh/id_rsa' } }),
+      line({ type: 'item.completed', item: { id: '1', type: 'command_execution', command: 'cat ~/.ssh/id_rsa' } }),
+      answer,
+    ].join('\n'));
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure?.kind).toBe('bad-output');
+    expect(result.failure?.message).toContain('command_execution');
+    expect(result.scores.every((s) => s.score === 0)).toBe(true);
+  });
+
+  it('does not run a codex judge whose tool-less catalog cannot be built', async () => {
+    const bin = fakeCodex('codex-nocat', answer, 3);
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure?.kind).toBe('cli-error');
+    expect(result.failure?.message).toContain('tool-less model catalog');
+    expect(recordedArgv('codex-nocat')).toEqual([]); // exec never ran
   });
 
   it('reads a gemini judge\'s answer and model out of its JSON wrapper', async () => {
