@@ -232,6 +232,23 @@ describe('BaseAdapter.collectDeliverables named-first collection', () => {
     expect(d.excluded).toEqual([{ path: 'node_modules', reason: 'vendored' }]);
   });
 
+  it('collects a named file under a vendored-looking dir, and nothing else in it', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
+    await mkdir(join(dir, 'out', 'deep'), { recursive: true });
+    await mkdir(join(dir, 'dist'));
+    await writeFile(join(dir, 'out', 'report.md'), '# Report');
+    await writeFile(join(dir, 'out', 'other.md'), 'other');
+    await writeFile(join(dir, 'out', 'deep', 'x.md'), 'x');
+    await writeFile(join(dir, 'dist', 'app.js'), 'app');
+    await writeFile(join(dir, 'main.js'), 'main');
+    const d = await new TestAdapter('team-a', dir, 'comp-1').collectDeliverables(['out/report.md with findings']);
+    expect(d.files.map((f) => f.path)).toEqual(['out/report.md', 'main.js']);
+    expect(d.excluded).toEqual(expect.arrayContaining([
+      { path: 'dist', reason: 'vendored' },
+      { path: 'out', reason: 'vendored' },
+    ]));
+  });
+
   it('reports an over-size file as excluded', async () => {
     dir = await mkdtemp(join(tmpdir(), 'arena-test-'));
     await writeFile(join(dir, 'big.txt'), 'x'.repeat(501 * 1024));

@@ -79,13 +79,19 @@ interface WalkedFile { path: string; size: number; full: string }
 
 /**
  * Recursively list the candidate files under `dir`. Dot-directories (`.git`, ...)
- * are skipped silently; vendored and generated directories (`node_modules`,
- * `dist`, ...) are not descended into and are reported in `excluded` once each.
+ * are skipped silently. Vendored and generated paths (`node_modules`, `dist`,
+ * `out`, ...) are skipped and reported in `excluded`, with one exception: a
+ * deliverable the brief names by a path (`out/report.md`) is still reached, by
+ * descending into the vendored directory only along that path. A bare file name
+ * is not searched for inside vendored directories, since it would match every
+ * package's README there.
  */
 async function walkDir(
   dir: string,
   base: string,
   excluded: NonNullable<Deliverable['excluded']>,
+  namedPaths: string[],
+  inVendored = false,
 ): Promise<WalkedFile[]> {
   const results: WalkedFile[] = [];
   let entries;
@@ -97,15 +103,25 @@ async function walkDir(
   for (const entry of entries) {
     const full = join(dir, entry.name);
     const rel = relative(base, full);
+    const lower = rel.toLowerCase();
     if (entry.isDirectory()) {
       if (entry.name.startsWith('.')) continue;
-      if (isVendoredPath(rel)) {
+      const vendored = inVendored || isVendoredPath(rel);
+      if (!vendored) {
+        results.push(...await walkDir(full, base, excluded, namedPaths));
+      } else if (namedPaths.some((n) => n.startsWith(`${lower}/`))) {
+        if (!inVendored) excluded.push({ path: rel, reason: 'vendored' });
+        results.push(...await walkDir(full, base, excluded, namedPaths, true));
+      } else if (!inVendored) {
         excluded.push({ path: rel, reason: 'vendored' });
-        continue;
       }
-      results.push(...await walkDir(full, base, excluded));
     } else if (entry.isFile()) {
-      if (isVendoredPath(rel)) continue;
+      if (inVendored || isVendoredPath(rel)) {
+        if (!namedPaths.includes(lower)) {
+          if (!inVendored) excluded.push({ path: rel, reason: 'vendored' });
+          continue;
+        }
+      }
       const info = await stat(full).catch(() => null);
       if (info) results.push({ path: rel, size: info.size, full });
     }
@@ -262,7 +278,7 @@ export abstract class BaseAdapter extends EventEmitter implements ModelAdapter {
       .filter((n): n is string => n !== null)
       .map((n) => n.toLowerCase());
 
-    const walked = await walkDir(this.workdir, this.workdir, excluded);
+    const walked = await walkDir(this.workdir, this.workdir, excluded, wanted.filter((n) => n.includes('/')));
     const ranked = walked
       .map((f) => ({ f, rank: namedRank(f.path, wanted) }))
       .sort((a, b) => {
