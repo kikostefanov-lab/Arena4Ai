@@ -30,6 +30,8 @@ export const UNKNOWN_PROVIDER_CAPABILITY: ProviderFileCapability = {
   opSource: 'first-sighting',
   tool: false,
   input: false,
+  subagentAttribution: false,
+  subagentLifecycle: 'collected',
 };
 
 /**

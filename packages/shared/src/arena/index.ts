@@ -8,7 +8,7 @@ export {
   hexToRgbTuple, rgba, mixHex,
 } from '../design/tokens.js';
 
-export type { ProviderFileCapability, FileOperation, FileOpSource } from '../types/event.js';
+export type { ProviderFileCapability, FileOperation, FileOpSource, SubAgentStatus, SubAgentSpawnPayload, SubAgentDonePayload } from '../types/event.js';
 export { PROVIDER_FILE_CAPABILITIES } from '../types/event.js';
 
 export type { Ctx2D, CanvasLike, CanvasGradientLike, TextMetricsLike } from './canvas2d.js';

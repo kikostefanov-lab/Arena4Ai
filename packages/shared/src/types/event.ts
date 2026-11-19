@@ -1,5 +1,12 @@
 import type { EventType } from '../constants/event-types.js';
 
+/**
+ * Event `metadata` keys written by the squad feature (all optional):
+ *  - `agentId?: string`  the event was produced by that sub-agent (matches a
+ *                        SubAgentSpawnPayload.agentId); absent means the team's lead agent.
+ *  - `squad?: true`      a file was written while a squad was open and the member
+ *                        responsible is unknown (providers without attribution).
+ */
 export interface ArenaEvent<T = unknown> {
   eventId: string;
   competitionId: string;
@@ -22,7 +29,33 @@ export type FileOperation = 'create' | 'modify';
  *  - 'verb'           parsed from the CLI's own prose ("modified foo.ts"). Heuristic.
  *  - 'first-sighting' inferred from whether we had seen the path before. Weakest.
  */
-export type FileOpSource = 'tool' | 'marker' | 'verb' | 'first-sighting';
+export type FileOpSource = 'tool' | 'marker' | 'verb' | 'first-sighting' | 'watch';
+
+/** How a sub-agent ended. 'unknown' when the provider never reported an outcome. */
+export type SubAgentStatus = 'completed' | 'failed' | 'killed' | 'unknown';
+
+/** Payload of a SUB_AGENT_SPAWN event. */
+export interface SubAgentSpawnPayload {
+  agentId: string;
+  parentAgentId?: string;
+  label: string;
+  description: string;
+  kind?: string;
+  model?: string;
+  background?: boolean;
+  /** 1 for a direct child of the lead agent. */
+  depth: number;
+}
+
+/** Payload of a SUB_AGENT_DONE event. */
+export interface SubAgentDonePayload {
+  agentId: string;
+  status: SubAgentStatus;
+  reason?: string;
+  summary?: string;
+  model?: string;
+  usage?: { tokens?: number; toolUses?: number; durationMs?: number };
+}
 
 /**
  * Provider-neutral payload for FILE_CREATE / FILE_MODIFY events.
@@ -61,6 +94,10 @@ export interface ProviderFileCapability {
   tool: boolean;
   /** The provider emits the raw tool input. */
   input: boolean;
+  /** Events can be attributed to the sub-agent that produced them (`metadata.agentId`). */
+  subagentAttribution: boolean;
+  /** 'live': spawn/done events arrive as they happen. 'collected': reconstructed after the fact. */
+  subagentLifecycle: 'live' | 'collected';
 }
 
 /**
@@ -83,11 +120,11 @@ export interface ProviderFileCapability {
  * A/M marker.
  */
 export const PROVIDER_FILE_CAPABILITIES: Record<'claude' | 'codex' | 'gemini', ProviderFileCapability> = {
-  claude: { path: true, op: true, opSource: 'tool',   tool: true,  input: true  },
-  codex:  { path: true, op: true, opSource: 'marker', tool: false, input: false },
+  claude: { path: true, op: true, opSource: 'tool',   tool: true,  input: true,  subagentAttribution: true,  subagentLifecycle: 'live' },
+  codex:  { path: true, op: true, opSource: 'marker', tool: false, input: false, subagentAttribution: false, subagentLifecycle: 'collected' },
   // AA-037: gemini now runs with `-o stream-json`, so tool_name and parameters
   // arrive as data. Its operation is tool-derived like claude's, not parsed from
   // prose — and `replace` with an empty old_string is read as a create, which the
   // tool name alone would have got wrong.
-  gemini: { path: true, op: true, opSource: 'tool',   tool: true,  input: true  },
+  gemini: { path: true, op: true, opSource: 'tool',   tool: true,  input: true,  subagentAttribution: false, subagentLifecycle: 'collected' },
 };
