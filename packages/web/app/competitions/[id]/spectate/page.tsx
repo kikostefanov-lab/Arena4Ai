@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { streamUrl } from '../../../../lib/stream-url';
 import { useParams } from 'next/navigation';
 import { LANE_COLORS, getStateStyle, hexToRgb, MODEL_BADGE_COLORS, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../../lib/design-tokens';
-import { isHeuristicScore, teamCriterionScores } from '@arena/shared';
+import { teamDisplayName, isHeuristicScore, teamCriterionScores } from '@arena/shared';
 import { classifyEvent } from '../../../../lib/EventRow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -42,8 +42,7 @@ function getModelName(model: string): string {
 function resolveTeamLabel(teams: Team[], teamId: string, fallback: string): string {
   const team = teams.find((t) => t.id === teamId);
   if (!team) return fallback;
-  const base = team.model;
-  return team.persona ? `${base}:${team.persona}` : base;
+  return teamDisplayName(team.model, team.persona);
 }
 
 // ─── Global CSS ──────────────────────────────────────────────────────────────

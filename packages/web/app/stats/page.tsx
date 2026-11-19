@@ -9,6 +9,7 @@ import {
   ACCENT_GOLD, ACCENT_SILVER, ACCENT_BRONZE, TEXT_MUTED,
 } from '../../lib/design-tokens';
 import { formatDuration } from '../../lib/format';
+import { teamDisplayName } from '@arena/shared';
 
 // ── Shared types ────────────────────────────────────────────────────────────
 
@@ -688,7 +689,7 @@ function CompareTab() {
         const keys = new Set<string>();
         for (const c of comps) {
           for (const t of c.teams ?? []) {
-            keys.add(t.persona ? `${t.model}:${t.persona}` : t.model);
+            keys.add(teamDisplayName(t.model, t.persona));
           }
         }
         const sorted = Array.from(keys).sort();

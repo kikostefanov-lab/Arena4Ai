@@ -9,7 +9,7 @@ import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import ArenaViewerV2 from '../../../components/ArenaViewerV2';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
-import { isHeuristicScore, judgeBreakdown, teamCriterionScores, HEURISTIC_CEILING, type JudgeBreakdown } from '@arena/shared';
+import { teamDisplayName, isHeuristicScore, judgeBreakdown, teamCriterionScores, HEURISTIC_CEILING, type JudgeBreakdown } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -223,7 +223,7 @@ const INIT_MESSAGES = [
 function PreBattleScreen({ color, model, persona }: { color: string; model: string; persona?: string }) {
   const [msgIdx, setMsgIdx] = useState(0);
   const [progress, setProgress] = useState(8);
-  const displayName = persona ? `${model}:${persona}` : model;
+  const displayName = teamDisplayName(model, persona);
 
   useEffect(() => {
     const t = setInterval(() => setMsgIdx((i) => (i + 1) % INIT_MESSAGES.length), 1600);

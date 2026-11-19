@@ -7,6 +7,7 @@ import { getBundle } from '../../../../../lib/remotion-bundle';
 import { COMPOSITION_ID } from '@arena/video';
 import type { ReelData, ReelTeam, ReelKeyEvent } from '@arena/video';
 import { teamCriterionScores } from '@arena/shared';
+import { teamDisplayName } from '@arena/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ function buildReelData(competition: any, events: any[]): ReelData {
 
     return {
       teamId: team.id,
-      label: `${model}:${persona}`,
+      label: teamDisplayName(model, persona),
       model,
       persona,
       color: getModelColor(model),

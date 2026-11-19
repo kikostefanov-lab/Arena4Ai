@@ -15,6 +15,7 @@ import {
   type ScoreCard,
   type Team,
   type TeamPresentation,
+  teamDisplayName,
 } from '@arena/shared';
 
 import { transition } from './state-machine.js';
@@ -351,7 +352,7 @@ export class CompetitionRunner extends EventEmitter {
       const badModels = await findUnavailableModels(
         teams.map((t) => ({
           teamId: t.id,
-          label: t.model.includes(':') ? t.model : `${t.model}:${t.persona ?? ''}`,
+          label: teamDisplayName(t.model, t.persona),
           provider: t.model.split(':')[0] || 'claude',
           modelVariant: resolvedTeams.get(t.id)?.modelVariant,
         })),

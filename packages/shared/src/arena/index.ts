@@ -31,3 +31,5 @@ export { IsoArenaRenderer, VERDICT_STATES } from './renderer.js';
 
 export type { SquadEventLine } from './squad-hud.js';
 export { describeSquadEvent, squadSummary, deliveredList } from './squad-hud.js';
+
+export { teamDisplayName } from './team-name.js';

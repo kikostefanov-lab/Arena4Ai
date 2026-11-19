@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useMemo, useState, useCallback, Fragment } from 'react';
-import { IsoArenaRenderer, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
+import { teamDisplayName, IsoArenaRenderer, stepStructures, momentumShares, squadSummary, deliveredList, toFrameEvent, toFrameEvents, phaseFor, reconcileWithManifest, corpusFromEvents } from '@arena/shared';
 import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
@@ -107,7 +107,7 @@ function LaneHeader({ team, color, align, latest, squad, delivered }: {
           width: 8, height: 8, borderRadius: '50%',
           background: color, boxShadow: `0 0 10px ${color}`,
         }}/>
-        {team.model}{team.persona ? `:${team.persona}` : ''}
+        {teamDisplayName(team.model, team.persona)}
       </div>
       <div style={{
         color: `rgba(${rgb},0.55)`, fontSize: 10, letterSpacing: 1.5, minHeight: 14,
@@ -258,7 +258,7 @@ function WinnerBanner({ visible, winner, color, scores, teams }: {
                 letterSpacing: 1,
               }}>
                 <span style={{ color: c, minWidth: 80, textAlign: 'left' }}>
-                  {t.model}{t.persona ? `:${t.persona}` : ''}
+                  {teamDisplayName(t.model, t.persona)}
                 </span>
                 <div style={{
                   flex: 1, height: 5, background: '#0a2235',

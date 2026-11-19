@@ -29,6 +29,17 @@ import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferG
 import { providerOf, capabilityFor, momentumShares, squadSlotCells, SQUAD_SLOTS } from '@arena/shared';
 import type { World, Structure, SquadMember, RecentActivity, TeamState } from '@arena/shared';
 
+/**
+ * Jumbotron team name. Arena3DTeam carries no persona, so a model that already
+ * holds one ("claude:architect") shows as given; a repeated trailing segment
+ * ("claude:architect:architect") is collapsed. Pure.
+ */
+export function jumboName(model: string): string {
+  const parts = model.split(':');
+  while (parts.length > 1 && parts[parts.length - 1].toLowerCase() === parts[parts.length - 2].toLowerCase()) parts.pop();
+  return parts.join(':').toUpperCase();
+}
+
 export interface Arena3DTeam { id: string; model: string; color: string }
 export interface Arena3DOptions {
   teams: Arena3DTeam[];
@@ -935,7 +946,7 @@ export class Arena3D {
    * `replayOf` (every reel) keeps the LIVE text it always had.
    */
   private liveBanner(world: World): string {
-    const names = this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ');
+    const names = this.opts.teams.map((t) => jumboName(t.model)).join('  vs  ');
     if (!world.replayOf) return `LIVE  ·  ${names}`;
     const ending = NO_VERDICT_LABEL[world.replayOf];
     return ending ? `REPLAY  ·  ${ending}  ·  ${names}` : `REPLAY  ·  ${names}`;
@@ -966,7 +977,7 @@ export class Arena3D {
   }
 
   private onPhase(world: World): void {
-    const names = this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ');
+    const names = this.opts.teams.map((t) => jumboName(t.model)).join('  vs  ');
     this.spot.visible = false; this.spot.material.uniforms.uI.value = 0; this.revealAt = -1;
     this.jumboUntil = 0;
     for (const f of this.fighters) { f.basePose = 'idle'; f.flash = null; for (const b of f.squad) b.flash = null; }
@@ -983,7 +994,8 @@ export class Arena3D {
       for (const f of this.fighters) { f.basePose = f === w ? 'triumph' : 'kneel'; f.energy = f === w ? 1 : 0; }
       this.spot.visible = true; this.spot.position.x = w.root.position.x; this.spot.material.uniforms.uC.value = w.color;
       this.revealAt = this.time.value;
-      const name = this.opts.teams.find((t) => t.id === w.id)?.model.toUpperCase() ?? '';
+      const found = this.opts.teams.find((t) => t.id === w.id)?.model;
+      const name = found ? jumboName(found) : '';
       this.setJumbo(`VERDICT  ·  ${name} WINS`, `#${w.color.getHexString()}`);
       this.cut(1 + this.fighters.indexOf(w) % 2);
     }
