@@ -110,30 +110,89 @@ export function attachWebSocket(server: Server): void {
       }
     };
 
-    // Replay past events from Postgres.
-    // lastSeq is a per-competition event count (number of events the client has already seen),
-    // not a global DB serial — this is stable across concurrent competitions.
-    try {
-      const pastEvents = await repo.getEvents(competitionId, lastSeq > 0 ? lastSeq : undefined);
-      for (let i = 0; i < pastEvents.length; i++) {
-        const row = pastEvents[i];
-        send({
-          eventId: row.id,
-          competitionId: row.competitionId,
-          teamId: row.teamId,
-          timestamp: row.timestamp,
-          type: row.type,
-          payload: row.payload,
-          metadata: row.metadata,
-          _seq: lastSeq + i + 1,
-        });
+    // Subscribe BEFORE reading history. Events emitted while the history query is
+    // in flight are buffered and flushed afterwards, so a (re)connecting viewer
+    // cannot miss one (a missed SUB_AGENT_DONE would leave a ghost robot).
+    // Events reach the DB fire-and-forget, so the same event can be in both the
+    // history and the buffer; eventId dedups them.
+    const runner = runnerRegistry.get(competitionId);
+    const sentIds = new Set<string>();
+    let seq = lastSeq;
+    let live = false;
+    let closed = false;
+    const buffer: Array<() => void> = [];
+
+    const sendLiveEvent = (event: unknown) => {
+      const id = (event as { eventId?: string }).eventId;
+      if (id !== undefined) {
+        if (sentIds.has(id)) return;
+        sentIds.add(id);
       }
-      lastSeq += pastEvents.length;
-    } catch (err) {
-      console.error('[ws] replay error:', err);
+      seq++;
+      send({ ...(event as object), _seq: seq });
+    };
+    const deliver = (fn: () => void) => { if (live) fn(); else buffer.push(fn); };
+
+    const onArenaEvent = (event: unknown) => deliver(() => sendLiveEvent(event));
+    const onStateChange = (state: unknown) => deliver(() => send({ type: 'STATE_CHANGE', state }));
+    const onResult = (r: unknown) => deliver(() => {
+      const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; presentations?: unknown[]; synthesis?: RawSynthesis; deliverables?: TeamDeliverable[] };
+      const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, {
+        synthesis: runnerResult.synthesis,
+        presentations: runnerResult.presentations,
+        deliverables: runnerResult.deliverables,
+      });
+      send({ type: 'COMPLETE', result: normalized });
+      closed = true;
+      ws.close();
+    });
+    const onError = (err: Error) => deliver(() => { send({ type: 'ERROR', message: err.message }); closed = true; ws.close(); });
+
+    if (runner) {
+      runner.on('arenaEvent', onArenaEvent);
+      runner.on('stateChange', onStateChange);
+      runner.on('result', onResult);
+      runner.on('error', onError);
+      ws.on('close', () => {
+        runner.off('arenaEvent', onArenaEvent);
+        runner.off('stateChange', onStateChange);
+        runner.off('result', onResult);
+        runner.off('error', onError);
+      });
     }
 
     try {
+      // Replay past events from Postgres.
+      // lastSeq is a per-competition event count (number of events the client has already seen),
+      // not a global DB serial — this is stable across concurrent competitions.
+      try {
+        const pastEvents = await repo.getEvents(competitionId, lastSeq > 0 ? lastSeq : undefined);
+        for (let i = 0; i < pastEvents.length; i++) {
+          const row = pastEvents[i];
+          sentIds.add(row.id);
+          send({
+            eventId: row.id,
+            competitionId: row.competitionId,
+            teamId: row.teamId,
+            timestamp: row.timestamp,
+            type: row.type,
+            payload: row.payload,
+            metadata: row.metadata,
+            _seq: lastSeq + i + 1,
+          });
+        }
+        lastSeq += pastEvents.length;
+        seq = lastSeq;
+      } catch (err) {
+        console.error('[ws] replay error:', err);
+      }
+
+      // Flush what arrived during the history read, then go direct.
+      for (const fn of buffer) fn();
+      buffer.length = 0;
+      live = true;
+      if (closed) return;
+
       // Check if already complete
       const result = await repo.getResult(competitionId);
       if (result) {
@@ -150,40 +209,11 @@ export function attachWebSocket(server: Server): void {
         return;
       }
 
-      // Subscribe to live events from the active runner
-      const runner = runnerRegistry.get(competitionId);
       if (!runner) {
         send({ type: 'ERROR', message: 'Competition not found — the server may have restarted mid-competition.' });
         ws.close();
         return;
       }
-
-      let seq = lastSeq;
-      const onArenaEvent = (event: unknown) => { seq++; send({ ...(event as object), _seq: seq }); };
-      const onStateChange = (state: unknown) => { send({ type: 'STATE_CHANGE', state }); };
-      const onResult = (r: unknown) => {
-        const runnerResult = r as { scorecards?: RawScorecard[]; winner?: string | null; presentations?: unknown[]; synthesis?: RawSynthesis; deliverables?: TeamDeliverable[] };
-        const normalized = normalizeResult(runnerResult.scorecards ?? [], runnerResult.winner ?? null, {
-          synthesis: runnerResult.synthesis,
-          presentations: runnerResult.presentations,
-          deliverables: runnerResult.deliverables,
-        });
-        send({ type: 'COMPLETE', result: normalized });
-        ws.close();
-      };
-      const onError = (err: Error) => { send({ type: 'ERROR', message: err.message }); ws.close(); };
-
-      runner.on('arenaEvent', onArenaEvent);
-      runner.on('stateChange', onStateChange);
-      runner.on('result', onResult);
-      runner.on('error', onError);
-
-      ws.on('close', () => {
-        runner.off('arenaEvent', onArenaEvent);
-        runner.off('stateChange', onStateChange);
-        runner.off('result', onResult);
-        runner.off('error', onError);
-      });
     } catch (err) {
       console.error('[ws] connection error:', err);
       send({ type: 'ERROR', message: err instanceof Error ? err.message : 'Internal error' });
