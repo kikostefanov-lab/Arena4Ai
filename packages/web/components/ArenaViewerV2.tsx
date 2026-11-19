@@ -721,7 +721,7 @@ export default function ArenaViewerV2({
       {teams.length >= 2 && (
         <>
           {teams.length > 2 && (
-            <div style={{ position: 'relative', height: 30 }}><PhaseChip phase={phase} /></div>
+            <div style={{ position: 'relative', height: 48 }}><PhaseChip phase={phase} /></div>
           )}
           <div style={{
             display: 'grid', alignItems: 'start', gap: 12,

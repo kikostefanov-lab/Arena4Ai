@@ -501,7 +501,14 @@ export class Arena3D {
       // member, so three squads never bury the floor in text.
       let talker: SquadMember | null = null;
       for (const m of bound) {
-        if (!m || m.endedAt !== undefined && m.endedAt <= world.t || m.lastActiveAt <= m.spawnedAt || m.lastActiveAt > world.t) continue;
+        if (!m || m.endedAt !== undefined && m.endedAt <= world.t || m.spawnedAt > world.t) continue;
+        if (!attributed) {
+          // No per-member attribution (codex, gemini): lastActiveAt never moves,
+          // so the most recently SPAWNED open member keeps the team's label.
+          if (!talker || m.spawnedAt > talker.spawnedAt) talker = m;
+          continue;
+        }
+        if (m.lastActiveAt <= m.spawnedAt || m.lastActiveAt > world.t) continue;
         if (world.t - m.lastActiveAt < LABEL_ACTIVE_MS && (!talker || m.lastActiveAt > talker.lastActiveAt)) talker = m;
       }
 
@@ -572,7 +579,7 @@ export class Arena3D {
           b.beam.material.opacity = bi;
         } else b.beam.visible = false;
 
-        const talk = m === talker ? clamp01((LABEL_ACTIVE_MS - (world.t - m.lastActiveAt)) / 500) : 0;
+        const talk = m !== talker ? 0 : attributed ? clamp01((LABEL_ACTIVE_MS - (world.t - m.lastActiveAt)) / 500) : 1;
         const la = Math.max(clamp01((LABEL_SPAWN_MS - age) / 500), talk, ended ? 1 : 0) * alpha * clamp01(k * 2);
         if (la > 0.01) {
           if (b.labelText !== m.label) { b.labelText = m.label; this.drawTag(b.labelCtx, b.labelTex, m.label, f.color); }
