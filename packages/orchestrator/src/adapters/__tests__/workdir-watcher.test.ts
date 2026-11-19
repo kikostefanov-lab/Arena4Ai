@@ -84,15 +84,21 @@ describe('WorkdirWatcher', () => {
     expect(seen).toEqual([{ path: 'src/ok.ts', op: 'create' }]);
   });
 
-  it('stop() ends the interval', () => {
+  it('start() emits on its own timer, and stop() ends it', () => {
     vi.useFakeTimers();
     try {
-      const { w, seen } = make();
+      const run = (stopIt: boolean) => {
+        const seen: Array<{ path: string; op: string }> = [];
+        const w = new WorkdirWatcher({ root, now: () => Date.now(), onFile: (f) => seen.push(f) });
+        w.start();
+        if (stopIt) w.stop();
+        vi.advanceTimersByTime(6000);
+        w.stop();
+        return seen;
+      };
       writeFileSync(join(root, 'a.md'), 'x');
-      w.start();
-      w.stop();
-      vi.advanceTimersByTime(20_000);
-      expect(seen).toEqual([]);
+      expect(run(false)).toEqual([{ path: 'a.md', op: 'create' }]);
+      expect(run(true)).toEqual([]);
     } finally { vi.useRealTimers(); }
   });
 });
