@@ -353,8 +353,9 @@ program
 
     const repo = new CompetitionRepository(db);
     const comps = await repo.list(500);
+    const { isSyntheticCompetition } = await import('@arena/shared');
     const completed = comps.filter(
-      (c: any) => c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE' || c.state === 'SCORED',
+      (c: any) => !isSyntheticCompetition(c) && (c.state === 'COMPLETE' || c.state === 'FORGE_COMPLETE' || c.state === 'SCORED'),
     );
 
     console.log(`[arena] found ${completed.length} completed competitions`);

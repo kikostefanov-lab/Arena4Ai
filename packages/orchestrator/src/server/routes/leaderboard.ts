@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { isFinishedState } from '@arena/shared';
+import { isFinishedState, isSyntheticCompetition } from '@arena/shared';
 import { repo } from '../repo.js';
 
 export const leaderboardRouter = Router();
@@ -30,7 +30,7 @@ interface Scorecard {
 leaderboardRouter.get('/', async (_req: Request, res: Response) => {
   // Fetch all completed competitions and their results
   const competitions = await repo.list(500);
-  const completedComps = competitions.filter((c) => isFinishedState(c.state));
+  const completedComps = competitions.filter((c) => isFinishedState(c.state) && !isSyntheticCompetition(c));
 
   if (completedComps.length === 0) {
     res.json([]);

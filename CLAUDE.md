@@ -117,7 +117,9 @@ Competitor CLIs may spawn their own sub-agents; Arena records and draws them as 
 - **Leaderboard** credits the lead agent's model, not its sub-agents'.
 - **Demo:** `npx tsx packages/orchestrator/src/dev/seed-squad-demo.ts [--brief file.yml]` seeds a
   COMPLETE three-team match titled "[DEMO] Squads — synthetic replay" from the committed fixtures
-  (real normalizers, re-timed, replayed several times) and prints its id. Synthetic: not a result.
+  (real normalizers, re-timed, replayed several times) and prints its id. Synthetic: not a result. Its brief is tagged `synthetic-demo` (`isSyntheticCompetition()`
+  in `@arena/shared`); leaderboard, analytics, compare, criteria and `seed-quality-signals` skip it.
+  `seed-squad-demo.ts --remove` deletes every synthetic competition and nothing else.
 
 ## Tests
 
@@ -157,9 +159,11 @@ Model routing in `competition-runner.ts` (prefix before `:`):
 - `gemini:*` → GeminiAdapter
 
 ### CLI flags (critical — wrong flags = broken agent)
-- **Claude**: `claude --print <prompt> --output-format stream-json --verbose --dangerously-skip-permissions`
-- **Codex**: `codex exec --skip-git-repo-check -s workspace-write <prompt>` (`-s workspace-write` required)
-- **Gemini**: `gemini -p <prompt> --yolo` (`--yolo` required — auto-approves tool calls)
+The source of truth is the code: `claudeArgs` in `claude-adapter.ts`, `codexArgs()` in
+`codex-adapter.ts`, the gemini args in `gemini-adapter.ts`, and `adapters/isolation.ts`. Shape:
+- **Claude**: `claude --print - --output-format stream-json --verbose --dangerously-skip-permissions --strict-mcp-config --setting-sources project [--model <m>]` (prompt on stdin)
+- **Codex**: `codex exec --json --skip-git-repo-check -s workspace-write --ignore-user-config -c features.multi_agent_v2=false -c sandbox_workspace_write.network_access=true -c web_search=live -c agents.max_concurrent_threads_per_session=<cap> [-m <m>] <prompt>` (`-s workspace-write` required)
+- **Gemini**: `gemini -p <prompt> --yolo -o stream-json --extensions none --allowed-mcp-server-names arena-none [--model <m>]` (`--yolo` required — auto-approves tool calls)
 
 ### HTTP API (Express, port 3000)
 - `POST /competitions` — start competition → `{ competitionId }`
@@ -346,8 +350,8 @@ const parsed = JSON.parse(extractJson(stdout));
 ```
 
 **Brief context** — `packages/orchestrator/src/utils/brief-context.ts` builds the brief section of every LLM prompt. Exports `buildBriefContext(brief, options)`, `truncateFiles(files, perFile, budget)`, and 4 presets — use them, don't hand-build brief sections:
-- `JUDGE_CONTEXT`: title/problem/constraints/deliverables/rubric (full detail), 12K/file, 80K budget
-- `PRESENTER_CONTEXT`: same fields, weights-only rubric, 8K/file, 50K budget
+- `JUDGE_CONTEXT`: title/problem/constraints/deliverables/rubric (full detail), 24K/file, 240K budget
+- `PRESENTER_CONTEXT`: same fields, weights-only rubric, 12K/file, 120K budget
 - `SYNTHESIS_CONTEXT`: title/problem/constraints/rubric (full), 8K/file, 50K budget
 - `FORGE_CONTEXT`: title/problem/constraints/rubric (full), 6K/file, 40K budget
 
@@ -459,8 +463,9 @@ Where things stand after 2026-11-18 (see `CHANGELOG.md` for the detail):
 - Agent squads are on `feat/agent-squads` (not merged): sub-agent events, robots in the 3D view,
   squad chips and deliverable strips in the HUD, the Codex `--json` move and the WebSocket
   subscribe-before-history fix. Browser verification and the PR are what is left.
+
 Earlier, after 2026-11-14:
-- `main` has the 3D arena (`v2.0.0`) and the harness hardening (#17). Nothing is in flight.
+- As of 2026-11-14, `main` had the 3D arena (`v2.0.0`) and the harness hardening (#17).
 - **Done 2026-11-14:** real end-to-end runs (CLI and web) on the hardened build. They led to the
   live model catalog and agent-crash reporting on `feat/live-model-catalog` (see CHANGELOG).
 - **Next:** mark a team whose CLI stalled on provider errors (e.g. Gemini 503s until the deadline)
@@ -497,5 +502,5 @@ Earlier, after 2026-11-14:
    Gemini's `invoke_agent` only marks the call and its result, so lifespans are approximate.
    Codex's `--ignore-user-config` also ignores the operator's `config.toml` (default model, a custom
    provider or base URL) for competitors, while the model-catalog probe does not use the flag.
-7. The heuristic fallback scorer's formula (`rubric-scorer.ts`) is owned by the parallel session
-   `fix-the-heuristic-fallba`; squad work does not touch it.
+7. The heuristic fallback scorer's formula (`rubric-scorer.ts`) is the heuristic fallback scorer work (PR #20);
+   squad work does not touch it.

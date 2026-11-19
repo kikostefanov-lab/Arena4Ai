@@ -1,3 +1,12 @@
+/** Brief tag marking a competition seeded by dev/seed-squad-demo.ts. Never a real result. */
+export const SYNTHETIC_DEMO_TAG = 'synthetic-demo';
+
+/** True for a stored competition whose brief carries the synthetic-demo tag. */
+export function isSyntheticCompetition(comp: { brief?: unknown }): boolean {
+  const tags = (comp.brief as { tags?: unknown } | null | undefined)?.tags;
+  return Array.isArray(tags) && tags.includes(SYNTHETIC_DEMO_TAG);
+}
+
 /** Highest share of a criterion's maxScore the completeness heuristic can award. */
 export const HEURISTIC_CEILING = 0.5;
 

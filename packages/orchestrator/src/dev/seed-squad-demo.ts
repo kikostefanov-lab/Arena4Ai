@@ -15,11 +15,15 @@
  *   DATABASE_URL=postgresql://localhost/arena \
  *     npx tsx packages/orchestrator/src/dev/seed-squad-demo.ts [--brief path/to/brief.yml]
  *
+ * The brief is tagged `synthetic-demo`; leaderboard, analytics, compare, criteria and
+ * seed-quality-signals skip such competitions. `--remove` deletes every synthetic
+ * competition (events and results included) and refuses anything not tagged.
+ *
  * --brief defaults to briefs/fizzbuzz-cli.yml. Prints the competition id.
  */
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { EventType, expectedFileName } from '@arena/shared';
+import { EventType, expectedFileName, SYNTHETIC_DEMO_TAG, isSyntheticCompetition } from '@arena/shared';
 import type { ArenaEvent, Team } from '@arena/shared';
 import { parseBrief } from '../brief/parser.js';
 import { loadFixture } from '../adapters/__fixtures__/load.js';
@@ -155,11 +159,32 @@ function buildTeamEvents(plan: TeamPlan, t0: number, deliverables: string[]): Ar
   return out.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 }
 
+async function removeSynthetic(): Promise<void> {
+  const { db } = await import('../db/client.js');
+  const { CompetitionRepository } = await import('../db/repository.js');
+  const repo = new CompetitionRepository(db);
+  const all = await repo.list(1000);
+  const targets = all.filter((c) => isSyntheticCompetition(c));
+  for (const c of targets) {
+    // Defence in depth: delete() is by id, so re-check the tag on the exact row.
+    const row = await repo.getCompetition(c.id);
+    if (!row || !isSyntheticCompetition(row)) {
+      console.error(`refusing to delete ${c.id}: not marked synthetic`);
+      continue;
+    }
+    await repo.delete(c.id);
+    console.log(`removed ${c.id}`);
+  }
+  if (targets.length === 0) console.log('no synthetic competitions found');
+  process.exit(0);
+}
+
 async function main(): Promise<void> {
   if (!process.env.DATABASE_URL) {
     console.error('DATABASE_URL is required');
     process.exit(1);
   }
+  if (process.argv.includes('--remove')) return removeSynthetic();
   const argIdx = process.argv.indexOf('--brief');
   const briefPath = resolve(argIdx >= 0 && process.argv[argIdx + 1] ? process.argv[argIdx + 1] : 'briefs/fizzbuzz-cli.yml');
   const parsed = await parseBrief(briefPath);
@@ -167,6 +192,7 @@ async function main(): Promise<void> {
     ...parsed,
     id: parsed.id ?? COMPETITION_ID,
     title: '[DEMO] Squads — synthetic replay',
+    tags: [...(parsed.tags ?? []), SYNTHETIC_DEMO_TAG],
     timeLimitMs: DEMO_MS,
   };
   const teams = plans.map((p) => p.team);

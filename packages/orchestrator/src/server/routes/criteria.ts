@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { isSyntheticCompetition } from '@arena/shared';
 import { repo } from '../repo.js';
 
 export const criteriaRouter = Router();
@@ -25,7 +26,7 @@ interface ScoreCard {
 
 /** GET /analytics/criteria */
 criteriaRouter.get('/', async (_req: Request, res: Response) => {
-  const allComps = await repo.list(200);
+  const allComps = (await repo.list(200)).filter((c) => !isSyntheticCompetition(c));
   const completedComps = allComps.filter((c) => c.state === 'COMPLETE');
 
   if (completedComps.length === 0) {
