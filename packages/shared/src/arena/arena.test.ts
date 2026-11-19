@@ -15,7 +15,7 @@ import {
   corpusFromEvents,
 } from './event-model.js';
 import { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, squadSlotCells, SQUAD_SLOTS } from './layout.js';
-import { createWorld, resetWorld, applyEvent, stepStructures, targetHeight, foldFileStats, telemetryFromStats, momentumShares } from './world.js';
+import { createWorld, resetWorld, applyEvent, stepStructures, targetHeight, foldFileStats, telemetryFromStats, momentumShares, deliverableMatches } from './world.js';
 import { safeBox, worldScale, createCamera, NO_INSETS } from './camera.js';
 import { IsoArenaRenderer } from './renderer.js';
 import { MODEL_COLORS } from '../design/tokens.js';
@@ -577,6 +577,21 @@ describe('parallel bands — N teams get N bands, and none of them overlap', () 
     }
   });
 
+  it('claims no more capacity than the smallest band can hold (middle band loses x=0)', () => {
+    // planGrid used to claim floor((2gx-1)/n) columns per band, but at N=3 the
+    // middle band also loses the x=0 centre column: needed=10 claimed 37 cells
+    // while the bands held [37, 30, 37].
+    for (const n of [2, 3, 4]) {
+      for (const needed of [1, 10, 37, 60, 80, 200, MAX_BLOCKS_PER_TEAM]) {
+        const g = planGrid(needed, n);
+        expect(g.capacity).toBeGreaterThanOrEqual(needed);
+        for (const b of bandsFor(n, g, 6.2)) {
+          expect(bandCells(b, g).length).toBeGreaterThanOrEqual(g.capacity);
+        }
+      }
+    }
+  });
+
   it('sizes the floor per BAND, so four teams are not given a two-team floor', () => {
     // planGrid(needed, n) must grow with n: the same per-team demand on more
     // teams needs more floor, or the extra bands stack like the old code did.
@@ -653,7 +668,7 @@ describe('reconcileWithManifest', () => {
     const { events: out } = reconcileWithManifest([fileEv(100, 'b', 'a.js')], [
       { teamId: 'b', paths: ['a.js', 'c.js'], corpus: namesAll('a.js','c.js') },
     ]);
-    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 };
     for (const e of out) foldFileStats(stats, e);
 
     const tel = telemetryFromStats('codex', stats);
@@ -689,7 +704,7 @@ describe('reconcileWithManifest', () => {
   });
 
   it('a complete stream with a contract stays MEASURED', () => {
-    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 };
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 };
     foldFileStats(stats, fileEv(100, 'b', 'a.js'));
     expect(telemetryFromStats('codex', stats).editDepth).toBe('measured');
   });
@@ -984,6 +999,24 @@ describe('squads', () => {
     expect(w.teams.get('b')!.counts.files).toBe(1);
   });
 
+  it('a watch-only team is not labelled measured, and says why (both telemetry paths)', () => {
+    const events = toFrameEvents([watch('b', 'notes.md', 100), watch('b', 'plan.md', 200)], T0);
+    const w = createWorld(two, events);
+    const fromEvents = w.teams.get('b')!.telemetry;
+    const stats = { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 };
+    for (const e of events) foldFileStats(stats, e);
+    const fromStats = telemetryFromStats('codex', stats);
+    for (const t of [fromEvents, fromStats]) {
+      expect(t.editDepth).toBe('inferred');
+      expect(t.note).toContain('files observed on disk; the CLI did not report its edits');
+      expect(t.note).not.toContain('predates');
+    }
+    expect(fromStats).toEqual(fromEvents);
+    // One CLI-reported edit makes it measured again, in both places.
+    const mixed = toFrameEvents([fileBy('b', 'main.go', 50), watch('b', 'notes.md', 100)], T0);
+    expect(createWorld(two, mixed).teams.get('b')!.telemetry.editDepth).toBe('measured');
+  });
+
   it('a watch event never downgrades a measured block', () => {
     const events = toFrameEvents([fileBy('a', 'x.md', 100), watch('a', 'x.md', 200)], T0);
     const w = createWorld(two, events);
@@ -1009,16 +1042,29 @@ describe('squads', () => {
 
   it('delivered tracks named deliverables, including nested names', () => {
     const deliverables = ['research/kegs.md — the keg market', 'decision.md with the pick', 'A short pitch'];
-    const events = toFrameEvents([fileBy('a', 'research/kegs.md', 100), fileBy('a', 'notes/decision.md', 200)], T0);
+    const events = toFrameEvents([fileBy('a', 'research/kegs.md', 100), fileBy('a', 'node_modules/x/decision.md', 150)], T0);
     const w = createWorld(two, events, { deliverables });
     expect(w.deliverables).toEqual(['research/kegs.md', 'decision.md']);
     for (const e of events) applyEvent(w, e, false);
     const team = w.teams.get('a')!;
     expect(team.delivered.has('research/kegs.md')).toBe(true);
+    // Collection does not search vendored dirs for a bare name, so neither does the strip.
     expect(team.delivered.has('decision.md')).toBe(false);
-    applyEvent(w, toFrameEvent(watch('a', 'decision.md', 300), T0), false);
+    // A nested basename is what the judge collects when there is no top-level file.
+    applyEvent(w, toFrameEvent(watch('a', 'notes/decision.md', 300), T0), false);
     expect(team.delivered.has('decision.md')).toBe(true);
     expect(w.teams.get('b')!.delivered.size).toBe(0);
+  });
+
+  it('deliverableMatches follows the judge: exact path, or a bare name at top level or nested', () => {
+    expect(deliverableMatches('decision.md', 'decision.md')).toBe(true);
+    expect(deliverableMatches('./Decision.MD', 'decision.md')).toBe(true);
+    expect(deliverableMatches('notes/decision.md', 'decision.md')).toBe(true);
+    expect(deliverableMatches('.github/decision.md', 'decision.md')).toBe(false);
+    expect(deliverableMatches('node_modules/p/decision.md', 'decision.md')).toBe(false);
+    expect(deliverableMatches('research/kegs.md', 'research/kegs.md')).toBe(true);
+    expect(deliverableMatches('old/research/kegs.md', 'research/kegs.md')).toBe(false);
+    expect(deliverableMatches('kegs.md', 'research/kegs.md')).toBe(false);
   });
 
   it('resetWorld clears squads, totals and delivered', () => {
@@ -1170,6 +1216,27 @@ describe('squads', () => {
       expect(r.world.phase).toBe('reveal');
       expect(terminals(r)).toEqual(['kneel', 'triumph']);
     });
+
+    it('a replay is marked on the world, live is not, and a scrub keeps it', () => {
+      const r = finished(match());
+      expect(r.world.replayOf).toBe('COMPLETE');
+      r.seek(0);
+      expect(r.world.replayOf).toBe('COMPLETE');
+      const live = new IsoArenaRenderer({ teams: two, events: [], timeLimitMs: 300_000 });
+      expect(live.world.replayOf).toBeNull();
+    });
+
+    for (const state of ['FAILED', 'CANCELLED']) {
+      it(`a ${state} replay is a replay but never reveals a verdict`, () => {
+        const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });
+        r.setWinner(null);
+        r.setFinalState(state);
+        r.seek(r.totalMs);
+        expect(r.world.replayOf).toBe(state);
+        expect(r.world.phase).toBe('active');
+        expect(r.world.compState).not.toBe(state);
+      });
+    }
 
     it('a renderer with no final state (live) never has its phase forced', () => {
       const r = new IsoArenaRenderer({ teams: two, events: toFrameEvents(match(), T0), timeLimitMs: 300_000 });

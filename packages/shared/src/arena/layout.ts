@@ -43,32 +43,40 @@ const ASPECT = 8 / 5;
 export const SQUAD_SLOTS = 6;
 
 /**
- * Cells `cellOrder` withholds: up to two because the competitor figure stands on
- * them, plus one per squad slot. `planGrid` must budget for these: sizing the
- * grid to the raw lattice count leaves it short, which is precisely the
- * silent-stacking bug this module exists to remove — just smaller and harder to
- * see.
+ * Where an outermost band seats its competitor figure, as a distance from the
+ * centre line. The world passes this to `bandsFor`; `planGrid` needs the same
+ * value because the figure and squad cells it reserves depend on it.
  */
-const RESERVED_BASE_CELLS = 2 + SQUAD_SLOTS;
+export const DEFAULT_BASE_X = 6.2;
 
 /**
  * Smallest grid whose per-side USABLE capacity covers `needed`, keeping the 8:5
  * look. Never returns smaller than the prototype's 8×5 — a two-file competition
  * should still look like an arena, not like a chessboard for ants.
  *
- * `capacity` is what a caller can actually place, base cells already deducted.
+ * `capacity` is what a caller can actually place in EVERY band: the smallest
+ * `bandCells(...)` count over the teams' bands, so the cells the competitor
+ * figure and its squad slots stand on are already deducted. Budgeting from the
+ * raw lattice count instead leaves the grid short, which is precisely the
+ * silent-stacking bug this module exists to remove. It is measured, not estimated: the old
+ * `floor((2gx-1)/n)` column count over-claimed for an interior band at N=3,
+ * which also loses the x=0 centre column (needed=10 claimed 37 cells while the
+ * middle band had 30), so the middle team stacked blocks before the grid grew.
  */
-export function planGrid(needed: number, teamCount = 2): GridExtent {
+export function planGrid(needed: number, teamCount = 2, baseX = DEFAULT_BASE_X): GridExtent {
   const n = Math.max(1, teamCount);
   let gz = 5;
   for (;;) {
     const gx = Math.max(8, Math.round(gz * ASPECT));
     // Each team owns one band of the long axis, so per-team capacity is the
-    // whole lattice divided by the number of bands — not half of it. Sizing as
-    // though there were always two teams would leave a four-way competition
-    // half the floor it needs and reintroduce stacking at N > 2.
-    const columns = Math.floor((2 * gx - 1) / n);
-    const capacity = columns * (2 * gz - 1) - RESERVED_BASE_CELLS;
+    // smallest band's usable cells — not half of the lattice. Sizing as though
+    // there were always two teams would leave a four-way competition half the
+    // floor it needs and reintroduce stacking at N > 2.
+    const probe: GridExtent = { gx, gz, capacity: 0 };
+    let capacity = Infinity;
+    for (const band of bandsFor(n, probe, baseX)) {
+      capacity = Math.min(capacity, bandCells(band, probe).length);
+    }
     if (capacity >= needed || gz > 64) return { gx, gz, capacity };
     gz += 1;
   }

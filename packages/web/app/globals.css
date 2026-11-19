@@ -164,6 +164,11 @@ html {
 }
 
 /* ── TopBar layout ── */
+/* Arena theater mode (ArenaViewerV2): the arena sits in <main>'s stacking
+   context, below the fixed site chrome, so the chrome is hidden instead. */
+body.arena-theater .topbar,
+body.arena-theater .corner { display: none; }
+
 .topbar {
   position: fixed; top: 0; left: 0; right: 0;
   z-index: 100;

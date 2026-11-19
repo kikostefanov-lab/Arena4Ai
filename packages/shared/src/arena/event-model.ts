@@ -422,11 +422,19 @@ export interface TeamTelemetry {
  * provider that CAN report an operation still yields nothing on a historical
  * competition recorded before it did.
  */
+/** Legend note for a team whose every file came from the workdir watcher. */
+export function watchOnlyNote(provider: string): string {
+  return `${provider}: files observed on disk; the CLI did not report its edits, so block heights are inferred`;
+}
+
 export function resolveTelemetry(model: string, fileEvents: FrameEvent[]): TeamTelemetry {
   const provider = providerOf(model);
   const capability = capabilityFor(model);
   const anyLegacy = fileEvents.some((e) => e.legacy);
-  const anyContract = fileEvents.some((e) => !e.legacy && e.opSource);
+  // A watch sighting is evidence of a file, not the CLI reporting its edit:
+  // excluded here and in `foldFileStats` (world.ts), which must stay in step.
+  const anyContract = fileEvents.some((e) => !e.legacy && e.opSource && e.opSource !== 'watch');
+  const allWatched = fileEvents.length > 0 && fileEvents.every((e) => e.opSource === 'watch');
   const anyPath = fileEvents.some((e) => !!e.path);
 
   // A provider that structurally CANNOT report the operation is the primary
@@ -450,6 +458,9 @@ export function resolveTelemetry(model: string, fileEvents: FrameEvent[]): TeamT
   if (fileEvents.length === 0) {
     // No files at all is a fact about the run, not a gap in telemetry.
     return { provider, capability, editDepth: 'measured', legacy: false };
+  }
+  if (allWatched) {
+    return { provider, capability, editDepth: 'inferred', legacy: anyLegacy, note: watchOnlyNote(provider) };
   }
   if (anyPath) {
     return {

@@ -1,10 +1,10 @@
 import type { FrameEvent, TeamTelemetry, EditDepthMode, SquadSignals } from './event-model.js';
-import { resolveTelemetry, providerOf, capabilityFor, squadNotes } from './event-model.js';
+import { resolveTelemetry, providerOf, capabilityFor, squadNotes, isVendoredPath, watchOnlyNote } from './event-model.js';
 import type { SubAgentStatus } from '../types/event.js';
 import { expectedFileName } from '../constants/scoring.js';
 import { getModelColor } from '../design/tokens.js';
 import type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
-import { planGrid, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, SQUAD_SLOTS } from './layout.js';
+import { planGrid, DEFAULT_BASE_X, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, SQUAD_SLOTS } from './layout.js';
 
 /** What the renderer needs to know about one competitor. */
 export interface TeamSpec {
@@ -18,7 +18,16 @@ export interface TeamSpec {
 export type BlockKind = 'src' | 'test' | 'doc' | 'config';
 
 /** Running tallies over a team's file events. See `TeamState.fileStats`. */
-export interface FileStats { total: number; withContract: number; withPath: number; legacy: number; recovered: number }
+export interface FileStats {
+  total: number;
+  /** Events carrying the CLI's own operation (`op` + an opSource other than 'watch'). */
+  withContract: number;
+  withPath: number;
+  legacy: number;
+  recovered: number;
+  /** Events the workdir watcher saw on disk (`opSource: 'watch'`). */
+  watched: number;
+}
 
 /**
  * Fold one file event into a team's tallies.
@@ -37,7 +46,11 @@ export interface FileStats { total: number; withContract: number; withPath: numb
 export function foldFileStats(stats: FileStats, ev: FrameEvent): void {
   if (ev.kind !== 'file') return;
   stats.total++;
-  if (ev.opSource && ev.op) stats.withContract++;
+  // A watch sighting is evidence of a file, not the CLI reporting its edit, so
+  // it never makes a team's heights `measured`. Keep in step with
+  // `resolveTelemetry` in event-model.ts.
+  if (ev.opSource === 'watch') stats.watched++;
+  else if (ev.opSource && ev.op) stats.withContract++;
   if (ev.path) stats.withPath++;
   if (ev.legacy) stats.legacy++;
   if (ev.recovered) stats.recovered++;
@@ -191,6 +204,13 @@ export interface World {
   judgeScanZ: number;
   /** Every honest-absence note gathered from the teams, for the legend. */
   notes: string[];
+  /**
+   * The state a FINISHED match ended in when this world is a replay of it
+   * (e.g. 'COMPLETE', 'FAILED'); null while live. Lets a view say REPLAY rather
+   * than LIVE, and name a match that ended without a verdict. Survives
+   * `resetWorld`: scrubbing does not make a replay live.
+   */
+  replayOf: string | null;
 }
 
 const RECENT_CAP = 400;
@@ -216,7 +236,7 @@ export function createWorld(
   events: FrameEvent[],
   opts: { deliverables?: string[] } = {},
 ): World {
-  const baseX = 6.2;
+  const baseX = DEFAULT_BASE_X;
   // Brief deliverables are free text ("README.md with run instructions"); an
   // entry that names no file cannot be checked off, so it is dropped.
   const deliverables = [...new Set(
@@ -253,7 +273,7 @@ export function createWorld(
     widest = Math.max(widest, blocks);
   }
 
-  const grid = planGrid(Math.max(widest, 1), teams.length);
+  const grid = planGrid(Math.max(widest, 1), teams.length, baseX);
 
   const world: World = {
     grid,
@@ -271,6 +291,7 @@ export function createWorld(
     t: 0,
     judgeScanZ: 0,
     notes: [],
+    replayOf: null,
   };
 
   const bands = bandsFor(teams.length, grid, baseX);
@@ -296,7 +317,7 @@ export function createWorld(
       budget,
       seen: new Set(),
       fileStats: fileEvents.reduce<FileStats>((acc, e) => { foldFileStats(acc, e); return acc; },
-        { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0 }),
+        { total: 0, withContract: 0, withPath: 0, legacy: 0, recovered: 0, watched: 0 }),
       squad: new Map(),
       squadTotals: { spawned: 0, failed: 0, peak: 0 },
       delivered: new Set(),
@@ -588,17 +609,29 @@ function applyAgentDone(team: TeamState, ev: FrameEvent): boolean {
 }
 
 /**
- * Check off a deliverable a file event landed for. A path matches a name equal
- * to it, or a path-qualified name (`research/kegs.md`) it ends with after a `/`.
- * A bare name (`decision.md`) matches only at the top level: `notes/decision.md`
- * is a different file, and lighting the strip for it would claim a deliverable
- * the judge will not find where the brief put it.
+ * Check off a deliverable a file event landed for, by the same rule collection
+ * and the judge use (`namedRank` / `truncateFiles`), so the strip never claims
+ * what the judge will not see or misses what it will:
+ *  - a path-qualified name (`research/kegs.md`) matches that exact path;
+ *  - a bare name (`decision.md`) matches the top-level file, else the same
+ *    basename nested anywhere collection walks (not inside a vendored or
+ *    dot-directory, which it skips for a bare name).
+ * Case-insensitive, as collection is.
  */
+export function deliverableMatches(path: string, name: string): boolean {
+  const p = path.replace(/^\.?\//, '').toLowerCase();
+  const n = name.replace(/^\.?\//, '').toLowerCase();
+  if (n.includes('/')) return p === n;
+  if (p === n) return true;
+  const parts = p.split('/');
+  if (parts.pop() !== n) return false;
+  return !parts.some((d) => d.startsWith('.')) && !isVendoredPath(p);
+}
+
 function markDelivered(world: World, team: TeamState, path: string): void {
   if (world.deliverables.length === 0) return;
-  const p = path.replace(/^\.\//, '');
   for (const name of world.deliverables) {
-    if (p === name || (name.includes('/') && p.endsWith(`/${name}`))) team.delivered.add(name);
+    if (deliverableMatches(path, name)) team.delivered.add(name);
   }
 }
 
@@ -665,6 +698,11 @@ export function telemetryFromStats(model: string, stats: TeamState['fileStats'])
   }
   if (stats.withContract > 0) return { provider, capability, editDepth: 'measured', legacy };
   if (stats.total === 0) return { provider, capability, editDepth: 'measured', legacy: false };
+  // Every file came from the watcher: its own reason, NOT the "predates
+  // telemetry" note, which would be false for a modern run.
+  if (stats.watched === stats.total) {
+    return { provider, capability, editDepth: 'inferred', legacy, note: watchOnlyNote(provider) };
+  }
   if (stats.withPath > 0) {
     return {
       provider, capability, editDepth: 'inferred', legacy,
@@ -708,7 +746,7 @@ export function refreshNotes(world: World): void {
 export function ensureGridCapacity(world: World, needed: number): boolean {
   if (needed <= world.grid.capacity) return false;
 
-  const grid = planGrid(needed, world.teams.size);
+  const grid = planGrid(needed, world.teams.size, world.baseX);
   world.grid = grid;
 
   const bands = bandsFor(world.teams.size, grid, world.baseX);

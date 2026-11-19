@@ -7,6 +7,9 @@ import type { FrameEvent } from './event-model.js';
 import type { World, TeamState, Structure, TeamSpec } from './world.js';
 import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats, foldSquadSignals } from './world.js';
 
+/** Finished states that carry a verdict: a replay ending in one reveals it. */
+export const VERDICT_STATES: ReadonlySet<string> = new Set(['SCORED', 'COMPLETE', 'FORGING', 'FORGE_COMPLETE']);
+
 /**
  * The isometric arena renderer.
  *
@@ -362,13 +365,18 @@ export class IsoArenaRenderer {
 
   /**
    * Declare the match FINISHED in `state` (e.g. 'COMPLETE'), or pass null for a
-   * live match. A finished match plays as a match: 'active' while the playhead
-   * is before `matchEndMs`, then `phaseFor(state)` with the winner's end
-   * sequence. Takes effect at once, so a view parked on the end reveals now.
+   * live match. The world records it as `replayOf` either way, so a view can
+   * say REPLAY. A match that reached a verdict (`VERDICT_STATES`) plays as a
+   * match: 'active' while the playhead is before `matchEndMs`, then
+   * `phaseFor(state)` with the winner's end sequence, at once if the view is
+   * parked on the end. One that ended without a verdict (FAILED, CANCELLED)
+   * never reveals: it has no verdict to show, and must not end on SCORED.
    */
   setFinalState(state: string | null): void {
-    if (state === this.finalState) return;
-    this.finalState = state;
+    this.world.replayOf = state;
+    const verdict = state !== null && VERDICT_STATES.has(state) ? state : null;
+    if (verdict === this.finalState) return;
+    this.finalState = verdict;
     this.followPlayhead(false);
   }
 

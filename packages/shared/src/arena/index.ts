@@ -18,7 +18,7 @@ export type { Insets, Viewport, Projected, CameraState } from './camera.js';
 export { NO_INSETS, DEFAULT_YAW, DEFAULT_PITCH, createCamera, safeBox, worldScale, focus, project, stepCamera, setYaw } from './camera.js';
 
 export type { Cell, GridExtent, BlockBudget, Band } from './layout.js';
-export { planGrid, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, SQUAD_SLOTS, squadSlotCells } from './layout.js';
+export { planGrid, DEFAULT_BASE_X, cellOrder, bandFor, bandsFor, bandCells, blockKeyFor, MAX_BLOCKS_PER_TEAM, SQUAD_SLOTS, squadSlotCells } from './layout.js';
 
 export type { KnownProvider, FrameEventKind, FrameEvent, EditDepthMode, TeamTelemetry, TeamManifest, ReconcileResult, SquadSignals } from './event-model.js';
 export { UNKNOWN_PROVIDER_CAPABILITY, providerOf, capabilityFor, recoverLegacyPath, toFrameEvent, toFrameEvents, resolveTelemetry, reconcileWithManifest, isVendoredPath, corpusFromEvents, squadNotes } from './event-model.js';
@@ -27,7 +27,7 @@ export type { TeamSpec, BlockKind, Structure, TeamState, Phase, World, ApplyEffe
 export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, stepStructures, telemetryFromStats, refreshNotes, ensureGridCapacity, foldSquadSignals, momentumShares } from './world.js';
 
 export type { RendererOptions } from './renderer.js';
-export { IsoArenaRenderer } from './renderer.js';
+export { IsoArenaRenderer, VERDICT_STATES } from './renderer.js';
 
 export type { SquadEventLine } from './squad-hud.js';
 export { describeSquadEvent, squadSummary, deliveredList } from './squad-hud.js';

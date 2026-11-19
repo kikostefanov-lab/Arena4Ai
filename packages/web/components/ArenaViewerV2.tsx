@@ -6,7 +6,7 @@ import type { TeamManifest } from '@arena/shared';
 import type { FrameEvent, TeamSpec, Ctx2D } from '@arena/shared';
 import type { ArenaPhase } from '../lib/arena/types';
 import type { Arena3D } from '@arena/video/dist/arena3d/scene';
-import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT } from '../lib/design-tokens';
+import { getModelColor, hexToRgb, MONOSPACE_FONT, BODY_FONT, BG_DARK } from '../lib/design-tokens';
 
 /**
  * AA-066 — the arena is now drawn by `IsoArenaRenderer` from @arena/shared.
@@ -312,6 +312,9 @@ const HUD_INSETS = { top: 18, right: 24, bottom: 34, left: 24 };
 /** Playback speeds offered when reviewing a finished competition. */
 const SPEEDS = [1, 3, 8] as const;
 
+/** Above the TopBar (z 100) and the page's fixed HUD corners. */
+const THEATER_Z = 1000;
+
 export default function ArenaViewerV2({
   teams, events, state, elapsedMs, timeLimitMs, scores, winnerId, deliverables, view3d, deliverableNames: deliverableNamesProp,
 }: ArenaViewerV2Props) {
@@ -322,6 +325,28 @@ export default function ArenaViewerV2({
   const deliverableNames = useMemo(() => deliverableNamesProp, [namesKey]);
   const [glFailed, setGlFailed] = useState(false);
   const use3d = !!view3d && !glFailed;
+  /**
+   * Theater: the arena alone, over the whole viewport, for recording. Only
+   * styles change between the two modes, never the element tree, so the canvas
+   * and its renderer and WebGL scene survive the switch; the box's
+   * ResizeObserver resizes the backing store.
+   */
+  const [theater, setTheater] = useState(false);
+  useEffect(() => {
+    if (!theater) return;
+    const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setTheater(false); };
+    window.addEventListener('keydown', onKey);
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    // The site chrome (TopBar, HUD corners) is fixed above <main>'s stacking
+    // context, which holds the arena; globals.css hides it under this class.
+    document.body.classList.add('arena-theater');
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = overflow;
+      document.body.classList.remove('arena-theater');
+    };
+  }, [theater]);
   const sceneRef = useRef<Arena3D | null>(null);
   const lastFrameRef = useRef(0);
   const [sceneReady, setSceneReady] = useState(false);
@@ -383,8 +408,11 @@ export default function ArenaViewerV2({
   const winnerRef = useRef<string | null>(null);
   /** The final state of a FINISHED competition (null while live), for the same reason. */
   const finalStateRef = useRef<string | null>(null);
-  /** End of stream the paused view is currently parked on. */
-  const parkedAtRef = useRef<number | null>(null);
+  /**
+   * End of stream as of the last frame, so a paused view can tell "parked at the
+   * end" (follow the end as the stream grows) from "paused mid-match" (hold).
+   */
+  const endSeenRef = useRef<number | null>(null);
 
   const [shares, setShares] = useState<MomentumShare[]>([]);
   const [squads, setSquads] = useState<Record<string, SquadSummary>>({});
@@ -586,6 +614,7 @@ export default function ArenaViewerV2({
        */
       replay.seek(replay.totalMs);
       rendererRef.current = replay;
+      endSeenRef.current = replay.totalMs;
       setPlaying(false);
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
@@ -601,6 +630,10 @@ export default function ArenaViewerV2({
       // A reorder: the only coherent response is to rebuild from scratch.
       // Rare, and cheaper to do correctly than to patch up incrementally.
       const all = loadFrames(events, origin);
+      // A replay keeps its playhead across the rebuild: the end if it was
+      // parked there, else the same moment.
+      const at = r.world.t;
+      const wasAtEnd = at >= r.totalMs;
       r.appendEvents([]);
       r.seek(0);
       rendererRef.current = null;
@@ -608,6 +641,8 @@ export default function ArenaViewerV2({
       const rebuilt = new IsoArenaRenderer({ teams: specs, events: all, timeLimitMs, deliverables: deliverableNames });
       rebuilt.setWinner(winnerRef.current);
       rebuilt.setFinalState(finalStateRef.current);
+      if (!isLive) rebuilt.seek(wasAtEnd ? rebuilt.totalMs : Math.min(at, rebuilt.totalMs));
+      endSeenRef.current = rebuilt.totalMs;
       rendererRef.current = rebuilt;
       consumedRef.current = events.length;
       lastIdRef.current = events[events.length - 1]?.eventId ?? null;
@@ -661,23 +696,25 @@ export default function ArenaViewerV2({
             r.setTime(elapsedMs);
           } else if (playing) {
             r.tick(16.7 * speed);
-            parkedAtRef.current = null;
-          } else if (r.totalMs !== parkedAtRef.current) {
+            endSeenRef.current = r.totalMs;
+          } else {
             /**
-             * A finished competition parks on its END STATE, and re-parks
-             * whenever the stream grows.
+             * Paused. A view paused mid-match HOLDS its frame: that is what
+             * pause means, and a recording depends on it.
              *
+             * A view parked on the END follows the end as the stream grows.
              * Seeking once at construction is not enough: the page delivers its
              * events progressively, so the first batch can be a single event.
              * The renderer then gets built from that one-event snapshot — end of
              * stream 2,000ms — and everything afterwards is appended, so the
              * view stays parked two seconds into an 831-second competition and
-             * the floor is bare. That is the empty arena. Re-parking on each
-             * change of totalMs converges on the real end as the list fills, and
-             * costs one seek per change rather than one per frame.
+             * the floor is bare. That is the empty arena. Re-parking when the
+             * end moves, and only if the view sat at the old end, converges on
+             * the real end as the list fills, at one seek per change.
              */
-            r.seek(r.totalMs);
-            parkedAtRef.current = r.totalMs;
+            const prevEnd = endSeenRef.current;
+            if (prevEnd !== null && r.totalMs !== prevEnd && r.world.t >= prevEnd) r.seek(r.totalMs);
+            endSeenRef.current = r.totalMs;
           }
 
           // A replay's phase lives in the world. Mirror it into React only when
@@ -745,7 +782,13 @@ export default function ArenaViewerV2({
   const notes = rendererRef.current?.honestyNotes ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0 }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 10, height: '100%', minHeight: 0,
+      ...(theater ? {
+        position: 'fixed', inset: 0, zIndex: THEATER_Z, height: 'auto',
+        padding: 16, boxSizing: 'border-box', background: BG_DARK,
+      } : {}),
+    }}>
       {teams.length >= 2 && (
         <>
           {teams.length > 2 && (
@@ -771,7 +814,21 @@ export default function ArenaViewerV2({
         </>
       )}
 
-      <div ref={boxRef} style={{ position: 'relative', width: '100%', flex: 1, minHeight: 240 }}>
+      {/*
+        The stage. In theater it is a size container and the box inside it is
+        the largest 16:9 rectangle that fits; otherwise the box fills it.
+      */}
+      <div style={{
+        display: 'flex', justifyContent: 'center', alignItems: theater ? 'center' : 'stretch',
+        width: '100%', flex: 1, minHeight: theater ? 0 : 240,
+        containerType: theater ? 'size' : 'normal',
+      }}>
+      <div ref={boxRef} style={{
+        position: 'relative',
+        ...(theater
+          ? { flex: 'none', width: 'min(100cqw, calc(100cqh * 16 / 9))', aspectRatio: '16 / 9' }
+          : { flex: 1, minHeight: 240 }),
+      }}>
         <canvas
           // A canvas can only ever hand out one kind of context, so switching
           // between the 2D and WebGL pictures needs a fresh element.
@@ -798,7 +855,9 @@ export default function ArenaViewerV2({
           }}>
             <div>EACH BLOCK IS A FILE · HEIGHT IS ITS EDIT COUNT</div>
             <div>SOLID EDGE measured · DASHED inferred · HOLLOW provider cannot report edits</div>
-            {notes.length > 0 && <div style={{ color: '#ffd700' }}>⚠ {notes.length} telemetry caveat{notes.length > 1 ? 's' : ''} below</div>}
+            {/* Theater hides the notes below, so the caveats travel inside the frame. */}
+            {notes.length > 0 && !theater && <div style={{ color: '#ffd700' }}>⚠ {notes.length} telemetry caveat{notes.length > 1 ? 's' : ''} below</div>}
+            {theater && [...new Set(notes)].map((n) => <div key={n} style={{ color: '#ffd700' }}>⚠ {n}</div>)}
           </div>
         )}
         {use3d && !sceneReady && (
@@ -828,6 +887,7 @@ export default function ArenaViewerV2({
           />
         ))}
       </div>
+      </div>
 
       {teams.length >= 2 && shares.length === teams.length && <MomentumMeter shares={shares} />}
 
@@ -842,13 +902,14 @@ export default function ArenaViewerV2({
               type="button"
               onClick={() => {
                 const r = rendererRef.current;
-                // Sitting on the final frame, Play means "watch it again".
+                // Sitting on the final frame, Play means "watch it again";
+                // anywhere else it resumes from the playhead.
                 if (r && !playing && r.world.t >= r.totalMs) r.seek(0);
                 setPlaying((p) => !p);
               }}
               style={ctrlStyle(playing)}
             >
-              {playing ? 'Pause' : 'Replay'}
+              {transportLabel(playing, rendererRef.current)}
             </button>
             {SPEEDS.map((s) => (
               <button key={s} type="button" onClick={() => setSpeed(s)} style={ctrlStyle(speed === s)}>
@@ -870,6 +931,15 @@ export default function ArenaViewerV2({
         <button type="button" onClick={() => setOrbit((o) => !o)} style={ctrlStyle(orbit)}>
           {use3d ? (orbit ? 'Director cam' : 'Free cam') : 'Cam'}
         </button>
+        <button
+          type="button"
+          onClick={() => setTheater((t) => !t)}
+          style={ctrlStyle(theater)}
+          aria-pressed={theater}
+          title={theater ? 'Exit theater (Esc)' : 'Fill the screen with the arena, for recording'}
+        >
+          {theater ? '⛶ Exit theater' : '⛶ Theater'}
+        </button>
       </div>
 
       {/*
@@ -878,7 +948,7 @@ export default function ArenaViewerV2({
         repeated here as selectable text because a screenshot is not accessible
         and a caveat nobody can copy is a caveat nobody quotes.
       */}
-      {notes.length > 0 && (
+      {notes.length > 0 && !theater && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
           {[...new Set(notes)].map((n) => (
             <div key={n} style={{
@@ -893,6 +963,13 @@ export default function ArenaViewerV2({
       )}
     </div>
   );
+}
+
+/** Pause while playing; Replay on the final frame; Play at the start, Resume mid-match. */
+function transportLabel(playing: boolean, r: IsoArenaRenderer | null): string {
+  if (playing) return 'Pause';
+  if (!r || r.world.t >= r.totalMs) return 'Replay';
+  return r.world.t <= 0 ? 'Play' : 'Resume';
 }
 
 function ctrlStyle(active: boolean): React.CSSProperties {

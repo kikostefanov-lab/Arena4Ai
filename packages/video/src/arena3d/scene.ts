@@ -139,6 +139,9 @@ const CHEST = 6.2;
 /** Vertices the decimated squad robot keeps, and the mesh size below which decimating is not worth the tearing. */
 const LOD_KEEP = 0.25;
 const LOD_MIN_VERTS = 400;
+/** How the jumbotron names a match that ended without a verdict. */
+const NO_VERDICT_LABEL: Readonly<Record<string, string>> = { FAILED: 'MATCH FAILED', CANCELLED: 'CANCELLED' };
+
 /** Seconds the "DEPLOYS SQUAD" banner holds before the live banner returns. */
 const SQUAD_JUMBO_S = 6;
 /**
@@ -634,11 +637,11 @@ export class Arena3D {
     this.lastT = world.t;
     if (this.jumboUntil > 0 && now >= this.jumboUntil) {
       this.jumboUntil = 0;
-      if (world.phase === 'active') this.setJumbo(this.liveBanner(), '#00f0ff');
+      if (world.phase === 'active') this.setJumbo(this.liveBanner(world), '#00f0ff');
     }
 
     // Phase.
-    const phaseKey = `${world.phase}:${world.winnerId ?? ''}`;
+    const phaseKey = `${world.phase}:${world.winnerId ?? ''}:${world.replayOf ?? ''}`;
     if (phaseKey !== this.lastPhase) { this.onPhase(world); this.lastPhase = phaseKey; }
     this.phaseCol.lerp(world.phase === 'judging' ? JUDGE : new THREE.Color(0, 0, 0), Math.min(1, dt * 3));
     this.floorMat.uniforms.uPhase.value.copy(this.phaseCol);
@@ -784,7 +787,7 @@ export class Arena3D {
 
     this.spot.visible = !!winner && (o.reveal ?? 0) > 0;
     if (winner) { this.spot.position.x = winner.root.position.x; this.spot.material.uniforms.uC.value = winner.color; this.spot.material.uniforms.uI.value = o.reveal ?? 0; }
-    this.setJumbo(o.banner?.text ?? this.liveBanner(), o.banner?.color ?? '#00f0ff');
+    this.setJumbo(o.banner?.text ?? this.liveBanner(world), o.banner?.color ?? '#00f0ff');
     this.jumbo.tex.offset.x = o.t * 0.03;
     this.placeCars(o.t);
     this.pSize.fill(0); this.pGeo.attributes.size.needsUpdate = true;
@@ -925,8 +928,17 @@ export class Arena3D {
     return ((sh.get(this.fighters[0].id) ?? 0) - (sh.get(this.fighters[1].id) ?? 0)) * SEAM_SWING;
   }
 
-  private liveBanner(): string {
-    return `LIVE  ·  ${this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ')}`;
+  /**
+   * The jumbotron's resting text, from the world alone (drawFrame stays pure):
+   * LIVE while live, REPLAY when the world replays a finished match, and the
+   * way a match ended without a verdict named honestly. A world with no
+   * `replayOf` (every reel) keeps the LIVE text it always had.
+   */
+  private liveBanner(world: World): string {
+    const names = this.opts.teams.map((t) => t.model.toUpperCase()).join('  vs  ');
+    if (!world.replayOf) return `LIVE  ·  ${names}`;
+    const ending = NO_VERDICT_LABEL[world.replayOf];
+    return ending ? `REPLAY  ·  ${ending}  ·  ${names}` : `REPLAY  ·  ${names}`;
   }
 
   /** The lead's own reaction: unchanged choreography, but a file spark now aims at the block it wrote. */
@@ -958,12 +970,16 @@ export class Arena3D {
     this.spot.visible = false; this.spot.material.uniforms.uI.value = 0; this.revealAt = -1;
     this.jumboUntil = 0;
     for (const f of this.fighters) { f.basePose = 'idle'; f.flash = null; for (const b of f.squad) b.flash = null; }
-    if (world.phase === 'active') { this.setJumbo(this.liveBanner(), '#00f0ff'); this.cut(0); }
+    if (world.phase === 'active') { this.setJumbo(this.liveBanner(world), '#00f0ff'); this.cut(0); }
     else if (world.phase === 'freeze') { this.setJumbo('TIME UP  ·  COLLECTING DELIVERABLES', '#ffd23c'); this.cut(3); }
     else if (world.phase === 'judging') { for (const f of this.fighters) f.basePose = 'salute'; this.setJumbo('CROSS-JUDGE READING THE FILES', '#b06bff'); this.cut(0); }
     else {
       const w = this.fighters.find((f) => f.id === world.winnerId);
-      if (!w) { this.setJumbo(`SCORED  ·  ${names}`, '#00f0ff'); return; }
+      if (!w) {
+        const ending = NO_VERDICT_LABEL[world.compState];
+        this.setJumbo(ending ? `${ending}  ·  ${names}` : `SCORED  ·  ${names}`, ending ? '#ffd23c' : '#00f0ff');
+        return;
+      }
       for (const f of this.fighters) { f.basePose = f === w ? 'triumph' : 'kneel'; f.energy = f === w ? 1 : 0; }
       this.spot.visible = true; this.spot.position.x = w.root.position.x; this.spot.material.uniforms.uC.value = w.color;
       this.revealAt = this.time.value;
