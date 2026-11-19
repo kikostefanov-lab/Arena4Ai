@@ -5,14 +5,15 @@ import { repo } from './repo.js';
 import { runnerRegistry } from './runner-registry.js';
 import { isAllowedWsOrigin } from './network.js';
 import { isStreamAuthorized } from './stream-ticket.js';
-import { isHeuristicScore } from '@arena/shared';
+import { isHeuristicScore, judgeBreakdown } from '@arena/shared';
 
 type RawScorecard = {
   teamId: string;
   finalScore: number;
   rank: number;
   agentFailure?: { message: string; exitCode: number };
-  judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
+  judgePanel?: Array<{ provider: string; model: string; judgeId: string; failure?: string }>;
+  judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; overallScore?: number; provider?: string; model?: string; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
 };
 
 type TeamDeliverable = {
@@ -52,6 +53,8 @@ function normalizeResult(
       ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
       // A team whose agent CLI crashed was not judged; the UI says so.
       ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
+      // Per-judge scores for the Scores tab: the cross-vendor panel, or an adversarial pair.
+      ...((() => { const judges = judgeBreakdown(sc); return judges ? { judges } : {}; })()),
     })),
     ...(opts?.summary ? { summary: opts.summary } : {}),
     ...(opts?.synthesis ? { synthesis: opts.synthesis } : {}),

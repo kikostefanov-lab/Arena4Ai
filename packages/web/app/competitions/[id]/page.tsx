@@ -4,12 +4,12 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { streamUrl } from '../../../lib/stream-url';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, BORDER_DIM, BG_HEADER, TEXT_MUTED, TEXT_DIM, ACCENT_CYAN, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import ArenaViewerV2 from '../../../components/ArenaViewerV2';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
-import { isHeuristicScore, HEURISTIC_CEILING } from '@arena/shared';
+import { isHeuristicScore, judgeBreakdown, HEURISTIC_CEILING, type JudgeBreakdown } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -41,7 +41,11 @@ interface TeamResult {
   agentFailure?: { message: string; exitCode: number };
   /** The AI judge failed; this score is the capped completeness heuristic, not a judgement. */
   heuristic?: boolean;
+  /** Per-judge scores when more than one AI judge (or the cross-vendor panel) judged this team. */
+  judges?: JudgeBreakdown;
 }
+
+const JUDGE_PROVIDER_NAMES: Record<string, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' };
 interface TeamDeliverable { teamId: string; files: { path: string; content: string }[]; }
 interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale: string; winningApproach?: string; losingApproach?: string; }
 interface SynthesisResult { synthesis: string; overallRationale?: string; perCriterion: SynthesisPerCriterion[]; }
@@ -1187,6 +1191,38 @@ function ScoreDrawer({
                     );
                   });
                 })()}
+
+                {/* Per-judge breakdown: the cross-vendor panel (or an adversarial pair) */}
+                {teamDisplays.some(td => td.result.judges && !td.result.agentFailure) && (
+                  <div style={{ borderTop: `2px solid ${BORDER_MID}`, background: BG_HEADER, padding: '0.6rem 1rem' }}>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 800, color: ACCENT_CYAN, letterSpacing: '1px', fontFamily: MONOSPACE_FONT, marginBottom: '0.45rem' }}>
+                      {(teamDisplays.find(td => td.result.judges)?.result.judges?.label ?? 'Judges').toUpperCase()}
+                    </div>
+                    {teamDisplays.filter(td => td.result.judges && !td.result.agentFailure).map(({ result: tr, label, color }) => (
+                      <div key={`judges-${tr.teamId}`} style={{
+                        display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.4rem 0.9rem',
+                        padding: '0.35rem 0', borderBottom: `1px solid ${BORDER_DIM}`, fontSize: '0.66rem', fontFamily: BODY_FONT,
+                      }}>
+                        <span style={{ color, fontWeight: 700, minWidth: '9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                        {tr.judges!.rows.map((j) => (
+                          <span key={j.judgeId} title={j.judgeId} style={{ color: TEXT_MUTED, whiteSpace: 'nowrap' }}>
+                            <span style={{ color: getModelColor(j.provider), fontWeight: 700 }}>{JUDGE_PROVIDER_NAMES[j.provider] ?? j.provider}</span>
+                            <span style={{ color: TEXT_DIM }}> {j.model} </span>
+                            {j.overallScore === null
+                              ? <span style={{ color: HEURISTIC_COLOR }}>failed{j.failure ? ` (${j.failure})` : ''}</span>
+                              : <strong style={{ fontFamily: 'monospace' }}>{Math.round(j.overallScore * 100)}%</strong>}
+                          </span>
+                        ))}
+                        <span style={{ marginLeft: 'auto', color: TEXT_MUTED, whiteSpace: 'nowrap' }}>
+                          avg{' '}
+                          <strong style={{ fontFamily: 'monospace', color: ACCENT_CYAN }}>
+                            {tr.judges!.average === null ? 'n/a' : `${Math.round(tr.judges!.average * 100)}%`}
+                          </strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {result.summary && (
                   <div style={{ padding: '0.75rem 1rem', fontSize: BODY_FONT_SIZE, color: '#4a8fa8', lineHeight: 1.7, borderTop: '1px solid #0a2235', fontFamily: BODY_FONT }}>
@@ -2335,7 +2371,7 @@ export default function CompetitionPage() {
         if (data.result) {
           // DB result has `scorecards` + `winnerId`; frontend expects `teams` + `winnerId`
           const raw = data.result;
-          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
+          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgePanel?: Array<{ provider: string; model: string; judgeId: string; failure?: string }>; judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; overallScore?: number; provider?: string; model?: string; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
           const normalized: CompetitionResult = {
             winnerId: (raw.winnerId as string) ?? null,
             teams: scorecards.map((sc) => ({
@@ -2347,6 +2383,7 @@ export default function CompetitionPage() {
               rank: sc.rank,
               ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
               ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
+              ...((() => { const judges = judgeBreakdown(sc); return judges ? { judges } : {}; })()),
             })),
             summary: raw.summary as string | undefined,
             synthesis: raw.synthesis as SynthesisResult | null | undefined,

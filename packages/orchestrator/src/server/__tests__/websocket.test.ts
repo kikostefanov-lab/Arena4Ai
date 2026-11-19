@@ -127,6 +127,26 @@ describe('websocket stream', () => {
     expect(msgs.map((m) => m.type)).toEqual(['REASONING', 'COMPLETE']);
   });
 
+  it('carries each team\'s per-judge panel scores in the COMPLETE result', async () => {
+    getEvents.mockResolvedValue([] as never);
+    getResult.mockResolvedValue({
+      winnerId: 'a',
+      scorecards: [{
+        teamId: 'a', finalScore: 0.7, rank: 1,
+        judgePanel: [
+          { provider: 'claude', model: 'claude-opus-5', judgeId: 'ai-claude/claude-opus-5' },
+          { provider: 'gemini', model: 'cli-default', judgeId: 'ai-gemini/cli-default', failure: 'timeout' },
+        ],
+        judgeResults: [{ judgeId: 'ai-claude/claude-opus-5', overallScore: 0.7, scores: [] }],
+      }],
+    } as never);
+    const { ws, msgs } = connect();
+    await new Promise((r) => ws.on('close', r));
+    const complete = msgs.find((m) => m.type === 'COMPLETE') as { result: { teams: Array<{ judges?: { label: string; rows: unknown[]; average: number } }> } };
+    expect(complete.result.teams[0]!.judges).toMatchObject({ label: 'Cross-vendor panel', average: 0.7 });
+    expect(complete.result.teams[0]!.judges!.rows).toHaveLength(2);
+  });
+
   const EVENTS = ['arenaEvent', 'stateChange', 'result', 'error'];
   const listenerCounts = () => EVENTS.map((e) => runner.listenerCount(e));
 

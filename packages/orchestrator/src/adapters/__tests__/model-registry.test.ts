@@ -89,6 +89,8 @@ describe('resolveJudgeModel', () => {
   afterEach(() => {
     delete process.env['ARENA_JUDGE_MODEL'];
     delete process.env['ARENA_ADVERSARIAL_JUDGE_MODEL'];
+    delete process.env['ARENA_JUDGE_MODEL_CODEX'];
+    delete process.env['ARENA_JUDGE_MODEL_GEMINI'];
   });
 
   it('pins the standard judge to an explicit model', () => {
@@ -107,6 +109,18 @@ describe('resolveJudgeModel', () => {
 
   it('honours env overrides for reproducing an old score', () => {
     process.env['ARENA_JUDGE_MODEL'] = 'claude-opus-4-8';
+    expect(resolveJudgeModel('ai-claude')).toBe('claude-opus-4-8');
+  });
+
+  it('takes codex and gemini overrides from their own variables, never the claude one', () => {
+    // The panel runs all three at once: a claude id handed to codex is rejected.
+    process.env['ARENA_JUDGE_MODEL'] = 'claude-opus-4-8';
+    expect(resolveJudgeModel('ai-codex', 'codex')).toBe(CLI_DEFAULT_MODEL);
+    expect(resolveJudgeModel('ai-gemini', 'gemini')).toBe(CLI_DEFAULT_MODEL);
+    process.env['ARENA_JUDGE_MODEL_CODEX'] = 'codex-pinned';
+    process.env['ARENA_JUDGE_MODEL_GEMINI'] = 'gemini-pinned';
+    expect(resolveJudgeModel('ai-codex', 'codex')).toBe('codex-pinned');
+    expect(resolveJudgeModel('ai-gemini', 'gemini')).toBe('gemini-pinned');
     expect(resolveJudgeModel('ai-claude')).toBe('claude-opus-4-8');
   });
 });

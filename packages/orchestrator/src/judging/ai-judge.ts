@@ -1,6 +1,11 @@
 import { spawn } from 'node:child_process';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
-import { helperClaudeArgs, helperEnv } from '../utils/claude-helper.js';
+import {
+  helperClaudeArgs, helperCodexArgs, helperGeminiArgs, helperEnv, GEMINI_DENY_ALL_POLICY,
+} from '../utils/claude-helper.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, truncateFiles, namedDeliverables, JUDGE_CONTEXT } from '../utils/brief-context.js';
@@ -76,7 +81,11 @@ export interface AiJudgeFailure {
 export interface AiJudgeResult extends JudgeResult {
   /** Present iff the judge failed and `scores` are the zero fallback. */
   failure?: AiJudgeFailure;
-  /** Model the judge was pinned to for this run. */
+  /**
+   * Model the judge ran on. For a judge on CLI_DEFAULT_MODEL this is the model
+   * the CLI reported using (codex's banner, gemini's stats), falling back to
+   * `cli-default` when the CLI did not say.
+   */
   model?: string;
   /** Provider whose CLI produced this score. */
   provider?: JudgeProvider;
@@ -94,38 +103,48 @@ const CLI_HINT = 'npm i -g @anthropic-ai/claude-code, then run `claude` once to 
  *  - whether stdin must be closed (codex `exec` otherwise blocks forever on
  *    "Reading additional input from stdin...", which looks exactly like a hang).
  *
- * Judges are read-only by construction: a judge that can write to the workspace
- * is a judge that can edit the thing it is grading.
+ * Every judge is a HELPER: it reads untrusted deliverables, so it runs with no
+ * tools, no MCP servers, an allowlisted environment and an empty scratch
+ * directory as its cwd (see utils/claude-helper.ts). A judge that can act is a
+ * judge that a deliverable can talk into editing the thing it is grading.
  */
 interface JudgeInvocation {
   args: string[];
   promptVia: 'stdin' | 'argv';
   answerStream: 'stdout' | 'stderr';
+  /** 'gemini-json': stdout is gemini's `-o json` wrapper; the answer is its `response`. */
+  answerFormat: 'text' | 'gemini-json';
+}
+
+/** Where a judge runs: an empty scratch dir, and (gemini) its deny-all policy file. */
+export interface JudgeScratch {
+  workdir: string;
+  policyPath: string;
 }
 
 export function buildJudgeInvocation(
   provider: JudgeProvider,
   model: string,
   prompt: string,
+  scratch: JudgeScratch,
 ): JudgeInvocation {
   const modelFlag = getProviderConfig(provider)?.modelFlag ?? '--model';
   // CLI_DEFAULT_MODEL means "no model flag": the CLI picks its own default.
   const modelArgs = isCliDefaultModel(model) ? [] : [modelFlag, model];
   switch (provider) {
     case 'codex':
-      // -s read-only: the judge may not modify the workspace it is scoring.
       return {
-        args: ['exec', '--skip-git-repo-check', '-s', 'read-only', ...modelArgs, prompt],
+        args: [...helperCodexArgs({ modelArgs, workdir: scratch.workdir }), prompt],
         promptVia: 'argv',
         answerStream: 'stdout',
+        answerFormat: 'text',
       };
     case 'gemini':
-      // --approval-mode plan is gemini's read-only mode; --yolo would grant a
-      // judge tool access it has no need for.
       return {
-        args: ['-p', prompt, ...modelArgs, '--approval-mode', 'plan'],
+        args: helperGeminiArgs(prompt, { modelArgs, policyPath: scratch.policyPath }),
         promptVia: 'argv',
         answerStream: 'stdout',
+        answerFormat: 'gemini-json',
       };
     case 'claude':
     default:
@@ -133,8 +152,45 @@ export function buildJudgeInvocation(
         args: helperClaudeArgs({ model }),
         promptVia: 'stdin',
         answerStream: 'stdout',
+        answerFormat: 'text',
       };
   }
+}
+
+/**
+ * Split a judge CLI's output into the answer text and the model that produced
+ * it, when the CLI says. Codex prints a `model: <id>` line in its stderr banner;
+ * gemini's `-o json` carries per-model token stats (the one with the most
+ * tokens did the judging; a router model may appear beside it).
+ */
+export function readJudgeOutput(
+  invocation: Pick<JudgeInvocation, 'answerStream' | 'answerFormat'>,
+  provider: JudgeProvider,
+  stdout: string,
+  stderr: string,
+): { answer: string; model?: string } {
+  const raw = invocation.answerStream === 'stderr' ? stderr : stdout;
+  if (provider === 'codex') {
+    const model = /^model:\s*(\S+)/m.exec(stderr)?.[1];
+    return { answer: raw, ...(model ? { model } : {}) };
+  }
+  if (invocation.answerFormat !== 'gemini-json') return { answer: raw };
+
+  let wrapper: { response?: unknown; stats?: { models?: Record<string, unknown> } };
+  try {
+    wrapper = JSON.parse(extractJson(raw)) as typeof wrapper;
+  } catch {
+    return { answer: raw };
+  }
+  if (typeof wrapper.response !== 'string') return { answer: raw };
+  const tokens = (v: unknown): number => {
+    const t = (v as { tokens?: Record<string, unknown> } | null)?.tokens;
+    const n = t?.['total'] ?? t?.['candidates'] ?? 0;
+    return typeof n === 'number' ? n : 0;
+  };
+  const models = Object.entries(wrapper.stats?.models ?? {});
+  const model = models.sort((a, b) => tokens(b[1]) - tokens(a[1]))[0]?.[0];
+  return { answer: wrapper.response, ...(model ? { model } : {}) };
 }
 
 /**
@@ -168,21 +224,27 @@ export function classifyJudgeFailure(
       detail,
     };
   }
-  if (/rate limit|429|quota|overloaded|too many requests/.test(haystack)) {
+  // 503 "high demand" is the provider shedding load: like a rate limit, it is
+  // worth one delayed retry (gemini-cli retries it with backoff until killed).
+  if (/rate limit|429|quota|overloaded|too many requests|503|high demand|resource_exhausted/.test(haystack)) {
     return {
       kind: 'rate-limit',
-      message: `AI judge unavailable: rate limited by the ${provider} API. Re-judge this competition once the limit resets.`,
+      message: `AI judge unavailable: rate limited or overloaded by the ${provider} API. Re-judge this competition once it recovers.`,
       detail,
     };
   }
-  if (/model/.test(haystack) && /(not found|unknown|invalid|unsupported|deprecat|retire|404)/.test(haystack)) {
+  const timedOut = err instanceof Error && /timed out/i.test(err.message);
+  // A rejected model makes the CLI exit at once; a judge that hung until the
+  // deadline was not rejected, whatever its log happened to say about "model".
+  if (!timedOut && /model/.test(haystack) && /(not found|unknown|invalid|unsupported|deprecat|retire|404)/.test(haystack)) {
+    const override = provider === 'claude' ? 'DEFAULT_JUDGE_MODEL in model-registry.ts or set ARENA_JUDGE_MODEL' : `ARENA_JUDGE_MODEL_${provider.toUpperCase()}`;
     return {
       kind: 'model-unavailable',
-      message: `AI judge unavailable: model "${model}" was rejected by the CLI. Update DEFAULT_JUDGE_MODEL in model-registry.ts or set ARENA_JUDGE_MODEL.`,
+      message: `AI judge unavailable: model "${model}" was rejected by the CLI. Update ${override}.`,
       detail,
     };
   }
-  if (err instanceof Error && /timed out/i.test(err.message)) {
+  if (timedOut) {
     const after = /timed out after (\d+s)/i.exec(err.message)?.[1] ?? '120s';
     return { kind: 'timeout', message: `AI judge unavailable: timed out after ${after}.`, detail };
   }
@@ -340,9 +402,10 @@ Return ONLY a JSON object with this exact shape (no markdown, no prose):
 }
 
 /**
- * Ask a Claude model to evaluate a deliverable against a rubric.
+ * Ask a judge model (on the claude, codex or gemini CLI) to evaluate a
+ * deliverable against a rubric.
  *
- * Builds a structured prompt, calls the claude CLI asynchronously,
+ * Builds a structured prompt, calls the provider's CLI asynchronously,
  * and parses the JSON response back into a JudgeResult.
  *
  * On failure it returns zero scores AND an explicit `failure` field naming the
@@ -362,9 +425,9 @@ export async function aiJudge(
   const model = options.model ?? resolveJudgeModel(judgeId, provider);
 
   const prompt = buildJudgePrompt(brief, deliverable, rubric, judgeId);
-  const invocation = buildJudgeInvocation(provider, model, prompt);
 
   let failure: AiJudgeFailure | undefined;
+  let ranOn: string | undefined;
   let scores: CriterionScore[] = rubric.criteria.map((c) => ({
     criterionId: c.id,
     score: 0,
@@ -372,7 +435,20 @@ export async function aiJudge(
   }));
 
   let stderr = '';
+  let scratchDir: string | undefined;
   try {
+    // An empty scratch directory as cwd: the judge's CLI must not see the
+    // orchestrator's checkout (its .env, its CLAUDE.md / AGENTS.md / GEMINI.md),
+    // and all three judges get the same, empty, context.
+    scratchDir = await mkdtemp(join(tmpdir(), 'arena-judge-'));
+    const scratch: JudgeScratch = { workdir: join(scratchDir, 'work'), policyPath: join(scratchDir, 'deny-all.toml') };
+    await mkdir(scratch.workdir);
+    if (provider === 'gemini') await writeFile(scratch.policyPath, GEMINI_DENY_ALL_POLICY, 'utf8');
+    const invocation = buildJudgeInvocation(provider, model, prompt, scratch);
+    const env = provider === 'gemini'
+      ? { ...helperEnv(provider), GEMINI_CLI_TRUST_WORKSPACE: 'true' }
+      : helperEnv(provider);
+
     const stdout = await new Promise<string>((resolve, reject) => {
       // stdin is 'ignore' unless the prompt travels that way. codex `exec`
       // blocks forever on an open, silent stdin — indistinguishable from a hang.
@@ -380,7 +456,8 @@ export async function aiJudge(
         claudeBin,
         invocation.args,
         {
-          env: helperEnv(provider),
+          cwd: scratch.workdir,
+          env,
           stdio: [invocation.promptVia === 'stdin' ? 'pipe' : 'ignore', 'pipe', 'pipe'],
         },
       );
@@ -405,14 +482,17 @@ export async function aiJudge(
       child.stdout?.on('data', (chunk: Buffer) => { out += chunk.toString(); });
       child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
       child.on('close', (code) => settle(() => {
-        const answer = invocation.answerStream === 'stderr' ? stderr : out;
-        if (code === 0) resolve(answer);
-        else reject(new Error(`AI judge exited with code ${code}`));
+        if (code === 0) { resolve(out); return; }
+        // gemini's `-o json` reports its error on stdout; classify on both.
+        if (invocation.answerFormat === 'gemini-json' && out.trim()) stderr = `${stderr}\n${out}`.trim();
+        reject(new Error(`AI judge exited with code ${code}`));
       }));
       child.on('error', (err) => settle(() => reject(err)));
     });
 
-    const parsed = JSON.parse(extractJson(stdout)) as { scores?: unknown };
+    const { answer, model: reported } = readJudgeOutput(invocation, provider, stdout, stderr);
+    ranOn = reported;
+    const parsed = JSON.parse(extractJson(answer)) as { scores?: unknown };
     const normalized = normalizeJudgeScores(parsed.scores, rubric);
     const missing = missingCriteria(normalized, rubric);
     if (normalized.length > 0 && missing.length === 0) {
@@ -431,6 +511,8 @@ export async function aiJudge(
     }
   } catch (err) {
     failure = classifyJudgeFailure(err, stderr, claudeBin, model, provider);
+  } finally {
+    if (scratchDir) await rm(scratchDir, { recursive: true, force: true }).catch(() => {});
   }
 
   if (failure) {
@@ -449,7 +531,7 @@ export async function aiJudge(
     teamId: deliverable.teamId,
     scores,
     overallScore: computeOverallScore(scores, rubric),
-    model,
+    model: ranOn ?? model,
     provider,
     ...(failure ? { failure } : {}),
   };

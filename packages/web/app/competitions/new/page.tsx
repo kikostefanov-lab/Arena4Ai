@@ -437,6 +437,7 @@ function NewCompetitionForm() {
   const [domainHint, setDomainHint] = useState<DomainHint>('');
   const [domainHintOpen, setDomainHintOpen] = useState(false);
   const [adversarialJudge, setAdversarialJudge] = useState(false);
+  const [judgePanel, setJudgePanel] = useState(false);
   const [teams, setTeams] = useState<Array<{ id: string; model: Model; persona: string; agentId?: string }>>([
     { id: 'team-a', model: 'claude' as Model, persona: 'speedrunner' },
     { id: 'team-b', model: 'claude' as Model, persona: 'architect' },
@@ -838,7 +839,9 @@ function NewCompetitionForm() {
           ...(domainHint ? { domainHint } : {}),
         },
         teams: teams.map((t) => ({ id: t.id, model: t.model, persona: t.persona, ...(t.agentId ? { agentId: t.agentId } : {}) })),
-        adversarialJudge,
+        // The panel replaces the adversarial pair (the server ignores both at once).
+        adversarialJudge: adversarialJudge && !judgePanel,
+        judgePanel,
         // No `options` here: the agent binaries, the log directory and the Docker
         // sandbox are resolved server-side from the environment (see
         // orchestrator run-options.ts). Anything sent here is ignored.
@@ -1594,12 +1597,31 @@ function NewCompetitionForm() {
                   )}
                 </div>
 
-                {/* Adversarial judge toggle */}
+                {/* Cross-vendor judge panel toggle */}
                 <div style={{ marginTop: '0.75rem' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
                     <input
                       type="checkbox"
-                      checked={adversarialJudge}
+                      checked={judgePanel}
+                      onChange={(e) => setJudgePanel(e.target.checked)}
+                      style={{ accentColor: '#00f0ff', width: '14px', height: '14px' }}
+                    />
+                    <span style={{ fontSize: '0.65rem', color: '#7cc6db', fontFamily: MONOSPACE_FONT, letterSpacing: '0.5px' }}>
+                      Cross-vendor judge panel (Claude + Codex + Gemini judge every team)
+                    </span>
+                  </label>
+                  <div style={{ fontSize: '0.58rem', color: '#1e4a5a', marginTop: '0.2rem', marginLeft: '1.6rem', fontFamily: BODY_FONT }}>
+                    Each vendor&apos;s judge scores every team; the final score is their average. Needs all three CLIs installed.
+                  </div>
+                </div>
+
+                {/* Adversarial judge toggle */}
+                <div style={{ marginTop: '0.75rem', opacity: judgePanel ? 0.45 : 1 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: judgePanel ? 'not-allowed' : 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={adversarialJudge && !judgePanel}
+                      disabled={judgePanel}
                       onChange={(e) => setAdversarialJudge(e.target.checked)}
                       style={{ accentColor: '#00f0ff', width: '14px', height: '14px' }}
                     />
@@ -1608,7 +1630,9 @@ function NewCompetitionForm() {
                     </span>
                   </label>
                   <div style={{ fontSize: '0.58rem', color: '#1e4a5a', marginTop: '0.2rem', marginLeft: '1.6rem', fontFamily: BODY_FONT }}>
-                    Runs two independent AI judges and averages their scores for more reliable results.
+                    {judgePanel
+                      ? 'Not used with the cross-vendor panel, which already averages three judges.'
+                      : 'Runs two independent AI judges and averages their scores for more reliable results.'}
                   </div>
                 </div>
 
