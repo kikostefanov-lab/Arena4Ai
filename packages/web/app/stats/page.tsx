@@ -673,7 +673,8 @@ function LeaderboardTab() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 function CompareTab() {
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  /** `key` is what the server matches on; `label` is what the picker shows. */
+  const [availableModels, setAvailableModels] = useState<Array<{ key: string; label: string }>>([]);
   const [modelA, setModelA] = useState('');
   const [modelB, setModelB] = useState('');
   const [data, setData] = useState<CompareResponse | null>(null);
@@ -686,15 +687,20 @@ function CompareTab() {
       .then((r) => r.json())
       .then((comps: CompSummary[]) => {
         if (!Array.isArray(comps)) return;
-        const keys = new Set<string>();
+        // The KEY must be the server's own join (routes/compare.ts `teamKey`):
+        // a de-doubled key never matches a record stored as model 'claude:architect'
+        // + persona 'architect', so Compare found 0 matchups for it. Only the
+        // visible label is de-doubled.
+        const labels = new Map<string, string>();
         for (const c of comps) {
           for (const t of c.teams ?? []) {
-            keys.add(teamDisplayName(t.model, t.persona));
+            const key = t.persona ? `${t.model}:${t.persona}` : t.model;
+            labels.set(key, teamDisplayName(t.model, t.persona));
           }
         }
-        const sorted = Array.from(keys).sort();
+        const sorted = Array.from(labels, ([key, label]) => ({ key, label })).sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
         setAvailableModels(sorted);
-        if (sorted.length >= 2) { setModelA(sorted[0]); setModelB(sorted[1]); }
+        if (sorted.length >= 2) { setModelA(sorted[0].key); setModelB(sorted[1].key); }
       })
       .catch(() => {})
       .finally(() => setModelsLoading(false));
@@ -749,7 +755,7 @@ function CompareTab() {
             <div style={{ position: 'relative' }}>
               <select value={modelA} onChange={(e) => setModelA(e.target.value)} style={{ ...selectStyle, borderColor: modelA ? `${colorA}44` : '#0a2235', width: '100%' }}>
                 <option value="">-- select --</option>
-                {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                {availableModels.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
               <span style={{ position: 'absolute', right: '0.7rem', top: '50%', transform: 'translateY(-50%)', color: '#3d7d94', pointerEvents: 'none', fontSize: '0.6rem' }}>{'\u25BE'}</span>
             </div>
@@ -768,7 +774,7 @@ function CompareTab() {
             <div style={{ position: 'relative' }}>
               <select value={modelB} onChange={(e) => setModelB(e.target.value)} style={{ ...selectStyle, borderColor: modelB ? `${colorB}44` : '#0a2235', width: '100%' }}>
                 <option value="">-- select --</option>
-                {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                {availableModels.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
               </select>
               <span style={{ position: 'absolute', right: '0.7rem', top: '50%', transform: 'translateY(-50%)', color: '#3d7d94', pointerEvents: 'none', fontSize: '0.6rem' }}>{'\u25BE'}</span>
             </div>

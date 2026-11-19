@@ -6,8 +6,7 @@ import { orchestratorUrl, orchestratorHeaders } from '../../../../../lib/orchest
 import { getBundle } from '../../../../../lib/remotion-bundle';
 import { COMPOSITION_ID } from '@arena/video';
 import type { ReelData, ReelTeam, ReelKeyEvent } from '@arena/video';
-import { teamCriterionScores } from '@arena/shared';
-import { teamDisplayName } from '@arena/shared';
+import { teamCriterionScores, teamDisplayName } from '@arena/shared';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
