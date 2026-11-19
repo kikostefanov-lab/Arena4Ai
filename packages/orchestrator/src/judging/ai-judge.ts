@@ -4,11 +4,11 @@ import { helperClaudeArgs, helperEnv } from '../utils/claude-helper.js';
 import { computeOverallScore } from './score-aggregator.js';
 import { extractJson } from '../utils/extract-json.js';
 import { buildBriefContext, truncateFiles, JUDGE_CONTEXT } from '../utils/brief-context.js';
-import { isCliDefaultModel } from '@arena/shared';
+import { isCliDefaultModel, AUTOMATED_JUDGE_ID } from '@arena/shared';
 import { resolveJudgeModel, getProviderConfig } from '../adapters/model-registry.js';
 
 export const JUDGE_IDS = {
-  automated: 'automated',
+  automated: AUTOMATED_JUDGE_ID,
   aiClaude: 'ai-claude',
   aiAdversarial: 'ai-adversarial',
 } as const;

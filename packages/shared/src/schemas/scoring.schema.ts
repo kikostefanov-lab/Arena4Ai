@@ -11,4 +11,5 @@ export const judgeResultSchema = z.object({
   teamId: z.string().min(1),
   scores: z.array(criterionScoreSchema).min(1),
   overallScore: z.number().min(0),
+  heuristic: z.boolean().optional(),
 });

@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 import { writeFile, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import type { Brief, Rubric, Deliverable, JudgeResult, CriterionScore } from '@arena/shared';
+import { HEURISTIC_CEILING } from '@arena/shared';
 import { normalizeOutput } from '../adapters/normalizer-utils.js';
 import { computeOverallScore } from './score-aggregator.js';
 
@@ -201,13 +202,141 @@ async function scoreByExecution(
   };
 }
 
+// ── Completeness heuristic ────────────────────────────────────────────────────
+//
+// Without the AI judge nothing here can read a deliverable and say whether it is
+// any good. The old heuristic pretended otherwise: it scaled with character
+// count, so ~500 characters of anything (scratch notes, a stray log) earned full
+// marks even when every named deliverable was missing.
+//
+// What the fallback CAN honestly measure is completeness: did the team hand in
+// the files the brief asked for, and are they more than a placeholder? That is
+// all it scores. Length beyond the placeholder check earns nothing, and because
+// quality was never assessed the result is capped at HEURISTIC_CEILING of each
+// criterion's maxScore: a complete submission reads as "handed in, not judged",
+// never as a perfect score.
+
+/** Marker prefix on heuristic commentary, mirroring SKIPPED_PREFIX. */
+export const HEURISTIC_PREFIX = 'HEURISTIC:';
+
+/** Highest share of a criterion's maxScore the completeness heuristic can award (lives in @arena/shared so UI copy matches). */
+export { HEURISTIC_CEILING };
+
+/**
+ * A file with fewer non-whitespace characters than this is treated as a
+ * placeholder ("TODO", an empty heading). Deliberately low: a one-line solution
+ * must clear it. It is a presence check, not a quality scale.
+ */
+export const MIN_SUBSTANTIVE_CHARS = 40;
+
+/** Credit for a named deliverable that exists but is only a placeholder. */
+const PLACEHOLDER_CREDIT = 0.2;
+
+/** A leading token that looks like a file name: `README.md`, `src/cli.ts`, `scorer.py`. */
+const FILENAME_TOKEN = /^`?((?:[\w.-]+\/)*[\w-][\w.-]*\.[A-Za-z][A-Za-z0-9]{0,7})`?(?=$|[\s,:;(—–-])/;
+
+/**
+ * The file name a brief deliverable names, or null when the entry only describes
+ * one ("A runnable solution file (any language)") and so cannot be checked.
+ */
+export function expectedFileName(entry: string): string | null {
+  const match = FILENAME_TOKEN.exec(entry.trim());
+  return match ? match[1].replace(/^\.?\//, '') : null;
+}
+
+function nonWhitespaceLength(content: string): number {
+  return content.replace(/\s+/g, '').length;
+}
+
+function findDeliverableFile(
+  files: Array<{ path: string; content: string }>,
+  expected: string,
+): { path: string; content: string } | undefined {
+  const want = expected.toLowerCase();
+  const wantBase = want.split('/').pop()!;
+  const normalized = files.map((f) => ({ file: f, path: f.path.replace(/^\.?\//, '').toLowerCase() }));
+  return (
+    normalized.find((n) => n.path === want || n.path.endsWith(`/${want}`))?.file ??
+    // Fall back to the base name, so `docs/README.md` satisfies `README.md` and
+    // `README.md` satisfies `docs/README.md`.
+    normalized.find((n) => n.path.split('/').pop() === wantBase)?.file
+  );
+}
+
+interface Completeness {
+  /** In [0, 1]: share of the requested deliverables handed in with substance. */
+  ratio: number;
+  /** Human-readable reason, without the HEURISTIC_PREFIX. */
+  summary: string;
+}
+
+/**
+ * How complete the submission is against `brief.deliverables`.
+ *
+ * Each deliverable that names a file earns 1 when that file exists with
+ * substance, PLACEHOLDER_CREDIT when it exists but is a placeholder, and 0 when
+ * it is missing. Files the brief did not ask for earn nothing. When the brief
+ * names no file at all (only descriptions), the best the heuristic can do is
+ * check that SOMETHING substantive was handed in.
+ */
+export function assessCompleteness(
+  files: Array<{ path: string; content: string }>,
+  deliverables: string[] | undefined,
+): Completeness {
+  const named = (deliverables ?? [])
+    .map(expectedFileName)
+    .filter((n): n is string => n !== null);
+
+  if (named.length === 0) {
+    const substantive = files.filter((f) => nonWhitespaceLength(f.content) >= MIN_SUBSTANTIVE_CHARS);
+    if (substantive.length > 0) {
+      return { ratio: 1, summary: `${files.length} file(s) handed in; the brief names no files to check against.` };
+    }
+    return {
+      ratio: files.length > 0 ? PLACEHOLDER_CREDIT : 0,
+      summary: `${files.length} file(s) handed in, all under ${MIN_SUBSTANTIVE_CHARS} non-whitespace characters (placeholders).`,
+    };
+  }
+
+  const missing: string[] = [];
+  const placeholders: string[] = [];
+  let credit = 0;
+  for (const name of named) {
+    const file = findDeliverableFile(files, name);
+    if (!file) {
+      missing.push(name);
+    } else if (nonWhitespaceLength(file.content) < MIN_SUBSTANTIVE_CHARS) {
+      placeholders.push(name);
+      credit += PLACEHOLDER_CREDIT;
+    } else {
+      credit += 1;
+    }
+  }
+
+  const present = named.length - missing.length;
+  const parts = [`${present}/${named.length} named deliverable(s) present`];
+  if (missing.length > 0) parts.push(`missing: ${missing.join(', ')}`);
+  if (placeholders.length > 0) parts.push(`placeholder only: ${placeholders.join(', ')}`);
+  return { ratio: credit / named.length, summary: `${parts.join('; ')}.` };
+}
+
+function heuristicCommentary(completeness: Completeness): string {
+  return (
+    `${HEURISTIC_PREFIX} AI judge unavailable, so this was scored on completeness only. ` +
+    `${completeness.summary} Quality was not assessed; heuristic scores are capped at ` +
+    `${Math.round(HEURISTIC_CEILING * 100)}%.`
+  );
+}
+
 /**
  * Automated rubric scorer (the fallback used when the AI judge fails).
  *
  * When `brief.expectedOutput` is set, the `correctness` criterion is scored by
- * executing the deliverable and comparing stdout line-by-line. All other
- * criteria (and all criteria when no expectedOutput is defined) use simple
- * heuristics (file count, content length).
+ * executing the deliverable and comparing stdout line-by-line. Every other
+ * criterion (and correctness when no expectedOutput is defined) is scored on
+ * completeness against `brief.deliverables`, capped at HEURISTIC_CEILING — see
+ * the "Completeness heuristic" note above. The result carries `heuristic: true`
+ * so the UI can label it; that flag, not the score, is what says "not judged".
  *
  * Execution requires an explicit opt-in — see the SECURITY POSTURE note at the
  * top of this file. When it is disabled, the affected criterion is reported as
@@ -231,8 +360,8 @@ export async function scoreDeliverable(
   rubric: Rubric,
   brief?: Brief,
 ): Promise<JudgeResult> {
-  const totalChars = deliverable.files.reduce((s, f) => s + f.content.length, 0);
   const fileCount = deliverable.files.length;
+  const completeness = assessCompleteness(deliverable.files, brief?.deliverables);
 
   const activeCriteria = rubric.criteria.filter(
     (c) => c.description.trim() && c.weight >= 0.05,
@@ -259,20 +388,10 @@ export async function scoreDeliverable(
           commentary = result.commentary;
         }
       } else {
-        switch (criterion.id) {
-          case 'correctness':
-            raw = Math.min(criterion.maxScore, (totalChars / fileCount / 50) * criterion.maxScore);
-            commentary = `Heuristic: ${fileCount} file(s), ${totalChars} chars (no expectedOutput defined).`;
-            break;
-          case 'quality':
-          case 'code-quality':
-            raw = Math.min(criterion.maxScore, fileCount * 2 + (totalChars > 200 ? 2 : 0));
-            commentary = `Heuristic: ${fileCount} file(s), ${totalChars} chars.`;
-            break;
-          default:
-            raw = Math.min(criterion.maxScore, (totalChars / 500) * criterion.maxScore);
-            commentary = `Heuristic: ${totalChars} chars across ${fileCount} file(s).`;
-        }
+        // The heuristic cannot tell criteria apart, so every criterion gets the
+        // same completeness score rather than invented per-criterion formulas.
+        raw = completeness.ratio * HEURISTIC_CEILING * criterion.maxScore;
+        commentary = heuristicCommentary(completeness);
       }
 
       raw = Math.max(0, Math.round(raw * 10) / 10);
@@ -299,5 +418,6 @@ export async function scoreDeliverable(
     teamId: deliverable.teamId,
     scores,
     overallScore: computeOverallScore(scores, scoringRubric),
+    heuristic: true,
   };
 }

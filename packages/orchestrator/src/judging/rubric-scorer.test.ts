@@ -4,6 +4,9 @@ import {
   hostCodeExecutionAllowed,
   EXECUTION_ENV_VAR,
   SKIPPED_PREFIX,
+  HEURISTIC_PREFIX,
+  HEURISTIC_CEILING,
+  expectedFileName,
 } from './rubric-scorer.js';
 import type { Brief, Rubric, Deliverable } from '@arena/shared';
 
@@ -248,5 +251,120 @@ describe('host code execution gate (AA-033)', () => {
     // but the commentary must still say why rather than implying a failed check.
     expect(result.overallScore).toBe(0);
     expect(result.scores[0].commentary).toContain(SKIPPED_PREFIX);
+  });
+});
+
+// ── Completeness heuristic: length is not quality ────────────────────────────
+describe('heuristic fallback scoring', () => {
+  const docRubric: Rubric = {
+    criteria: [
+      { id: 'depth', description: 'Analysis depth', weight: 0.5, maxScore: 10 },
+      { id: 'clarity', description: 'Clear writing', weight: 0.3, maxScore: 10 },
+      { id: 'quality', description: 'Overall quality', weight: 0.2, maxScore: 10 },
+    ],
+  };
+  const brief = { deliverables: ['city-design.md', 'scorer.py'] } as Partial<Brief> as Brief;
+  const at = new Date().toISOString();
+
+  const designDoc = [
+    '# City design',
+    '',
+    'Districts are laid out on a hex grid so every block touches six neighbours.',
+    'Transit runs on three ring roads with radial spokes every sixty degrees.',
+  ].join('\n');
+  const scorer = [
+    'import sys',
+    '',
+    'def score(city):',
+    '    return sum(d["population"] / max(d["commute"], 1) for d in city["districts"])',
+    '',
+    'if __name__ == "__main__":',
+    '    print(score(eval(sys.stdin.read())))',
+  ].join('\n');
+
+  it('a reasonable submission with every named deliverable reaches the heuristic ceiling, not 100%', async () => {
+    const d: Deliverable = {
+      teamId: 'team-a',
+      files: [{ path: 'city-design.md', content: designDoc }, { path: 'src/scorer.py', content: scorer }],
+      collectedAt: at,
+    };
+    const result = await scoreDeliverable('automated', d, docRubric, brief);
+    expect(result.heuristic).toBe(true);
+    expect(result.overallScore).toBeCloseTo(HEURISTIC_CEILING, 5);
+    for (const s of result.scores) {
+      expect(s.score).toBe(HEURISTIC_CEILING * 10);
+      expect(s.commentary.startsWith(HEURISTIC_PREFIX)).toBe(true);
+      expect(s.commentary).toContain('2/2 named deliverable(s) present');
+    }
+  });
+
+  it('a missing named deliverable scores low, however long the rest is', async () => {
+    const d: Deliverable = {
+      teamId: 'team-b',
+      // A long design doc, but no scorer.py: the old formula gave this full marks.
+      files: [{ path: 'city-design.md', content: designDoc.repeat(50) }],
+      collectedAt: at,
+    };
+    const result = await scoreDeliverable('automated', d, docRubric, brief);
+    expect(result.overallScore).toBeCloseTo(HEURISTIC_CEILING / 2, 5);
+    expect(result.scores[0].commentary).toContain('missing: scorer.py');
+  });
+
+  it('scratch notes earn nothing when none of the named deliverables exist', async () => {
+    const d: Deliverable = {
+      teamId: 'team-c',
+      files: [{ path: 'NOTES.md', content: 'thinking out loud about the design. '.repeat(200) }],
+      collectedAt: at,
+    };
+    const result = await scoreDeliverable('automated', d, docRubric, brief);
+    expect(result.overallScore).toBe(0);
+    expect(result.scores[0].commentary).toContain('0/2 named deliverable(s) present');
+  });
+
+  it('a tiny placeholder file gets only token credit', async () => {
+    const d: Deliverable = {
+      teamId: 'team-d',
+      files: [{ path: 'city-design.md', content: '# TODO' }, { path: 'scorer.py', content: 'pass' }],
+      collectedAt: at,
+    };
+    const result = await scoreDeliverable('automated', d, docRubric, brief);
+    expect(result.overallScore).toBeGreaterThan(0);
+    expect(result.overallScore).toBeLessThan(0.15);
+    expect(result.scores[0].commentary).toContain('placeholder only: city-design.md, scorer.py');
+  });
+
+  it('a complete submission outranks a longer one that is missing a deliverable', async () => {
+    const complete = await scoreDeliverable('automated', {
+      teamId: 'a', collectedAt: at,
+      files: [{ path: 'city-design.md', content: designDoc }, { path: 'scorer.py', content: scorer }],
+    }, docRubric, brief);
+    const verbose = await scoreDeliverable('automated', {
+      teamId: 'b', collectedAt: at,
+      files: [{ path: 'city-design.md', content: designDoc.repeat(100) }, { path: 'notes.txt', content: scorer.repeat(100) }],
+    }, docRubric, brief);
+    expect(complete.overallScore).toBeGreaterThan(verbose.overallScore);
+  });
+
+  it('with only descriptive deliverables, checks that something substantive was handed in', async () => {
+    const vague = { deliverables: ['A runnable solution file (any language)'] } as Partial<Brief> as Brief;
+    const real = await scoreDeliverable('automated', {
+      teamId: 'a', collectedAt: at, files: [{ path: 'main.py', content: scorer }],
+    }, docRubric, vague);
+    const stub = await scoreDeliverable('automated', {
+      teamId: 'b', collectedAt: at, files: [{ path: 'main.py', content: 'pass' }],
+    }, docRubric, vague);
+    expect(real.overallScore).toBeCloseTo(HEURISTIC_CEILING, 5);
+    expect(stub.overallScore).toBeLessThan(real.overallScore);
+  });
+
+  it('reads file names off brief deliverable entries, and only file names', () => {
+    expect(expectedFileName('README.md with run instructions')).toBe('README.md');
+    expect(expectedFileName('pricing-tiers.md')).toBe('pricing-tiers.md');
+    expect(expectedFileName('./src/cli.ts')).toBe('src/cli.ts');
+    expect(expectedFileName('`solution.py` — the entry point')).toBe('solution.py');
+    expect(expectedFileName('A runnable solution file (any language)')).toBeNull();
+    expect(expectedFileName('ADR document')).toBeNull();
+    expect(expectedFileName('e.g. a CLI')).toBeNull();
+    expect(expectedFileName('v1.2 release notes')).toBeNull();
   });
 });

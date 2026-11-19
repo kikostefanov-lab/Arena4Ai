@@ -4,11 +4,12 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { streamUrl } from '../../../lib/stream-url';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, TEXT_MUTED, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import ArenaViewerV2 from '../../../components/ArenaViewerV2';
 import type { ForgeRun, ForgeSource, ForgeArtifact as SharedForgeArtifact } from '@arena/shared';
+import { isHeuristicScore, HEURISTIC_CEILING } from '@arena/shared';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -38,6 +39,8 @@ interface TeamResult {
   criteriaScores: CriterionScore[];
   /** The agent CLI crashed before producing anything; the team was not judged. */
   agentFailure?: { message: string; exitCode: number };
+  /** The AI judge failed; this score is the capped completeness heuristic, not a judgement. */
+  heuristic?: boolean;
 }
 interface TeamDeliverable { teamId: string; files: { path: string; content: string }[]; }
 interface SynthesisPerCriterion { criterionId: string; teamId: string; rationale: string; winningApproach?: string; losingApproach?: string; }
@@ -1023,9 +1026,16 @@ function ScoreDrawer({
                           DID NOT COMPETE
                         </div>
                       ) : (
-                        <div style={{ fontSize: '1.1rem', fontWeight: 900, color: isWinner ? '#eab308' : '#c8eef8', fontFamily: 'monospace', marginTop: '0.1rem' }}>
-                          {Math.round(tr.totalScore * 100 * scoreProgress)}%
-                        </div>
+                        <>
+                          <div style={{ fontSize: '1.1rem', fontWeight: 900, color: isWinner ? '#eab308' : '#c8eef8', fontFamily: 'monospace', marginTop: '0.1rem' }}>
+                            {Math.round(tr.totalScore * 100 * scoreProgress)}%
+                          </div>
+                          {tr.heuristic && (
+                            <div title={HEURISTIC_SCORE_TITLE} style={HEURISTIC_BADGE_STYLE}>
+                              HEURISTIC
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
@@ -1042,6 +1052,18 @@ function ScoreDrawer({
                   }}>
                     <strong style={{ color: '#ff5566' }}>{label} was not judged.</strong>{' '}
                     Its agent CLI failed before producing any files: {tr.agentFailure!.message}
+                  </div>
+                ))}
+
+                {/* Heuristic fallback: a completeness check must not read as a judged score */}
+                {teamDisplays.filter(td => td.result.heuristic && !td.result.agentFailure).map(({ result: tr, label }) => (
+                  <div key={`heuristic-${tr.teamId}`} style={{
+                    padding: '0.6rem 1rem', borderBottom: `1px solid rgba(${hexToRgb(HEURISTIC_COLOR)},0.25)`,
+                    background: `rgba(${hexToRgb(HEURISTIC_COLOR)},0.06)`, fontSize: '0.7rem', color: TEXT_MUTED, lineHeight: 1.5,
+                  }}>
+                    <strong style={{ color: HEURISTIC_COLOR }}>{label} was not scored by the AI judge.</strong>{' '}
+                    The judge failed, so this is a completeness check against the brief&apos;s named deliverables,
+                    capped at {Math.round(HEURISTIC_CEILING * 100)}%. Quality was not assessed. Re-judge for a real score.
                   </div>
                 ))}
 
@@ -2294,7 +2316,7 @@ export default function CompetitionPage() {
         if (data.result) {
           // DB result has `scorecards` + `winnerId`; frontend expects `teams` + `winnerId`
           const raw = data.result;
-          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
+          const scorecards = (raw.scorecards ?? []) as Array<{ teamId: string; finalScore: number; rank?: number; agentFailure?: { message: string; exitCode: number }; judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }> }>;
           const normalized: CompetitionResult = {
             winnerId: (raw.winnerId as string) ?? null,
             teams: scorecards.map((sc) => ({
@@ -2304,6 +2326,7 @@ export default function CompetitionPage() {
                 criterionId: s.criterionId, score: s.score, maxScore: s.maxScore ?? 10, commentary: s.commentary ?? '',
               })) ?? [],
               rank: sc.rank,
+              ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
               ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
             })),
             summary: raw.summary as string | undefined,

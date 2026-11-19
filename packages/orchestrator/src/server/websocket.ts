@@ -5,13 +5,14 @@ import { repo } from './repo.js';
 import { runnerRegistry } from './runner-registry.js';
 import { isAllowedWsOrigin } from './network.js';
 import { isStreamAuthorized } from './stream-ticket.js';
+import { isHeuristicScore } from '@arena/shared';
 
 type RawScorecard = {
   teamId: string;
   finalScore: number;
   rank: number;
   agentFailure?: { message: string; exitCode: number };
-  judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
+  judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
 };
 
 type TeamDeliverable = {
@@ -47,6 +48,8 @@ function normalizeResult(
         commentary: s.commentary ?? '',
       })) ?? [],
       rank: sc.rank,
+      // The AI judge failed and the completeness heuristic scored this team.
+      ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
       // A team whose agent CLI crashed was not judged; the UI says so.
       ...(sc.agentFailure ? { agentFailure: sc.agentFailure } : {}),
     })),

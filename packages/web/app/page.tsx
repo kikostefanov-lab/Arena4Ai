@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getModelColor, getStateStyle, FORMAT_BADGES, MONOSPACE_FONT, HOVER_DARK, HOVER_TEXT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM } from '../lib/design-tokens';
+import { getModelColor, getStateStyle, FORMAT_BADGES, MONOSPACE_FONT, HOVER_DARK, HOVER_TEXT, KICKER_STYLE, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, HEURISTIC_COLOR, HEURISTIC_SCORE_TITLE } from '../lib/design-tokens';
+import { isHeuristicScore } from '@arena/shared';
 import { formatTimeLimit, resolveTeamLabel } from '../lib/format';
 
 interface TournamentSummary {
@@ -29,7 +30,7 @@ interface CompetitionSummary {
   teams: Team[];
   winnerId: string | null;
   notes?: string | null;
-  scorecards?: Array<{ teamId: string; finalScore?: number; agentFailure?: { message: string } }> | null;
+  scorecards?: Array<{ teamId: string; finalScore?: number; agentFailure?: { message: string }; judgeResults?: Array<{ judgeId?: string; heuristic?: boolean }> }> | null;
 }
 
 function timeAgo(dateStr: string | null): string {
@@ -748,6 +749,10 @@ export default function GalleryPage() {
                                   {sc.agentFailure ? (
                                     <span title={`Not judged: ${sc.agentFailure.message}`} style={{ fontSize: '0.6rem', color: '#ff5566', fontWeight: 700, minWidth: '2.75rem', textAlign: 'right', letterSpacing: '0.5px' }}>
                                       DNC
+                                    </span>
+                                  ) : isHeuristicScore(sc.judgeResults) ? (
+                                    <span title={HEURISTIC_SCORE_TITLE} style={{ fontSize: '0.7rem', color: HEURISTIC_COLOR, fontWeight: 700, minWidth: '2.75rem', textAlign: 'right', letterSpacing: '0.5px', cursor: 'help' }}>
+                                      {Math.round(score * 100)}%*
                                     </span>
                                   ) : (
                                     <span style={{ fontSize: '0.7rem', color: '#7cc6db', fontWeight: 700, minWidth: '2.75rem', textAlign: 'right', letterSpacing: '0.5px' }}>

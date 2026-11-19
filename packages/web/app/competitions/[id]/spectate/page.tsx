@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { streamUrl } from '../../../../lib/stream-url';
 import { useParams } from 'next/navigation';
-import { LANE_COLORS, getStateStyle, hexToRgb, MODEL_BADGE_COLORS } from '../../../../lib/design-tokens';
+import { LANE_COLORS, getStateStyle, hexToRgb, MODEL_BADGE_COLORS, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../../lib/design-tokens';
+import { isHeuristicScore } from '@arena/shared';
 import { classifyEvent } from '../../../../lib/EventRow';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ interface ArenaEvent {
 }
 
 interface CriterionScore { criterionId: string; score: number; maxScore: number; commentary: string; }
-interface TeamResult { teamId: string; totalScore: number; criteriaScores: CriterionScore[]; }
+interface TeamResult { teamId: string; totalScore: number; criteriaScores: CriterionScore[]; heuristic?: boolean; }
 interface CompetitionResult {
   winnerId: string | null;
   teams: TeamResult[];
@@ -145,6 +146,7 @@ function SpectateColumn({
   isRunning,
   isWinner,
   score,
+  heuristic,
   borderLeft,
   scrollRef,
 }: {
@@ -154,6 +156,8 @@ function SpectateColumn({
   isRunning: boolean;
   isWinner: boolean;
   score?: number;
+  /** Score came from the completeness fallback, not the AI judge. */
+  heuristic?: boolean;
   borderLeft?: boolean;
   scrollRef: (el: HTMLDivElement | null) => void;
 }) {
@@ -197,6 +201,11 @@ function SpectateColumn({
               fontFamily: 'monospace',
             }}>
               {Math.round(score * 100)}%
+            </span>
+          )}
+          {score !== undefined && heuristic && (
+            <span title={HEURISTIC_SCORE_TITLE} style={{ ...HEURISTIC_BADGE_STYLE, marginTop: 0 }}>
+              HEURISTIC
             </span>
           )}
         </div>
@@ -279,13 +288,14 @@ export default function SpectatePage() {
           const scorecards = (raw.scorecards ?? []) as Array<{
             teamId: string;
             finalScore: number;
-            judgeResults?: Array<{ scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
+            judgeResults?: Array<{ judgeId?: string; heuristic?: boolean; scores?: Array<{ criterionId: string; score: number; maxScore?: number; commentary?: string }> }>;
           }>;
           setResult({
             winnerId: (raw.winnerId as string) ?? null,
             teams: scorecards.map((sc) => ({
               teamId: sc.teamId,
               totalScore: sc.finalScore,
+              ...(isHeuristicScore(sc.judgeResults) ? { heuristic: true } : {}),
               criteriaScores: sc.judgeResults?.[0]?.scores?.map((s) => ({
                 criterionId: s.criterionId,
                 score: s.score,
@@ -521,7 +531,8 @@ export default function SpectatePage() {
               .slice()
               .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
             const isWinner = !!result?.winnerId && team.id === result.winnerId;
-            const teamScore = result?.teams.find((tr) => tr.teamId === team.id)?.totalScore;
+            const teamResult = result?.teams.find((tr) => tr.teamId === team.id);
+            const teamScore = teamResult?.totalScore;
 
             return (
               <SpectateColumn
@@ -532,6 +543,7 @@ export default function SpectatePage() {
                 isRunning={isRunning}
                 isWinner={isWinner}
                 score={teamScore}
+                heuristic={teamResult?.heuristic === true}
                 borderLeft={i > 0}
                 scrollRef={(el) => {
                   if (el) laneEls.current.set(team.id, el);

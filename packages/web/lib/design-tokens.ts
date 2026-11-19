@@ -154,6 +154,12 @@ export const ACCENT_GOLD   = '#eab308';
 export const ACCENT_SILVER = '#94a3b8';
 export const ACCENT_BRONZE = '#b47c3c';
 
+/**
+ * Marks a score from the automated fallback scorer (AI judge failed). Violet so
+ * it never reads as the winner's gold or as any model's colour.
+ */
+export const HEURISTIC_COLOR = '#b48cff';
+
 // ─── Interaction tokens ───────────────────────────────────────────────────────
 
 /** Hover state colors for interactive elements (CP-009) */
@@ -208,4 +214,24 @@ export const KICKER_STYLE: React.CSSProperties = {
   letterSpacing: LABEL_LETTER_SPACING,
   color: TEXT_DIM,
   textTransform: 'uppercase' as const,
+};
+
+/** Hover text for a heuristic score badge. */
+export const HEURISTIC_SCORE_TITLE =
+  'The AI judge failed for this team, so the automated fallback scored it on completeness only: ' +
+  'were the files the brief names handed in, and are they more than placeholders. ' +
+  'Quality was not assessed, so the score is capped. Re-judge for a real score.';
+
+/** Small "HEURISTIC" tag shown next to a fallback score. */
+export const HEURISTIC_BADGE_STYLE: React.CSSProperties = {
+  display: 'inline-block',
+  fontSize: '0.55rem',
+  fontWeight: 800,
+  letterSpacing: '1px',
+  color: HEURISTIC_COLOR,
+  border: `1px dashed ${HEURISTIC_COLOR}`,
+  borderRadius: '3px',
+  padding: '0.05rem 0.35rem',
+  marginTop: '0.25rem',
+  cursor: 'help',
 };
