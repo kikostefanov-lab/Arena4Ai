@@ -37,12 +37,19 @@ export interface GridExtent {
 const ASPECT = 8 / 5;
 
 /**
- * Cells `cellOrder` withholds because the competitor figure stands on them.
- * `planGrid` must budget for these: sizing the grid to the raw lattice count
- * leaves it two cells short, which is precisely the silent-stacking bug this
- * module exists to remove — just smaller and harder to see.
+ * How many squad members a team can have drawn at once. Each gets one reserved
+ * slot cell (see `squadSlotCells`); members past this are counted, not drawn.
  */
-const RESERVED_BASE_CELLS = 2;
+export const SQUAD_SLOTS = 6;
+
+/**
+ * Cells `cellOrder` withholds: up to two because the competitor figure stands on
+ * them, plus one per squad slot. `planGrid` must budget for these: sizing the
+ * grid to the raw lattice count leaves it short, which is precisely the
+ * silent-stacking bug this module exists to remove — just smaller and harder to
+ * see.
+ */
+const RESERVED_BASE_CELLS = 2 + SQUAD_SLOTS;
 
 /**
  * Smallest grid whose per-side USABLE capacity covers `needed`, keeping the 8:5
@@ -148,8 +155,67 @@ export function bandCells(band: Band, grid: GridExtent): Cell[] {
     const db = Math.hypot(b.x - band.baseX, b.z * 1.15);
     return da - db;
   });
-  // Skip the cells the competitor figure stands on.
-  return cells.filter((c) => !(Math.abs(c.x - band.baseX) < 0.8 && Math.abs(c.z) < 0.6));
+  // Skip the cells the competitor figure and its squad stand on.
+  const slots = new Set(squadSlotCells(band).map((c) => `${c.x},${c.z}`));
+  return cells.filter((c) => !isFigureCell(band, c) && !slots.has(`${c.x},${c.z}`));
+}
+
+/** True for the cell(s) the team's lead figure stands on. */
+function isFigureCell(band: Band, c: Cell): boolean {
+  return Math.abs(c.x - band.baseX) < 0.8 && Math.abs(c.z) < 0.6;
+}
+
+/**
+ * Where the squad stands, as (forward, lateral) offsets from the lead: a shallow
+ * arc in front of it, the middle pair furthest forward. The z=0 line straight
+ * ahead is left open so the lead keeps a clear line to its own blocks. Slot 0 is
+ * the first entry.
+ */
+const SQUAD_ARC: ReadonlyArray<readonly [forward: number, z: number]> = [
+  [2, 1], [2, -1], [1.6, 2], [1.6, -2], [1, 3], [1, -3],
+];
+
+/**
+ * The `SQUAD_SLOTS` cells a team's squad members stand on, in slot order.
+ * `bandCells` never hands these out, so a block can never stand where a squad
+ * robot does.
+ *
+ * Takes only the band so every view can compute it from `TeamState.band`. It
+ * stays on the lattice and inside the band without knowing the grid: columns
+ * strictly inside `(lo, hi)` are always grid columns (bands tile `[-gx, gx]`),
+ * and every grid has `gz >= 5`, so rows -3..3 always exist. A narrow band
+ * squeezes the arc toward the lead rather than spilling into a neighbour's band.
+ *
+ * "Forward" is the way the lead faces: toward +x for a band left of (or on) the
+ * centre line, toward -x otherwise, matching the 3D scene's facing rule.
+ */
+export function squadSlotCells(band: Band): Cell[] {
+  const dir = band.baseX <= 0 ? 1 : -1;
+  const xs: number[] = [];
+  for (let x = Math.floor(band.lo) + 1; x < band.hi; x++) if (x !== 0) xs.push(x);
+  const candidates: Cell[] = [];
+  for (const x of xs) for (let z = -3; z <= 3; z++) {
+    const c = { x, z };
+    if (!isFigureCell(band, c)) candidates.push(c);
+  }
+  const taken = new Set<string>();
+  const out: Cell[] = [];
+  for (const [forward, z] of SQUAD_ARC) {
+    const ix = band.baseX + dir * forward;
+    let best: Cell | null = null;
+    let bestD = Infinity;
+    for (const c of candidates) {
+      if (taken.has(`${c.x},${c.z}`)) continue;
+      const d = Math.hypot(c.x - ix, c.z - z);
+      // Strict `<` keeps the first candidate on a tie, and candidates are
+      // generated in a fixed order, so the choice is deterministic.
+      if (d < bestD) { best = c; bestD = d; }
+    }
+    if (!best) break;
+    taken.add(`${best.x},${best.z}`);
+    out.push(best);
+  }
+  return out;
 }
 
 /**

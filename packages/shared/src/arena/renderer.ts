@@ -5,7 +5,7 @@ import type { CameraState, Viewport, Projected } from './camera.js';
 import { createCamera, project, worldScale, focus, stepCamera, safeBox, NO_INSETS, DEFAULT_YAW } from './camera.js';
 import type { FrameEvent } from './event-model.js';
 import type { World, TeamState, Structure, TeamSpec } from './world.js';
-import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats } from './world.js';
+import { createWorld, resetWorld, applyEvent, phaseFor, telemetryFromStats, refreshNotes, ensureGridCapacity, foldFileStats, foldSquadSignals } from './world.js';
 
 /**
  * The isometric arena renderer.
@@ -160,16 +160,17 @@ export class IsoArenaRenderer {
    */
   appendEvents(incoming: FrameEvent[]): void {
     if (incoming.length === 0) return;
+    let squadChanged = false;
     for (const ev of incoming) {
       this.events.push(ev);
-      if (ev.kind === 'file' && ev.teamId) {
-        const team = this.world.teams.get(ev.teamId);
-        if (team) foldFileStats(team.fileStats, ev);
-      }
+      const team = ev.teamId ? this.world.teams.get(ev.teamId) : undefined;
+      if (!team) continue;
+      if (ev.kind === 'file') foldFileStats(team.fileStats, ev);
+      if (foldSquadSignals(team.squadSignals, ev)) squadChanged = true;
     }
     const last = this.events[this.events.length - 1];
     this.totalMs = Math.max(this.totalMs, last.t + 2000);
-    this.syncTelemetry();
+    this.syncTelemetry(squadChanged);
   }
 
   /**
@@ -198,8 +199,8 @@ export class IsoArenaRenderer {
    * live arena starts out knowing only what the capability table declares and
    * learns the rest. Cheap — one pass over the teams, not over the events.
    */
-  private syncTelemetry(): void {
-    let changed = false;
+  private syncTelemetry(notesStale = false): void {
+    let changed = notesStale;
     for (const team of this.world.teams.values()) {
       const next = telemetryFromStats(team.model, team.fileStats);
       if (next.editDepth !== team.telemetry.editDepth || next.note !== team.telemetry.note) {

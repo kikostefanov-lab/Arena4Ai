@@ -47,6 +47,36 @@ export interface SubAgentSpawnPayload {
   depth: number;
 }
 
+const SQUAD_LABEL_MAX = 18;
+
+/**
+ * Short chip label for a sub-agent: the first words of its description, at most
+ * 18 chars. Shared so the normalizers and the arena's read-time upgrade of
+ * stored Claude matches label a sub-agent identically.
+ */
+export function squadLabel(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (!clean) return 'sub-agent';
+  if (clean.length <= SQUAD_LABEL_MAX) return clean;
+  const cut = clean.slice(0, SQUAD_LABEL_MAX - 1);
+  const atWord = cut.lastIndexOf(' ');
+  const base = atWord > 0 ? cut.slice(0, atWord) : cut;
+  return `${base.trimEnd()}…`;
+}
+
+/**
+ * Claude's task statuses (`task_updated.patch.status`, `task_notification.status`)
+ * as squad outcomes. Shared by the Claude normalizer and the arena's read-time
+ * upgrade of stored matches, so live and replayed squads end the same way.
+ */
+export const CLAUDE_TASK_STATUS: Readonly<Record<string, SubAgentStatus>> = {
+  completed: 'completed',
+  failed: 'failed',
+  error: 'failed',
+  killed: 'killed',
+  stopped: 'killed',
+};
+
 /** Payload of a SUB_AGENT_DONE event. */
 export interface SubAgentDonePayload {
   agentId: string;

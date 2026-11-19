@@ -1,4 +1,5 @@
 import {
+  CLAUDE_TASK_STATUS,
   EventType,
   type ArenaEvent,
   type SubAgentDonePayload,
@@ -156,13 +157,7 @@ function normalizeContentBlock(block: ContentBlock, ctx: NormalizeContext): Aren
   }
 }
 
-const STATUS_MAP: Record<string, SubAgentStatus> = {
-  completed: 'completed',
-  failed: 'failed',
-  error: 'failed',
-  killed: 'killed',
-  stopped: 'killed',
-};
+const STATUS_MAP = CLAUDE_TASK_STATUS;
 
 /**
  * Stateful wrapper around {@link normalizeLine} that understands Claude's
