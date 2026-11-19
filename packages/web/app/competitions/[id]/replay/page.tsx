@@ -16,6 +16,7 @@ interface ArenaEvent {
   type: string;
   payload: Record<string, unknown> | null;
   seq: number;
+  metadata?: Record<string, unknown>;
 }
 
 interface Team {
@@ -34,6 +35,8 @@ const EVENT_COLOR: Record<string, string> = {
   FILE_MODIFY:          '#10b981',
   REASONING:            '#06b6d4',
   ERROR:                '#ef4444',
+  SUB_AGENT_SPAWN:      '#a78bfa',
+  SUB_AGENT_DONE:       '#a78bfa',
   TIME_WARNING:         '#eab308',
   TIME_UP:              '#f97316',
   JUDGE_SCORE:          '#a855f7',
@@ -47,6 +50,8 @@ const HIST_COLORS: Record<string, string> = {
   FILE_MODIFY: '#10b981',
   REASONING:   '#06b6d4',
   ERROR:       '#ef4444',
+  SUB_AGENT_SPAWN: '#a78bfa',
+  SUB_AGENT_DONE:  '#a78bfa',
 };
 
 const LANE_COLORS = ['#3b82f6', '#a855f7', '#22c55e', '#f97316', '#eab308'];
@@ -746,6 +751,11 @@ export default function ReplayPage() {
           const teamEvents = visibleEvents.filter((e) => e.teamId === team.id);
           const allTeamEvents = allEvents.filter((e) => e.teamId === team.id);
           const color = LANE_COLORS[i] ?? '#8896ab';
+          const squadLabels = new Map<string, string>();
+          for (const e of allTeamEvents) {
+            const sp = e.type === 'SUB_AGENT_SPAWN' ? e.payload : null;
+            if (sp && typeof sp.agentId === 'string') squadLabels.set(sp.agentId, typeof sp.label === 'string' ? sp.label : sp.agentId);
+          }
           const label = resolveTeamLabel(teams.length > 0 ? teams : orderedTeams, team.id, team.id);
 
           return (
@@ -824,6 +834,12 @@ export default function ReplayPage() {
                       expanded={expandedEventId === ev.id}
                       onToggle={() => setExpandedEventId(prev => prev === ev.id ? null : ev.id)}
                       isNew={isNew}
+                      agentLabel={
+                        typeof ev.metadata?.agentId === 'string' && !ev.type.startsWith('SUB_AGENT_')
+                          ? squadLabels.get(ev.metadata.agentId) ?? ev.metadata.agentId
+                          : undefined
+                      }
+                      teamColor={color}
                     />
                   );
                 })}

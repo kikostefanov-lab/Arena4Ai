@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { ArenaEvent } from '../types/event.js';
 import type { FrameEvent } from './event-model.js';
 import { PROVIDER_FILE_CAPABILITIES } from '../types/event.js';
@@ -1085,5 +1085,28 @@ describe('squads', () => {
     const r = new IsoArenaRenderer({ teams: two, events: [], timeLimitMs: 120_000 });
     r.appendEvents([toFrameEvent(evm('REASONING', 'b', { text: 'waited on agents', squadUnidentified: true }, 100), T0)]);
     expect(r.honestyNotes).toEqual(['Codex reported a squad it did not identify.']);
+  });
+
+  it('draws one marker per open member with a slot, plus a count, and takes deliverables', () => {
+    const events = toFrameEvents([spawn('a', 'x1', 100), spawn('a', 'x2', 200), spawn('a', 'x3', 300), done('a', 'x3', 400)], T0);
+    const r = new IsoArenaRenderer({ teams: two, events, timeLimitMs: 120_000, deliverables: ['decision.md'] });
+    r.seek(1000);
+    const texts: string[] = [];
+    const ctx = new Proxy({}, {
+      get: (_t, k) => {
+        if (k === 'fillText') return (t: string) => { texts.push(t); };
+        if (k === 'createRadialGradient' || k === 'createLinearGradient') return () => ({ addColorStop() {} });
+        if (k === 'measureText') return () => ({ width: 10 });
+        return () => undefined;
+      },
+      set: () => true,
+    });
+    r.attach(ctx as never);
+    const spy = vi.spyOn(r as never, 'drawSquadMarker');
+    expect(() => r.draw()).not.toThrow();
+    // x1, x2 are open; x3 has ended and holds no slot.
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(texts).toContain('◆2');
+    expect(texts).not.toContain('◆3');
   });
 });

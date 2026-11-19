@@ -326,7 +326,7 @@ export default function SpectatePage() {
         const next = new Map(prev);
         const existing = next.get(teamId) ?? [];
         const updated = [...existing, ev];
-        // Cap at 600 per team, preserving important events
+        // Cap at 600 per team; every non-REASONING event (incl. SUB_AGENT_*) is kept
         if (updated.length > 600) {
           const important = updated.filter((e) => e.type !== 'REASONING');
           const reasoning = updated.filter((e) => e.type === 'REASONING');

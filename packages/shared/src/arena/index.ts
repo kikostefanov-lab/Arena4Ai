@@ -28,3 +28,6 @@ export { createWorld, resetWorld, phaseFor, targetHeight, applyEvent, stepStruct
 
 export type { RendererOptions } from './renderer.js';
 export { IsoArenaRenderer } from './renderer.js';
+
+export type { SquadEventLine } from './squad-hud.js';
+export { describeSquadEvent } from './squad-hud.js';

@@ -30,6 +30,8 @@ export interface RendererOptions {
   reducedMotion?: boolean;
   /** Show the honest-absence legend. Default true — hiding it defeats the point. */
   showLegend?: boolean;
+  /** The brief's deliverable names; lets the world tell a delivered file from scratch work. */
+  deliverables?: string[];
 }
 
 type Effect =
@@ -92,7 +94,7 @@ export class IsoArenaRenderer {
 
   constructor(opts: RendererOptions) {
     this.events = opts.events;
-    this.world = createWorld(opts.teams, opts.events);
+    this.world = createWorld(opts.teams, opts.events, { deliverables: opts.deliverables });
     this.reduced = opts.reducedMotion ?? false;
     this.showLegend = opts.showLegend ?? true;
     this.timeLimitMs = opts.timeLimitMs ?? 120_000;
@@ -811,7 +813,45 @@ export class IsoArenaRenderer {
     }
 
     ctx.shadowBlur = 0;
+    this.drawSquad(ctx, u, s, dir, now);
     ctx.restore();
+  }
+
+  /** The team's open sub-agents as small markers behind its figure, with a `◆N` count. Read from the world only. */
+  private drawSquad(ctx: Ctx2D, u: Unit, s: number, dir: number, now: number): void {
+    const team = this.world.teams.get(u.teamId);
+    if (!team) return;
+    let open = 0;
+    for (const m of team.squad.values()) {
+      if (m.status !== 'running') continue;
+      open++;
+      if (m.slot !== null) this.drawSquadMarker(ctx, u.color, m.slot, s, dir, now);
+    }
+    if (open === 0) return;
+    ctx.font = `700 ${Math.max(9, s * 0.2)}px ${FONT_MONO}`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = rgba(u.color, 0.95);
+    ctx.fillText(`◆${open}`, -dir * s * 0.95, s * 0.28);
+  }
+
+  /** One marker: a diamond on a 3-wide, 2-deep grid behind the figure. */
+  private drawSquadMarker(ctx: Ctx2D, color: string, slot: number, s: number, dir: number, now: number): void {
+    const col = slot % 3;
+    const row = Math.floor(slot / 3);
+    const x = -dir * s * (0.65 + col * 0.3);
+    const y = -s * (0.2 + row * 0.42) + (this.reduced ? 0 : Math.sin(now / 400 + slot) * s * 0.02);
+    const r = s * 0.11;
+    ctx.fillStyle = rgba(color, 0.35);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.lineTo(x + r, y);
+    ctx.lineTo(x, y + r);
+    ctx.lineTo(x - r, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
   }
 
   private drawEffects(ctx: Ctx2D, P: (x: number, y: number, z: number) => Projected, now: number): void {

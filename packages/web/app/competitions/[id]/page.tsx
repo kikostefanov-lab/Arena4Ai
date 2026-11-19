@@ -61,6 +61,8 @@ const HIST_COLORS: Record<string, string> = {
   FILE_MODIFY: '#0066ff',
   REASONING:   '#0066ff',
   ERROR:       '#ef4444',
+  SUB_AGENT_SPAWN: '#a78bfa',
+  SUB_AGENT_DONE:  '#a78bfa',
 };
 
 // LANE_COLORS imported from design-tokens above
@@ -310,6 +312,17 @@ const LanePanel = forwardRef<
 
   const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
 
+  // agentId → label from the spawn events, so a squad member's rows read "↳ label".
+  const squadLabels = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of events) {
+      if (e.type !== 'SUB_AGENT_SPAWN') continue;
+      const p = e.payload as { agentId?: unknown; label?: unknown } | null;
+      if (typeof p?.agentId === 'string') m.set(p.agentId, typeof p.label === 'string' ? p.label : p.agentId);
+    }
+    return m;
+  }, [events]);
+
   // Flash "BATTLE COMMENCED" when first renderable event arrives
   const [showLaunch, setShowLaunch] = useState(false);
   const wasRenderable = useRef(false);
@@ -409,6 +422,12 @@ const LanePanel = forwardRef<
             startTs={competitionStartTime ? new Date(competitionStartTime).toISOString() : null}
             expanded={expandedEventId === ev.eventId}
             onToggle={() => setExpandedEventId(prev => prev === ev.eventId ? null : ev.eventId)}
+            agentLabel={
+              typeof ev.metadata?.agentId === 'string' && ev.type !== 'SUB_AGENT_SPAWN' && ev.type !== 'SUB_AGENT_DONE'
+                ? squadLabels.get(ev.metadata.agentId) ?? ev.metadata.agentId
+                : undefined
+            }
+            teamColor={color}
           />
         ))}
       </div>
@@ -2400,7 +2419,7 @@ export default function CompetitionPage() {
         const existing = next.get(teamId) ?? [];
         const updated = [...existing, ev];
         if (updated.length > 600) {
-          // Keep all important events (TOOL_CALL, FILE_CREATE, ERROR); trim only REASONING
+          // Keep every non-REASONING event (TOOL_CALL, FILE_CREATE, ERROR, SUB_AGENT_*); trim only REASONING
           const important = updated.filter((e) => e.type !== 'REASONING');
           const reasoning = updated.filter((e) => e.type === 'REASONING');
           next.set(teamId, [...important, ...reasoning.slice(-Math.max(200, 500 - important.length))]);

@@ -1,5 +1,6 @@
 'use client';
 
+import { describeSquadEvent } from '@arena/shared';
 import { hexToRgb, BODY_FONT, BODY_FONT_SIZE, BODY_FONT_SIZE_SM, BODY_LINE_HEIGHT } from './design-tokens';
 
 // ─── Interfaces ───────────────────────────────────────────────────────────────
@@ -189,6 +190,16 @@ export function classifyEvent(type: string, payload: unknown): EventInfo | null 
       return { label: isUp ? 'TIME UP' : 'TIME', icon: '⏰', color: isUp ? '#ff6600' : '#ffd700', bg: isUp ? 'rgba(255,102,0,0.12)' : 'rgba(255,215,0,0.10)', text };
     }
 
+    case 'SUB_AGENT_SPAWN':
+    case 'SUB_AGENT_DONE': {
+      const line = describeSquadEvent(type, payload);
+      if (!line) return null;
+      const ok = line.icon !== '✗';
+      return type === 'SUB_AGENT_SPAWN'
+        ? { ...line, color: '#a78bfa', bg: 'rgba(167,139,250,0.10)' }
+        : { ...line, color: ok ? '#22c55e' : '#ef4444', bg: ok ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.10)' };
+    }
+
     case 'JUDGE_SCORE': {
       const score = p.score ?? p.totalScore;
       const crit = p.criterionId ?? p.criterion;
@@ -218,12 +229,18 @@ export function EventRow({
   expanded,
   onToggle,
   isNew,
+  agentLabel,
+  teamColor,
 }: {
   event: EventRowEvent;
   startTs: string | null;
   expanded: boolean;
   onToggle: () => void;
   isNew?: boolean;
+  /** The sub-agent that produced this event, when it came from a squad member. */
+  agentLabel?: string;
+  /** The team's colour, for the `↳ agent` tag. */
+  teamColor?: string;
 }) {
   const info = classifyEvent(event.type, event.payload);
   if (!info) return null;
@@ -276,6 +293,11 @@ export function EventRow({
         }}>
           {info.label}
         </span>
+        {agentLabel && (
+          <span style={{ color: (teamColor ?? '#a78bfa'), flexShrink: 0, fontSize: '0.65rem', fontFamily: BODY_FONT, lineHeight: 1.4 }}>
+            ↳ {agentLabel}
+          </span>
+        )}
         {/* Summary text (truncated) */}
         <span style={{
           color: '#c8eef8',
