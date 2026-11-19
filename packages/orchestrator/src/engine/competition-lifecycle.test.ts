@@ -277,6 +277,20 @@ describe('judge retry', () => {
     }
   });
 
+  it('never retries a judge that used a tool: it fails closed', async () => {
+    // A tool-using judge was likely steered by an injected deliverable; a retry
+    // would hand that deliverable a second run at a tool-capable judge.
+    const calls = new Map<string, number>();
+    vi.mocked(aiJudge).mockImplementation((async (_b: unknown, d: { teamId: string }) => {
+      const n = (calls.get(d.teamId) ?? 0) + 1;
+      calls.set(d.teamId, n);
+      return d.teamId === 'team-a' ? failed(d, 'tool-use') : ok(d);
+    }) as never);
+    const { runner } = makeRunner();
+    await runner.run();
+    expect(calls.get('team-a')).toBe(1);
+  });
+
   it('does not retry an auth failure and falls back to the automated scorer', async () => {
     vi.mocked(aiJudge).mockImplementation((async (_b: unknown, d: { teamId: string }) => failed(d, 'auth')) as never);
     const { runner } = makeRunner();

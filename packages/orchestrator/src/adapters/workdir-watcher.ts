@@ -26,6 +26,14 @@ const DEFAULT_POLL_MS = 2000;
 const SNIFF_BYTES = 8192;
 /** Files one scan looks at before giving up on the rest (a vendored tree we missed). */
 export const MAX_SCAN_FILES = 5000;
+/**
+ * Directory entries of ANY kind (files, folders, links, others) one scan may
+ * examine, and how deep it may descend. The tree is agent-controlled: counting
+ * only files let a model plant a huge or very deep tree of empty folders and
+ * stall the server's event loop on every poll.
+ */
+export const MAX_SCAN_ENTRIES = 20_000;
+export const MAX_SCAN_DEPTH = 24;
 
 /**
  * True when the file's first bytes contain a NUL (collection would skip it too)
@@ -95,14 +103,16 @@ export class WorkdirWatcher {
   scanOnce(): void {
     const t = this.now();
     let seen = 0;
-    this.walk('', (rel, signature, full) => {
-      if (++seen > MAX_SCAN_FILES) {
-        if (!this.cappedLogged) {
-          this.cappedLogged = true;
-          console.warn(`[arena] workdir watcher: ${this.opts.root} has more than ${MAX_SCAN_FILES} files; scanning only the first ${MAX_SCAN_FILES}`);
-        }
-        return false;
+    const budget = { entries: MAX_SCAN_ENTRIES };
+    const capped = (what: string): false => {
+      if (!this.cappedLogged) {
+        this.cappedLogged = true;
+        console.warn(`[arena] workdir watcher: ${this.opts.root} ${what}; scanning only part of it`);
       }
+      return false;
+    };
+    this.walk('', 0, budget, capped, (rel, signature, full) => {
+      if (++seen > MAX_SCAN_FILES) return capped(`has more than ${MAX_SCAN_FILES} files`);
       if (this.known.get(rel) === signature) return true;
       this.known.set(rel, signature);
       // Sniffed once per change: a binary is remembered by its signature too,
@@ -128,7 +138,15 @@ export class WorkdirWatcher {
   }
 
   /** Walk the tree; `visit` returns false to stop the walk. Returns false once stopped. */
-  private walk(rel: string, visit: (rel: string, signature: string, full: string) => boolean): boolean {
+  private walk(
+    rel: string,
+    depth: number,
+    budget: { entries: number },
+    capped: (what: string) => false,
+    visit: (rel: string, signature: string, full: string) => boolean,
+  ): boolean {
+    // Too deep: skip this branch only; the rest of the tree is still scanned.
+    if (depth > MAX_SCAN_DEPTH) { capped(`is nested deeper than ${MAX_SCAN_DEPTH} folders`); return true; }
     let entries;
     try {
       entries = readdirSync(join(this.opts.root, rel), { withFileTypes: true });
@@ -138,11 +156,14 @@ export class WorkdirWatcher {
     // Agent-controlled tree: lstat, never stat. A symlink, FIFO or device is
     // skipped, and an entry swapped since readdir is re-checked here.
     for (const entry of entries) {
+      // Every entry costs budget, whatever its kind, so a tree of empty folders
+      // cannot make a scan unbounded.
+      if (--budget.entries < 0) return capped(`has more than ${MAX_SCAN_ENTRIES} entries`);
       const childRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
         if (entry.name.startsWith('.') || isVendoredPath(childRel)) continue;
         if (!isRealDirectory(join(this.opts.root, childRel))) continue;
-        if (!this.walk(childRel, visit)) return false;
+        if (!this.walk(childRel, depth + 1, budget, capped, visit)) return false;
       } else if (entry.isFile()) {
         if (isVendoredPath(childRel)) continue;
         const full = join(this.opts.root, childRel);

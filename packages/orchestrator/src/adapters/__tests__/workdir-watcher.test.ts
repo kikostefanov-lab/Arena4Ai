@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { EventType } from '@arena/shared';
 import type { ArenaEvent } from '@arena/shared';
 import { BaseAdapter } from '../base-adapter.js';
-import { WorkdirWatcher, MAX_SCAN_FILES } from '../workdir-watcher.js';
+import { WorkdirWatcher, MAX_SCAN_FILES, MAX_SCAN_ENTRIES, MAX_SCAN_DEPTH } from '../workdir-watcher.js';
 import { makeEvent, makeFileEvent } from '../normalizer-utils.js';
 
 let root: string;
@@ -135,6 +135,34 @@ describe('WorkdirWatcher', () => {
       at.t = 5000; w.flushDue();
       expect(seen).toHaveLength(MAX_SCAN_FILES);
       expect(warn).toHaveBeenCalledTimes(1);
+    } finally { warn.mockRestore(); }
+  });
+
+  it('counts empty folders against the scan budget, so a folder flood cannot stall a scan', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      // A flood of empty folders holds no files, so the file cap alone never trips.
+      for (let i = 0; i < MAX_SCAN_ENTRIES + 50; i++) mkdirSync(join(root, `d${i}`));
+      const { w } = make();
+      w.scanOnce(); w.scanOnce();
+      // The entry budget, not the file cap, stopped the walk, and said so once.
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain('entries');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('stops descending past MAX_SCAN_DEPTH', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      let dir = root;
+      for (let i = 0; i < MAX_SCAN_DEPTH + 5; i++) { dir = join(dir, 'n'); mkdirSync(dir); }
+      writeFileSync(join(dir, 'too-deep.md'), 'x');
+      writeFileSync(join(root, 'top.md'), 'x');
+      const { w, seen, at } = make();
+      at.t = 0; w.scanOnce();
+      at.t = 5000; w.flushDue();
+      expect(seen.map((s) => s.path)).toEqual(['top.md']);
+      expect(String(warn.mock.calls[0]![0])).toContain('deeper');
     } finally { warn.mockRestore(); }
   });
 

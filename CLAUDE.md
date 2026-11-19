@@ -88,7 +88,7 @@ Codex and Gemini judges use `helperCodexArgs()` / `helperGeminiArgs()` from the 
 runs `--ignore-user-config`, read-only, web search off, every tool-bearing feature disabled
 (`CODEX_HELPER_DISABLED_FEATURES`) and on a copy of its model catalog with the per-model tool
 fields neutralised (`CODEX_TOOL_LESS_MODEL_FIELDS`, `-c model_catalog_json`); it runs with
-`--json`, and any tool item in the stream fails that judge closed (`bad-output`). Check with
+`--json`, and any tool item in the stream fails that judge closed (`tool-use`, never retried). Check with
 `npx tsx packages/orchestrator/src/dev/codex-judge-tool-probe.ts`, which renders the offered tools
 (`codex debug prompt-input`; only `request_user_input` should remain). Gemini runs under an admin-tier deny-all policy
 (`GEMINI_DENY_ALL_POLICY`) with no extensions or MCP servers. Every judge runs in an empty
@@ -279,7 +279,7 @@ zero score; branch on `agentFailure`.
    Limits for big briefs: time limit ceiling 3 h (`brief/parser.ts`); the judge reads up to 24K chars
    per file and 240K in total (`JUDGE_CONTEXT`), named deliverables first; helper timeouts scale with
    input size (`stageTimeoutMs`, 2-10 min); a judge failure of kind timeout / rate-limit / cli-error /
-   bad-output is retried once.
+   bad-output is retried once; `tool-use` (a judge that used a tool) is never retried.
 4. **Synthesis** (`merge-engine.ts`) — returns `SynthesisResult { synthesis: string, perCriterion[] }` with per-criterion winner attribution. On-demand only.
 
 **Adversarial mode** — `adversarialJudge: true` in the `POST /competitions` body or
@@ -306,7 +306,7 @@ is the most likely first-run failure — and it must never look like a bad score
   `ERROR` event with `payload.stage === 'preflight'`.
 - `aiJudge()` returns `AiJudgeResult` = `JudgeResult` + an explicit `failure?: AiJudgeFailure`
   (`cli-missing` | `auth` | `rate-limit` | `model-unavailable` | `timeout` | `cli-error` |
-  `bad-output`) and the `model` it ran on. It logs to stderr and rewrites the zero-score
+  `bad-output` | `tool-use`) and the `model` it ran on. It logs to stderr and rewrites the zero-score
   commentary with the reason. **Never infer judge failure from score values or commentary
   text** — branch on `failure`.
 - `competition-runner.ts` uses that field to decide per-team whether to fall back to the

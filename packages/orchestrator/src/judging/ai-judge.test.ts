@@ -461,7 +461,7 @@ describe('aiJudge runs the judge in an empty scratch directory', () => {
     const result = await aiJudge(brief, deliverable, rubric, {
       judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
     });
-    expect(result.failure?.kind).toBe('bad-output');
+    expect(result.failure?.kind).toBe('tool-use');
     expect(result.failure?.message).toContain('command_execution');
     expect(result.scores.every((s) => s.score === 0)).toBe(true);
   });

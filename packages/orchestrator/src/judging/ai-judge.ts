@@ -62,7 +62,13 @@ export type AiJudgeFailureKind =
   | 'model-unavailable'
   | 'timeout'
   | 'cli-error'
-  | 'bad-output';
+  | 'bad-output'
+  /**
+   * The judge used a tool while reading untrusted deliverables. Fail closed: its
+   * scores are discarded and the seat is never retried, so an injected deliverable
+   * gets no second run at a tool-capable judge.
+   */
+  | 'tool-use';
 
 export interface AiJudgeFailure {
   kind: AiJudgeFailureKind;
@@ -619,7 +625,7 @@ export async function aiJudge(
   } catch (err) {
     failure = err instanceof JudgeUsedToolError
       ? {
-          kind: 'bad-output',
+          kind: 'tool-use',
           message: `AI judge unavailable: the ${provider} judge used a tool (${err.toolItems.join(', ')}); a judge must only read the prompt, so its scores were discarded.`,
           detail: `tool items: ${err.toolItems.join(', ')}`,
         }

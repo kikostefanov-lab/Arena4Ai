@@ -105,7 +105,11 @@ export interface CompetitionResult {
 /** The unpausable stop fires this many times the time limit after the start. */
 const WALL_CLOCK_FACTOR = 1.5;
 
-/** Judge failures worth one more try; auth, a missing CLI or a retired model will not fix themselves. */
+/**
+ * Judge failures worth one more try; auth, a missing CLI or a retired model will
+ * not fix themselves. `tool-use` is deliberately absent: a judge that used a tool
+ * fails closed and is never re-run on the same untrusted deliverable.
+ */
 const RETRYABLE_JUDGE_FAILURES = new Set<string>(['timeout', 'rate-limit', 'cli-error', 'bad-output']);
 
 /** A rate-limited judge waits this long before its one retry: an instant retry hits the same limit. */
