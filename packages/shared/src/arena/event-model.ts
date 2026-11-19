@@ -172,6 +172,17 @@ export const HARNESS_ERROR_STAGES: ReadonlySet<string> = new Set([
   'preflight', 'sandbox', 'collect', 'presentation', 'judging', 'synthesis',
 ]);
 
+/**
+ * True when an ERROR payload was raised by the harness (a judge, a preflight, the
+ * sandbox) rather than by the team's agent. Such errors are stored under the team
+ * they concern but are not the team's doing, so no view may present them as the
+ * team failing — the arena, the HUD and the recap reel all use this one test.
+ */
+export function isHarnessError(payload: unknown): boolean {
+  const stage = (payload as { stage?: unknown } | null | undefined)?.stage;
+  return typeof stage === 'string' && HARNESS_ERROR_STAGES.has(stage);
+}
+
 const SUB_AGENT_STATUSES: ReadonlySet<string> = new Set<SubAgentStatus>(['completed', 'failed', 'killed', 'unknown']);
 
 function subAgentStatus(v: unknown): SubAgentStatus {
@@ -285,7 +296,7 @@ function classify(ev: ArenaEvent, originMs: number): FrameEvent {
       // but it is not the team's doing: on 7adcd4df Claude's header ended on
       // "✕ AI judge unavailable" and its lead took a hit. The Log view lists
       // every stored event; the arena applies only the agent's own.
-      if (typeof payload.stage === 'string' && HARNESS_ERROR_STAGES.has(payload.stage)) {
+      if (isHarnessError(payload)) {
         return { ...base, kind: 'other', legacy: false };
       }
       return { ...base, kind: 'error', legacy: false };
