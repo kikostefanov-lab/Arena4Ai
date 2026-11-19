@@ -4,7 +4,7 @@ import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'r
 import { streamUrl } from '../../../lib/stream-url';
 import { useParams, useRouter } from 'next/navigation';
 import { formatElapsed, resolveTeamLabel } from '../../../lib/format';
-import { MODEL_BADGE_COLORS, LANE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, BORDER_DIM, BG_HEADER, TEXT_MUTED, TEXT_DIM, ACCENT_CYAN, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
+import { MODEL_BADGE_COLORS, getModelColor, getStateStyle, hexToRgb, MONOSPACE_FONT, BODY_FONT, BODY_FONT_SIZE, BODY_LINE_HEIGHT, BORDER_MID, BORDER_DIM, BG_HEADER, TEXT_MUTED, TEXT_DIM, ACCENT_CYAN, HEURISTIC_COLOR, HEURISTIC_BADGE_STYLE, HEURISTIC_SCORE_TITLE } from '../../../lib/design-tokens';
 import { briefToYaml, downloadYaml } from '../../../lib/brief-yaml';
 import { EventRow, classifyEvent } from '../../../lib/EventRow';
 import ArenaViewerV2 from '../../../components/ArenaViewerV2';
@@ -68,8 +68,6 @@ const HIST_COLORS: Record<string, string> = {
   SUB_AGENT_SPAWN: '#a78bfa',
   SUB_AGENT_DONE:  '#a78bfa',
 };
-
-// LANE_COLORS imported from design-tokens above
 
 const ARTIFACT_EMOJI: Record<string, string> = {
   // Universal
@@ -701,10 +699,17 @@ function ScoreDrawer({
     ? resolveTeamLabel(teams, result.winnerId, result.winnerId)
     : null;
 
+  /**
+   * A team's colour is its model's, never its position. These lists are in
+   * rank, presentation or delivery order, so a colour taken by index painted
+   * the winner in the first team's colour (codex in Claude orange).
+   */
+  const teamColor = (teamId: string): string => getModelColor(teams.find((t) => t.id === teamId)?.model ?? '');
+
   const teamDisplays = result.teams.map((tr, i) => ({
     result: tr,
     label: resolveTeamLabel(teams, tr.teamId, `Team ${i + 1}`),
-    color: LANE_COLORS[i] ?? '#4a8fa8',
+    color: teamColor(tr.teamId),
     isWinner: tr.teamId === result.winnerId,
   }));
 
@@ -1268,7 +1273,7 @@ function ScoreDrawer({
                 }}>
                   {result.presentations!.map((pres, presIdx) => {
                     const label = resolveTeamLabel(teams, pres.teamId, pres.teamId);
-                    const color = LANE_COLORS[presIdx] ?? '#4a8fa8';
+                    const color = teamColor(pres.teamId);
                     const rgb = hexToRgb(color);
                     const isWinner = pres.teamId === result.winnerId;
 
@@ -1389,7 +1394,7 @@ function ScoreDrawer({
                     }}>
                       {result.deliverables!.map((td, tdIdx) => {
                         const label = resolveTeamLabel(teams, td.teamId, td.teamId);
-                        const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
+                        const color = teamColor(td.teamId);
                         const rgb = hexToRgb(color);
                         return (
                           <div
@@ -1468,8 +1473,7 @@ function ScoreDrawer({
                       const teamDel = result.deliverables!.find(td => td.teamId === selectedFileKey.teamId);
                       const file = teamDel?.files.find(f => f.path === selectedFileKey.path);
                       if (!file) return null;
-                      const teamIdx = result.deliverables!.findIndex(td => td.teamId === selectedFileKey.teamId);
-                      const color = LANE_COLORS[teamIdx] ?? '#4a8fa8';
+                      const color = teamColor(selectedFileKey.teamId);
                       const rgb = hexToRgb(color);
                       const label = resolveTeamLabel(teams, selectedFileKey.teamId, selectedFileKey.teamId);
                       return (
@@ -1556,7 +1560,7 @@ function ScoreDrawer({
                       }}>
                         {fileEventsByTeam.map((teamFiles, tdIdx) => {
                           const label = resolveTeamLabel(teams, teamFiles.teamId, teamFiles.teamId);
-                          const color = LANE_COLORS[tdIdx] ?? '#4a8fa8';
+                          const color = teamColor(teamFiles.teamId);
                           const rgb = hexToRgb(color);
                           return (
                             <div key={teamFiles.teamId} className="arena-scrollbar" style={{ borderRight: tdIdx < fileEventsByTeam.length - 1 ? '1px solid #0a2235' : 'none', overflowY: 'auto' }}>
@@ -3140,7 +3144,7 @@ export default function CompetitionPage() {
                 .slice()
                 .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
-              const color = LANE_COLORS[i] ?? '#4a8fa8';
+              const color = getModelColor(team.model);
 
               return (
                 <LanePanel
