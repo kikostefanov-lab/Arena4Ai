@@ -416,7 +416,7 @@ describe('aiJudge runs the judge in an empty scratch directory', () => {
   });
 
   /** A stand-in codex: `debug models` prints a catalog; `exec` records argv and prints `stream`. */
-  function fakeCodex(name: string, stream: string, catalogExit = 0): string {
+  function fakeCodex(name: string, stream: string, catalogExit = 0, streamExit = 0): string {
     const bin = join(scratch, name);
     const catalog = JSON.stringify({ models: [
       { slug: 'hidden-model', visibility: 'hide', priority: 1, tool_mode: 'code_mode_only' },
@@ -430,6 +430,7 @@ describe('aiJudge runs the judge in an empty scratch directory', () => {
       // Keep a copy of the catalog the judge was given, for inspection.
       'for a in "$@"; do case "$a" in model_catalog_json=*) f="${a#model_catalog_json=}"; f="${f%\\"}"; f="${f#\\"}"; cp "$f" ' + join(scratch, `${name}.catalog`) + ';; esac; done',
       `cat <<'ARENA_EOF'\n${stream}\nARENA_EOF`,
+      `exit ${streamExit}`,
     ].join('\n'));
     chmodSync(bin, 0o755);
     return bin;
@@ -464,6 +465,27 @@ describe('aiJudge runs the judge in an empty scratch directory', () => {
     expect(result.failure?.kind).toBe('tool-use');
     expect(result.failure?.message).toContain('command_execution');
     expect(result.scores.every((s) => s.score === 0)).toBe(true);
+  });
+
+  it('a codex judge that used a tool and then crashed is still tool-use, not a retryable crash', async () => {
+    const bin = fakeCodex('codex-tool-crash', [
+      line({ type: 'item.completed', item: { id: '1', type: 'command_execution', command: 'cat ~/.ssh/id_rsa' } }),
+      line({ type: 'turn.failed', error: { message: 'stream disconnected' } }),
+    ].join('\n'), 0, 1);
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure?.kind).toBe('tool-use');
+    expect(result.failure?.message).toContain('command_execution');
+  });
+
+  it('a codex judge that crashed without using a tool keeps its ordinary failure kind', async () => {
+    const bin = fakeCodex('codex-plain-crash', line({ type: 'turn.failed', error: { message: 'stream disconnected' } }), 0, 1);
+    const result = await aiJudge(brief, deliverable, rubric, {
+      judgeId: 'ai-codex', provider: 'codex', claudeBin: bin, model: CLI_DEFAULT_MODEL,
+    });
+    expect(result.failure).toBeDefined();
+    expect(result.failure?.kind).not.toBe('tool-use');
   });
 
   it('does not run a codex judge whose tool-less catalog cannot be built', async () => {
