@@ -1,0 +1,88 @@
+id: first-paying-customer-001
+title: The First Paying Customer
+format: HACKATHON
+deliverableType: mixed
+domainHint: business
+timeLimitMs: 2700000
+tags: ["B2B", "Bootstrapping", "Customer Validation", "Prototyping"]
+
+problem: |
+  You are helping a solo builder choose a small B2B product to sell in the U.S.
+  Assume basic web development skills, no existing audience, and no warm introductions.
+  Compare all three candidates below, choose one, and build a demo that supports a
+  concrete two-week attempt to win paying customers. Any candidate can win.
+
+  1. Commercial cleaning bid-pricing checker. An estimator has an RFP, a pricing workbook,
+     and amendments. Show what goes into the base price, what must be priced separately,
+     and what still needs clarification. Link each finding to the source or worksheet item.
+     In Delaware's published example, Addendum 2 addresses consumables, service frequency,
+     and separate floor-care pricing. The attendee roster is a source of prospect companies.
+     Source packet: https://bidcondocs.delaware.gov/GSS/GSS26612-JANITORIAL_rfp.pdf
+     Addendum and roster: https://bidcondocs.delaware.gov/GSS/GSS26612-JANITORIAL_ad2.pdf#page=12
+     Existing alternative: https://support.govdash.com/docs/adding-amendments-solicitation-docs
+
+  2. Wrong-barcode checker for label printers. A prepress lead has a batch of label proofs
+     and an approved file-to-product-code list. Identify codes that match, codes that scan
+     but belong to a different SKU, and proofs that require manual review. The check concerns
+     the code in the digital proof. Physical print quality is assessed separately by the shop.
+     Existing alternative: https://www.enfocus.com/en/pitstop-pro/buy-now
+     Barcode check documentation: https://cdn-www.enfocus.com/sites/default/files/media/news/release-notes/pitstop-2019/pitstop_2019_-_whats_new.pdf
+
+  3. Missing keg-deposit credits for bar groups. A bookkeeper has pickup receipts and later
+     invoices or credit memos. Reconcile the verified matches, show the amount still open,
+     and flag uncertain matches for review. For a sample case, eight returns at $30 create
+     $240 in expected credits. If five are credited, $90 is still open for investigation.
+     Existing workflow: https://docs.restaurant365.com/docs/keg-deposits
+     Existing alternative: https://www.opsi.io/products/reconciliation
+
+  In decision.md, rank the three on buyer access, urgency, existing alternatives, build
+  effort, and likelihood of repeat purchases. Draw on the public starting points above
+  and add evidence where available. Explain the most important assumption that could
+  reverse your choice, and what evidence would change your mind.
+
+  Show your chosen workflow in demo.html. Start from embedded sample inputs and generate
+  a result a buyer could act on. Include a normal case and a meaningful exception or
+  ambiguous case. Let the reviewer change at least one input and see the result update.
+  You may use extracted sample fields in place of document parsing or barcode decoding.
+  Label any simulated step and include two short reproduction checks in decision.md.
+
+  Propose a two-week paid pilot for your chosen idea. Name the buyer role, a specific
+  source of prospects, and how to find the first ten qualified buyers. Include a short
+  outreach draft, a price in USD, what the buyer gets, and numeric continue or stop
+  thresholds. Show a scenario for the first $250 in gross sales, the required buyer
+  count, and how sales time, review time, and direct costs affect what the builder earns.
+  Explain what you would automate after customers pay and what would still need review.
+
+constraints:
+  - "Compare all three ideas and prototype one. Scope the proposed two-week pilot to a solo builder and at most $100 in out-of-pocket spend."
+  - "Use public sources and synthetic or public sample data. Label assumptions, test prices, and simulated steps. Cite sources for factual market and product claims."
+  - "Keep the demo runnable as a standalone local HTML file with embedded sample data. It must work without accounts, network calls, dependencies, or a server."
+  - "Keep research read-only. Do not contact prospects, spend money, collect private records, or claim that interviews, payments, or savings occurred during the match."
+  - "Aim for 8,000 characters or fewer per deliverable so the full submission fits in AgentArena's presentation and synthesis views."
+
+deliverables:
+  - decision.md
+  - demo.html
+
+rubric:
+  criteria:
+    - id: buyer-and-evidence
+      description: "Compares all three ideas using concrete buyer workflows, credible sources, reachable prospects, and relevant existing alternatives."
+      maxScore: 10
+      weight: 0.25
+    - id: working-demo
+      description: "Demonstrates a buyer-relevant result computed from editable inputs, handles a meaningful exception, and makes evidence and simulated steps clear."
+      maxScore: 10
+      weight: 0.25
+    - id: paid-validation
+      description: "Defines a two-week test a solo builder could run, with a specific prospect channel, priced offer, outreach draft, and measurable continue or stop criteria."
+      maxScore: 10
+      weight: 0.25
+    - id: economics
+      description: "Uses reproducible first-sales math and realistic labor and cost assumptions. Distinguishes gross sales from what the builder keeps."
+      maxScore: 10
+      weight: 0.15
+    - id: judgment
+      description: "Makes a clear choice, identifies evidence that would reverse it, and limits the first build to work that helps secure or serve a paying customer."
+      maxScore: 10
+      weight: 0.10
