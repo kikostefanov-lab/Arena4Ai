@@ -126,4 +126,26 @@ describe('websocket stream', () => {
     await new Promise((r) => ws.on('close', r));
     expect(msgs.map((m) => m.type)).toEqual(['REASONING', 'COMPLETE']);
   });
+
+  const EVENTS = ['arenaEvent', 'stateChange', 'result', 'error'];
+  const listenerCounts = () => EVENTS.map((e) => runner.listenerCount(e));
+
+  it('leaves no runner listeners when the client closes during the handshake window', async () => {
+    getEvents.mockResolvedValue([] as never);
+    const { ws } = connect();
+    await new Promise((r) => ws.on('open', r));
+    ws.close();
+    await new Promise((r) => ws.on('close', r));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(listenerCounts()).toEqual([0, 0, 0, 0]);
+  });
+
+  it('removes runner listeners after a normal close', async () => {
+    getEvents.mockResolvedValue([row('h1')] as never);
+    const { ws, msgs } = connect();
+    await until(() => msgs.length === 1);
+    expect(listenerCounts()).toEqual([1, 1, 1, 1]);
+    ws.close();
+    await until(() => listenerCounts().every((n) => n === 0));
+  });
 });

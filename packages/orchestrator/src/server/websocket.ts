@@ -103,6 +103,9 @@ export function attachWebSocket(server: Server): void {
     // Small delay to allow lastSeq message to arrive before replay
     await new Promise((r) => setTimeout(r, 50));
     ws.off('message', onHandshake); // remove if handshake never arrived
+    // The client may have left during the handshake window; its 'close' already fired,
+    // so subscribing now would leak the runner listeners.
+    if (ws.readyState !== WebSocket.OPEN) return;
 
     const send = (payload: unknown) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -126,7 +129,7 @@ export function attachWebSocket(server: Server): void {
       const id = (event as { eventId?: string }).eventId;
       if (id !== undefined) {
         if (sentIds.has(id)) return;
-        sentIds.add(id);
+        if (!live) sentIds.add(id);
       }
       seq++;
       send({ ...(event as object), _seq: seq });
