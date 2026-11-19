@@ -208,6 +208,23 @@ export function readCodexJudgeStream(stdout: string): { answer: string; toolItem
  * judging; a router model may appear beside it). Codex's JSON stream names no
  * model: the judge pins one from the catalog instead (see aiJudge).
  */
+/**
+ * Tool items in whatever a judge printed before it failed (a crash, a timeout).
+ * Never throws: partial or garbled output just yields no items.
+ */
+export function toolItemsIn(
+  invocation: Pick<JudgeInvocation, 'answerStream' | 'answerFormat'> | undefined,
+  provider: JudgeProvider,
+  stdout: string,
+): string[] {
+  if (!invocation || !stdout) return [];
+  try {
+    return readJudgeOutput(invocation, provider, stdout, '').toolItems ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export function readJudgeOutput(
   invocation: Pick<JudgeInvocation, 'answerStream' | 'answerFormat'>,
   provider: JudgeProvider,
@@ -528,6 +545,11 @@ export async function aiJudge(
   }));
 
   let stderr = '';
+  // Everything the judge printed on stdout, kept even when it crashes or times
+  // out, so the tool-use check below runs on EVERY exit path: a judge that used a
+  // tool and then failed must not be reclassified as a retryable timeout or crash.
+  let capturedStdout = '';
+  let invocationUsed: JudgeInvocation | undefined;
   let scratchDir: string | undefined;
   try {
     // An empty scratch directory as cwd: the judge's CLI must not see the
@@ -556,6 +578,7 @@ export async function aiJudge(
       ranOn = runModel;
     }
     const invocation = buildJudgeInvocation(provider, runModel, prompt, scratch);
+    invocationUsed = invocation;
 
     const stdout = await new Promise<string>((resolve, reject) => {
       // stdin is 'ignore' unless the prompt travels that way. codex `exec`
@@ -587,7 +610,7 @@ export async function aiJudge(
       // Capture both streams, then hand the caller whichever one this provider
       // puts its final answer on.
       let out = '';
-      child.stdout?.on('data', (chunk: Buffer) => { out += chunk.toString(); });
+      child.stdout?.on('data', (chunk: Buffer) => { out += chunk.toString(); capturedStdout = out; });
       child.stderr?.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
       child.on('close', (code) => settle(() => {
         if (code === 0) { resolve(out); return; }
@@ -623,11 +646,16 @@ export async function aiJudge(
       failure = classifyJudgeFailure(new Error('judge returned no scores'), '', claudeBin, model, provider);
     }
   } catch (err) {
-    failure = err instanceof JudgeUsedToolError
+    // A crash or timeout after a tool call is still tool use: check what the
+    // judge printed before it died, so the seat fails closed and is not retried.
+    const toolItems = err instanceof JudgeUsedToolError
+      ? err.toolItems
+      : toolItemsIn(invocationUsed, provider, capturedStdout);
+    failure = toolItems.length > 0
       ? {
           kind: 'tool-use',
-          message: `AI judge unavailable: the ${provider} judge used a tool (${err.toolItems.join(', ')}); a judge must only read the prompt, so its scores were discarded.`,
-          detail: `tool items: ${err.toolItems.join(', ')}`,
+          message: `AI judge unavailable: the ${provider} judge used a tool (${toolItems.join(', ')}); a judge must only read the prompt, so its scores were discarded.`,
+          detail: `tool items: ${toolItems.join(', ')}`,
         }
       : classifyJudgeFailure(err, stderr, claudeBin, model, provider);
   } finally {
